@@ -1,0 +1,65 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &8045993344944125813
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5791291380045893665}
+  - component: {fileID: 4397233600530981603}
+  m_Layer: 0
+  m_Name: S2prefabSpanwer
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5791291380045893665
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8045993344944125813}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 1.44062, y: 2.07635, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &4397233600530981603
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8045993344944125813}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b0852faf2f8cd4c219c25721b597b58f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::stage2prefabSpawner
+  prefabs:
+  - {fileID: 6407285916211043712, guid: 9fbcb8568d16c452c8d60cce3221283a, type: 3}
+  - {fileID: 1965702745212382117, guid: 479e9352296894112aa0c264e4e573c9, type: 3}
+  - {fileID: 7767832482275115987, guid: 210ba810469ed4c25a03568dcf2700f4, type: 3}
+  - {fileID: 252121690084339701, guid: 5d90025b7d06d4bfba7f431fdd4c5318, type: 3}
+  - {fileID: 5172436824487664640, guid: 49a72ad4e819346308461a38207c0589, type: 3}
+  poolTags:
+  - 
+  - 
+  - 
+  - 
+  - 
+  poolSizePerPrefab: 4
+  playOnEnable: 0
+  minSpawnInterval: 4
+  maxSpawnInterval: 6
+  spawnWorldPos: {x: 20, y: -3.8}
+  endWorldPos: {x: -20, y: -3.8}
+  moveSpeed: 6

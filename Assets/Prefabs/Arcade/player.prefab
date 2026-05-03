@@ -1,0 +1,383 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &7683074617469704678
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5859194337017971802}
+  - component: {fileID: 6015082372541791020}
+  - component: {fileID: 4594126199369061318}
+  - component: {fileID: 1962860398496639793}
+  - component: {fileID: 1375860378352231304}
+  - component: {fileID: 7619116827110755597}
+  - component: {fileID: 831977246100301547}
+  m_Layer: 0
+  m_Name: player
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5859194337017971802
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7683074617469704678}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -5.73167, y: -1.32996, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!212 &6015082372541791020
+SpriteRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7683074617469704678}
+  m_Enabled: 1
+  m_CastShadows: 0
+  m_ReceiveShadows: 0
+  m_DynamicOccludee: 1
+  m_StaticShadowCaster: 0
+  m_MotionVectors: 1
+  m_LightProbeUsage: 1
+  m_ReflectionProbeUsage: 1
+  m_RayTracingMode: 0
+  m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
+  m_RenderingLayerMask: 1
+  m_RendererPriority: 0
+  m_Materials:
+  - {fileID: 2100000, guid: a97c105638bdf8b4a8650670310a4cd3, type: 2}
+  m_StaticBatchInfo:
+    firstSubMesh: 0
+    subMeshCount: 0
+  m_StaticBatchRoot: {fileID: 0}
+  m_ProbeAnchor: {fileID: 0}
+  m_LightProbeVolumeOverride: {fileID: 0}
+  m_ScaleInLightmap: 1
+  m_ReceiveGI: 1
+  m_PreserveUVs: 0
+  m_IgnoreNormalsForChartDetection: 0
+  m_ImportantGI: 0
+  m_StitchLightmapSeams: 1
+  m_SelectedEditorRenderState: 0
+  m_MinimumChartSize: 4
+  m_AutoUVMaxDistance: 0.5
+  m_AutoUVMaxAngle: 89
+  m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
+  m_SortingLayerID: 0
+  m_SortingLayer: 0
+  m_SortingOrder: 9
+  m_Sprite: {fileID: 1657475634455706512, guid: 32c91c3b55d7441c5929be700eea390d, type: 3}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_FlipX: 0
+  m_FlipY: 0
+  m_DrawMode: 0
+  m_Size: {x: 0.975, y: 1.234375}
+  m_AdaptiveModeThreshold: 0.5
+  m_SpriteTileMode: 0
+  m_WasSpriteAssigned: 1
+  m_MaskInteraction: 0
+  m_SpriteSortPoint: 0
+--- !u!95 &4594126199369061318
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7683074617469704678}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: 24a2a4d15f9784dc890938d7d230cff9, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
+--- !u!50 &1962860398496639793
+Rigidbody2D:
+  serializedVersion: 5
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7683074617469704678}
+  m_BodyType: 0
+  m_Simulated: 1
+  m_UseFullKinematicContacts: 0
+  m_UseAutoMass: 0
+  m_Mass: 1
+  m_LinearDamping: 0
+  m_AngularDamping: 0.05
+  m_GravityScale: 2.5
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_Interpolate: 0
+  m_SleepingMode: 1
+  m_CollisionDetection: 0
+  m_Constraints: 4
+--- !u!114 &1375860378352231304
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7683074617469704678}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dcec00dbed4064e6a80262664df924d2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  bombLauncher: {fileID: 0}
+  manaForLauncher: 7
+  bloodNormal: {fileID: 0}
+  bloodMissile: {fileID: 0}
+  bloodSaw: {fileID: 0}
+  bloodHill: {fileID: 0}
+  jumpSpeed: 12
+  hitboxPrefabP1: {fileID: 4729909129128647462, guid: c62a71cd626d748ca848518c3652e2f2, type: 3}
+  hitboxPrefabP3: {fileID: 6801875311862280507, guid: 06170db2bf6c94be4b18e6af871b928e, type: 3}
+  hitboxPrefabP5: {fileID: 2062212525942846678, guid: c76b885e8ab4140ca8fea10e870fa704, type: 3}
+  stompSpeed: -15
+  landDuration: 0.1
+  p3NormalAttackHitDuration: 0.15
+  smokeEffectPrefab: {fileID: 7567815159952545564, guid: c2885e07c2f0e43e3aee6d0007fd68ad, type: 3}
+  smokeEffectPrefabP3: {fileID: 8994040347663632742, guid: 777c0381bd6a74e03a8c7185abaa3594, type: 3}
+  smokeEffectPrefabP4: {fileID: 0}
+  smokeEffectPrefabP5: {fileID: 487935437026305014, guid: f7af75fdda18845f1afb714ddbf98809, type: 3}
+  useEffectPool: 1
+  projectilePoolTag: ProjectileBall
+  dummyProjectilePoolTag: DummyBallP4
+  lightningPoolTag: P4LightningNormal
+  p4RageLightningPoolTag: P4LightningRage
+  p2ProjectileSmokePoolTag: P2ProjectileSmoke
+  smokePoolTag: Smoke
+  smokeP3PoolTag: Smoke
+  smokeP4PoolTag: Smoke
+  smokeP5PoolTag: Smoke
+  floorSmokePoolTag: Smoke
+  rage24SmokePoolTag: p24ragesmoke
+  rage1SmokePoolTag: p1ragesmoke
+  rage3SmokePoolTag: p3ragesmoke
+  rageSmokePoolTag: transformSmoke
+  rageAttackSmokePoolTag: p5ragesmoke
+  hitboxP1PoolTag: PlayerHitboxP1
+  hitboxP3PoolTag: PlayerHitboxP3
+  hitboxP5PoolTag: PlayerHitboxP5
+  p2RageLaserPoolTag: P2RageLaser
+  lives: 1
+  rb: {fileID: 1962860398496639793}
+  anim: {fileID: 4594126199369061318}
+  baseWalkAnimSpeed: 1
+  useAbsoluteWalkSpeedMultiplier: 1
+  walkAnimSpeedSmooth: 0
+  gameplayX: -3.25
+  introAppearPosition: {x: -7, y: -2.145224}
+  introTotalDuration: 1.7
+  introStartDelay: 0.2
+  introGateLeadTime: 0.15
+  introDiagonalXSpeed: 3.5
+  introClimbYSpeed: -2
+  introMinDiagonalTime: 0.2
+  introGroundProbeDistance: 3
+  closeGateAfterIntro: 1
+  p2RageLaserPrefab: {fileID: 5089941723758895802, guid: 9a8df0246164f43f8bfa891478502c5f, type: 3}
+  rage24SmokePrefab: {fileID: 4640719106207764519, guid: 32d472394ed084fb4905d034ddc748be, type: 3}
+  p4RageLightningPrefab: {fileID: 769946336907460623, guid: c9db0c85af24f43f98502cf924b91849, type: 3}
+  rage1SmokePrefab: {fileID: 737927710300829522, guid: 79ea8674b6b534a44b32957461640ff9, type: 3}
+  rage3SmokePrefab: {fileID: 2562827100850085566, guid: 3dcb64eaca8164477b805c9525f77ead, type: 3}
+  p5RageBrickSpawnWorldPos: {x: 4.65, y: -2.42}
+  p5RageBrickSpawnZ: -0.5
+  rageDuration: 15
+  rageSmokePrefab: {fileID: 2232245992524951650, guid: 38ada9301408d49eea14957e284cfc28, type: 3}
+  rageAttackSmokePrefab: {fileID: 857786050246401123, guid: 8112aa079f6054c858b9666dc6cc3ef8, type: 3}
+  transformLockDuration: 0.9
+  lightningPrefab: {fileID: 3427914068613845217, guid: f957cddb54d1642b5a4a12690ae87050, type: 3}
+  dummySmokeBallPrefab: {fileID: 0}
+  floorSmokePrefab: {fileID: 0}
+  projectileSpeed: 20
+  dummyProjectileSpeed: 40
+  angle45Deg: 45
+  fireRecovery: 0.15
+  p2Muzzle: {fileID: 5859194337017971802}
+  projectilePrefab: {fileID: 7064872001727682976, guid: 2b5ca6ee95ba14de3bee3277db6ae14e, type: 3}
+  p4Emitter: {fileID: 5859194337017971802}
+  slowToReverseDuration: 1
+  baseMoverSpeed: 6
+  resumeDelay: 0
+  holdDuration: 0.5
+  isDead: 0
+  bar: {fileID: 0}
+  bumpVelocityY: 4
+  bumpDistance: 0.25
+  bumpDuration: 0.1
+  jumpParticleObject: {fileID: 0}
+  jumpParticleObject2: {fileID: 0}
+--- !u!114 &7619116827110755597
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7683074617469704678}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 076ffbfd15e19437993ed467bf1657c7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  anim: {fileID: 4594126199369061318}
+  baseController: {fileID: 9100000, guid: 24a2a4d15f9784dc890938d7d230cff9, type: 2}
+  baseWalk: {fileID: 7400000, guid: ca7eda273213f40f59474da53f89a8d7, type: 2}
+  baseJump: {fileID: 7400000, guid: 8ae167f4686b6407fa19c978d4712f67, type: 2}
+  baseAttack: {fileID: 7400000, guid: b559a0d47b07c4514861b0ebe08a2311, type: 2}
+  baseFlyAttack: {fileID: 7400000, guid: a83783ff7b1bd424aadf125273ff3c0b, type: 2}
+  baseLand: {fileID: 7400000, guid: c111b94491c9b4b87aa0446cdf7967b5, type: 2}
+  baseDie: {fileID: 7400000, guid: d1258590277e54b4882481a8e152c75f, type: 2}
+  baseTransform: {fileID: 7400000, guid: 079dcbf427f6a412897e53af95ef5ae3, type: 2}
+  baseHurt: {fileID: 7400000, guid: 1155aa80ba5aa414ba823ff7edd8aee7, type: 2}
+  baseStill: {fileID: 7400000, guid: c55c79574b6344c9d9ff9f4ac5f704db, type: 2}
+  walkClips:
+  - {fileID: 7400000, guid: f7dd010ae2b314463aa6de3f1c71e9e5, type: 2}
+  - {fileID: 7400000, guid: 85ac0c0ea18a847329b416ef38d3c637, type: 2}
+  - {fileID: 7400000, guid: 42f567623661e489cab6115b829c7735, type: 2}
+  - {fileID: 7400000, guid: ae56f1db032ba427d97bb2b6d553ae5e, type: 2}
+  - {fileID: 7400000, guid: c9be633c73c6d4b91a3a1c9ae42f4a6c, type: 2}
+  jumpClips:
+  - {fileID: 7400000, guid: 31398f6e4dbd645efa14dc5c172c8067, type: 2}
+  - {fileID: 7400000, guid: 59d797a1364eb4819b8c42d143417cbb, type: 2}
+  - {fileID: 7400000, guid: 79a5d14019f014d15b5a894b05aa9ff5, type: 2}
+  - {fileID: 7400000, guid: ffc7d014eb6ba42458ad198ce5619c3e, type: 2}
+  - {fileID: 7400000, guid: a9bdc09c96f874b9ca05169251ce48fa, type: 2}
+  attackClips:
+  - {fileID: 7400000, guid: f7acbec869641419c84b3f0cb220ad73, type: 2}
+  - {fileID: 7400000, guid: eca0a0ccfb78c45659aafb0f3faf4360, type: 2}
+  - {fileID: 7400000, guid: d3b90e0b4e100461ea8e88c03b9c7cfa, type: 2}
+  - {fileID: 7400000, guid: 35d0fb7ccf81c4a6ba2350f90d1711a3, type: 2}
+  - {fileID: 7400000, guid: 96425361a5de449b2a970c1ac732ffca, type: 2}
+  flyAttackClips:
+  - {fileID: 0}
+  - {fileID: 7400000, guid: ae0ff23f870724572b1f38aa9c5cb8ee, type: 2}
+  - {fileID: 7400000, guid: d3b90e0b4e100461ea8e88c03b9c7cfa, type: 2}
+  - {fileID: 7400000, guid: 4e87f176949884eaa8b6d7662107c6da, type: 2}
+  - {fileID: 0}
+  landClips:
+  - {fileID: 7400000, guid: 6050f2f1260a14c5e87220826fe41dab, type: 2}
+  - {fileID: 7400000, guid: 7b08ecc0d704846a4a82f45843b7114a, type: 2}
+  - {fileID: 7400000, guid: 37314436096294e07b6b16fec86d9219, type: 2}
+  - {fileID: 7400000, guid: 9dfc588b46aae4e168d7c020bd79a909, type: 2}
+  - {fileID: 7400000, guid: f222d55a3677a4615b61ae45f1d4c39e, type: 2}
+  dieClips:
+  - {fileID: 7400000, guid: 72201f8178dd74ccc9c523d0ecbee58f, type: 2}
+  - {fileID: 7400000, guid: 7ead881398f6543e3bb47b6a78ef8438, type: 2}
+  - {fileID: 7400000, guid: 6a554474d83874468964687ac7f7ea4f, type: 2}
+  - {fileID: 7400000, guid: 425a1e946598d418d8c5a91332bfc16e, type: 2}
+  - {fileID: 7400000, guid: b5162778000244d2ab40348f42b21013, type: 2}
+  transformClips: []
+  hurtClips: []
+  stillClips:
+  - {fileID: 7400000, guid: bf02feb6780034a57b0f12c3252841a8, type: 2}
+  - {fileID: 7400000, guid: 044f4aae06ca84721b0de2da09511f5d, type: 2}
+  - {fileID: 7400000, guid: 29a35a1c546134621881c7589783e9d1, type: 2}
+  - {fileID: 7400000, guid: daa6f0e22ff2348e6a958da7c1eee261, type: 2}
+  - {fileID: 7400000, guid: 2731b58008b894139ba789369978562a, type: 2}
+  rageWalkClips:
+  - {fileID: 7400000, guid: d457ee0067d5d499d9de034c52093910, type: 2}
+  - {fileID: 7400000, guid: 801b1b09c8390434e8dd48870ce66552, type: 2}
+  - {fileID: 7400000, guid: 9c6211a899cbc434cac88ac7f1b4e0eb, type: 2}
+  - {fileID: 7400000, guid: fa54f8b691a4746a7b427b4a80ede926, type: 2}
+  - {fileID: 7400000, guid: d5520065619704e438aaaa45f86c8cf1, type: 2}
+  rageJumpClips:
+  - {fileID: 7400000, guid: 4f6ab3566942b4011a0b367e5d0e8042, type: 2}
+  - {fileID: 7400000, guid: 30cc2d0e763294dad95699c972093bc1, type: 2}
+  - {fileID: 7400000, guid: 96cb715c26faf40aa90a92d8b6792edf, type: 2}
+  - {fileID: 7400000, guid: 4c1b69076e3f7487091521bd518d7e10, type: 2}
+  - {fileID: 7400000, guid: e52d5e18e674644ff83956c202b8bd46, type: 2}
+  rageAttackClips:
+  - {fileID: 7400000, guid: 85d4bea7dae6f4d9e9dd2985456275f5, type: 2}
+  - {fileID: 7400000, guid: 8dac6f9c0a0264c1990cce002ac5b6f6, type: 2}
+  - {fileID: 7400000, guid: 8d7383d7863364914b9663da4bfaac2b, type: 2}
+  - {fileID: 7400000, guid: 0512c02f76dea4f9f91e170c2267ef95, type: 2}
+  - {fileID: 7400000, guid: c2244e8c4b9314a61abceeb888cc6535, type: 2}
+  rageFlyAttackClips:
+  - {fileID: 0}
+  - {fileID: 7400000, guid: 6281bcea1b40b4b8284502257d824c15, type: 2}
+  - {fileID: 0}
+  - {fileID: 7400000, guid: b59214605bdab43a693e38c5350a940a, type: 2}
+  - {fileID: 0}
+  rageLandClips:
+  - {fileID: 7400000, guid: 65ffc786e184d4447a41c33b58e51ad9, type: 2}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 7400000, guid: db6105a4134aa4459ad525eff6d5966f, type: 2}
+  rageTransformClips:
+  - {fileID: 7400000, guid: af272941afe324e9ebd202fb71a2455c, type: 2}
+  - {fileID: 7400000, guid: c6235681dbd9f4714b3bf96ec35874ad, type: 2}
+  - {fileID: 7400000, guid: d6a1404b79aa74dee919fc2e0cdb9890, type: 2}
+  - {fileID: 7400000, guid: 2874ae6928c50450db89e070f5477c6d, type: 2}
+  - {fileID: 7400000, guid: 65704fc1ed8474922acbd37dc4e327ac, type: 2}
+--- !u!70 &831977246100301547
+CapsuleCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7683074617469704678}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 0
+  m_UsedByEffector: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
+  m_Offset: {x: 0.035073042, y: 0.07279445}
+  m_Size: {x: 0.63904047, y: 1.0719328}
+  m_Direction: 0
