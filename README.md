@@ -9,12 +9,10 @@ The Village is not set up yet (only design and a few animation).
 (PDF has more explanation with images)
 1. Download Unity
 2. Type below commands in your local terminal (requires 4.4G):
-
 ...
 cd ~/Desktop
 git clone https://github.com/seanyseany/game.git
-…
-
+...
 4. Go to Unity and find 'Projects' on the left. Click 'Add', and then click 'Add project from disk', find "game" on your Desktop.
 
 5. Proceed the game by clicking “game"
