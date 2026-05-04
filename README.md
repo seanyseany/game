@@ -6,7 +6,7 @@ The Arcade game focuses on dynamic player control, enemy interactions, and progr
 The Village is not set up yet (only design and a few animation).
 
 ## How to Run
-([How to Play (PDF)](HowToPlayGame%20(1).pdf) has more explanation with images)
+([How to Play (PDF)](HowToPlayGame%20(2).pdf) has more explanation with images)
 1. Download Unity
 
 2. Type below commands in your local terminal (requires 4.4G):
