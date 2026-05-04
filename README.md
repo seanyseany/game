@@ -5,6 +5,28 @@ This project is a 2D Unity game that combines village-building elements with act
 The Arcade game focuses on dynamic player control, enemy interactions, and progressive difficulty through stage systems.
 The Village is not set up yet (only design and a few animation).
 
+## How to Run
+(PDF has more explanation with images)
+1. Download Unity
+2. Type below commands in your local terminal (requires 4.4G):
+...
+cd ~/Desktop
+git clone https://github.com/seanyseany/game.git
+…
+3. Go to Unity and find 'Projects' on the left. Click 'Add', and then click 'Add project from disk', find "game" on your Desktop.
+
+4. Proceed the game by clicking “game"
+
+5. Click ‘Scenes’ in Assets folder and Click ‘arcade’
+
+6. Click play button on the top middle of the screen.
+
+7. Space bar is jump, Down arrow key is attack (click screen if a keyboard doesn’t work)
+
+
+
+
+
 ## Features
 - Player movement, combat, and multiple action states (jump, attack, rage mode)
 - Various enemy types and boss mechanics with different attack patterns
