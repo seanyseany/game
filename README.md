@@ -9,19 +9,21 @@ The Village is not set up yet (only design and a few animation).
 (PDF has more explanation with images)
 1. Download Unity
 2. Type below commands in your local terminal (requires 4.4G):
+
 ...
 cd ~/Desktop
 git clone https://github.com/seanyseany/game.git
 …
-3. Go to Unity and find 'Projects' on the left. Click 'Add', and then click 'Add project from disk', find "game" on your Desktop.
 
-4. Proceed the game by clicking “game"
+4. Go to Unity and find 'Projects' on the left. Click 'Add', and then click 'Add project from disk', find "game" on your Desktop.
 
-5. Click ‘Scenes’ in Assets folder and Click ‘arcade’
+5. Proceed the game by clicking “game"
 
-6. Click play button on the top middle of the screen.
+6. Click ‘Scenes’ in Assets folder and Click ‘arcade’
 
-7. Space bar is jump, Down arrow key is attack (click screen if a keyboard doesn’t work)
+7. Click play button on the top middle of the screen.
+
+8. Space bar is jump, Down arrow key is attack (click screen if a keyboard doesn’t work)
 
 
 
