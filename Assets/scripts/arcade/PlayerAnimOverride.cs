@@ -87,24 +87,24 @@ public class PlayerAnimOverride : MonoBehaviour
 
         if (isRageMode)
         {
-            map.Add(new(baseWalk, SafeGet(rageWalkClips, i) ?? baseWalk));
-            map.Add(new(baseJump, SafeGet(rageJumpClips, i) ?? baseJump));
-            map.Add(new(baseAttack, SafeGet(rageAttackClips, i) ?? baseAttack));
-            map.Add(new(baseFlyAttack, SafeGet(rageFlyAttackClips, i) ?? baseFlyAttack));
-            map.Add(new(baseLand, SafeGet(rageLandClips, i) ?? baseLand));
-            map.Add(new(baseTransform, SafeGet(rageTransformClips, i) ?? baseTransform));
+            map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseWalk, SafeGet(rageWalkClips, i) ?? baseWalk));
+            map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseJump, SafeGet(rageJumpClips, i) ?? baseJump));
+            map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseAttack, SafeGet(rageAttackClips, i) ?? baseAttack));
+            map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseFlyAttack, SafeGet(rageFlyAttackClips, i) ?? baseFlyAttack));
+            map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseLand, SafeGet(rageLandClips, i) ?? baseLand));
+            map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseTransform, SafeGet(rageTransformClips, i) ?? baseTransform));
         }
         else
         {
-            map.Add(new(baseWalk, SafeGet(walkClips, i) ?? baseWalk));
-            map.Add(new(baseJump, SafeGet(jumpClips, i) ?? baseJump));
-            map.Add(new(baseAttack, SafeGet(attackClips, i) ?? baseAttack));
-            map.Add(new(baseFlyAttack, SafeGet(flyAttackClips, i) ?? baseFlyAttack));
-            map.Add(new(baseLand, SafeGet(landClips, i) ?? baseLand));
-            map.Add(new(baseDie, SafeGet(dieClips, i) ?? baseDie));
-            map.Add(new(baseTransform, SafeGet(transformClips, i) ?? baseTransform));
-            map.Add(new(baseHurt, SafeGet(hurtClips, i) ?? baseHurt));
-            map.Add(new(baseStill, SafeGet(stillClips, i) ?? baseStill));
+            map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseWalk, SafeGet(walkClips, i) ?? baseWalk));
+            map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseJump, SafeGet(jumpClips, i) ?? baseJump));
+            map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseAttack, SafeGet(attackClips, i) ?? baseAttack));
+            map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseFlyAttack, SafeGet(flyAttackClips, i) ?? baseFlyAttack));
+            map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseLand, SafeGet(landClips, i) ?? baseLand));
+            map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseDie, SafeGet(dieClips, i) ?? baseDie));
+            map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseTransform, SafeGet(transformClips, i) ?? baseTransform));
+            map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseHurt, SafeGet(hurtClips, i) ?? baseHurt));
+            map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseStill, SafeGet(stillClips, i) ?? baseStill));
         }
 
         aoc.ApplyOverrides(map);

@@ -76,7 +76,9 @@ public class BackgroundLaneSpawner : MonoBehaviour
         for (int i = 0; i < bag.Count; i++)
         {
             int j = Random.Range(i, bag.Count);
-            (bag[i], bag[j]) = (bag[j], bag[i]);
+            int temp = bag[i];
+            bag[i] = bag[j];
+            bag[j] = temp;
         }
     }
 }
