@@ -10,9 +10,14 @@ The Village is not set up yet (only design and a few animation).
 1. Download Unity
 
 2. Type below commands in your local terminal (requires 4.4G):
+Mac / Linux:
 ```bash
 cd ~/Desktop
-
+git clone https://github.com/seanyseany/game.git
+```
+Windows (PowerShell):
+```bash
+cd Desktop
 git clone https://github.com/seanyseany/game.git
 ```
 
