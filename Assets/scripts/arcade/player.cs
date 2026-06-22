@@ -4,6 +4,14 @@ using System.Collections.Generic;
 
 public class Player : MonoBehaviour
 {
+    private enum RageSmokeDirection
+    {
+        None,
+        Normal,
+        Up,
+        Down
+    }
+
     // 0=Player1, 1=Player2, 2=Player3, 3=Player4, 4=Player5
     private const int T0 = 0, T1 = 1, T2 = 2, T3 = 3, T4 = 4, T5 = 5;
 
@@ -74,6 +82,7 @@ public class Player : MonoBehaviour
     public string hitboxP5PoolTag = "PlayerHitboxP5";
     public string p2RageLaserPoolTag = "P2RageLaser";
     public string speedEffectPoolTag = "SpeedEffect";
+    public string runningSmokePoolTag = "runningSmoke";
 
     [Header("Stats")]
     public int lives = 3;
@@ -118,10 +127,14 @@ public class Player : MonoBehaviour
     public GameObject rageSmokePrefab;
     public GameObject rageSmokePrefabSecondary;
     public GameObject rageAttackSmokePrefab;
+    public GameObject rageAttachedSmokePrimary;
+    public GameObject rageAttachedSmokeSecondary;
     public Vector2 rageTransformHitboxSize = new Vector2(15f, 2f);
     public Vector2 rageTransformHitboxOffset = Vector2.zero;
     public Vector3 rageSmokeOffset = Vector3.zero;
     public Vector3 rageSmokeOffsetSecondary = Vector3.zero;
+    public Vector2 rageAttachedSmokeLocalPosPrimary = Vector2.zero;
+    public Vector2 rageAttachedSmokeLocalPosSecondary = Vector2.zero;
 
     [Header("Rage Speed Effect")]
     public GameObject speedEffectPrefab;
@@ -138,6 +151,8 @@ public class Player : MonoBehaviour
 
     private string lastGroundTag = null;
     private Collider2D lastGroundCol = null;
+    private readonly Collider2D[] groundOverlapResults = new Collider2D[8];
+    private readonly ContactPoint2D[] groundContactPoints = new ContactPoint2D[16];
     bool attackQueued = false;
     private float attackQueuedTime = 0f;   // 공격키 예약 시각 기록
     private float attackQueueWindow = 0.2f;
@@ -147,6 +162,7 @@ public class Player : MonoBehaviour
     private bool needRebind = false;
     private bool isTransformLock = false;
     private float transformLockEndTime = 0f;
+    private bool blockJumpUntilReleaseAfterTransform = false;
     public float transformLockDuration = 0.9f;
 
     // ===== Ranged (Player2/Player4) =====
@@ -181,7 +197,15 @@ public class Player : MonoBehaviour
     private bool jumpedThisAirborne = false;
     private Coroutine rangedFlyattackLatchRoutine;
     private Coroutine rageRangedGroundAttackRoutine;
+    private Coroutine activeGroundAttackRoutine;
+    private Coroutine activeLandingRoutine;
     private const float rageRangedAttackAnimDuration = 0.5f;
+
+    [Header("Running Smoke")]
+    public GameObject runningSmokePrefab;
+    public Vector3 runningSmokeLocalOffset = new Vector3(-0.4f, -0.55f, 0f);
+    public float runningSmokeNormalSpeed = 1f;
+    public float runningSmokeRageSpeed = 1.5f;
 
 
     [Header("Obstacle SlowMo Reposition")]
@@ -211,6 +235,7 @@ public class Player : MonoBehaviour
     private float currentWalkAnimSpeed = 1f;
     private SpriteRenderer sr;
     private Collider2D bodyCollider;
+    private PlayerAnimOverride animOverride;
     private RigidbodyConstraints2D p3AttackOriginalConstraints;
     private bool p3AttackPhysicsLocked = false;
     public HealthBarUI bar;
@@ -235,11 +260,29 @@ public class Player : MonoBehaviour
     private GameObject rageTransformColliderObj;
     private BoxCollider2D rageTransformBox;
     private Hitbox rageTransformHitbox;
+    private MachineGun activeMachineGun;
     private GameObject activeRageSmokePrimary;
     private GameObject activeRageSmokeSecondary;
+    private GameObject runtimeAttachedRageSmokePrimary;
+    private GameObject runtimeAttachedRageSmokeSecondary;
+    private RageSmokeDirection currentRageSmokeDirection = RageSmokeDirection.None;
     private readonly HashSet<int> activeHazardContactIds = new HashSet<int>();
     private readonly Dictionary<int, ObstacleType> cachedObstacleTypes = new Dictionary<int, ObstacleType>(64);
     private float nextSpeedEffectSpawnTime = -1f;
+    private float jumpObstacleJumpLockUntil = -1f;
+    private bool resumeStompAttackAfterJumpObstacle = false;
+    private GameObject activeRunningSmoke;
+    private float groundProbeDistance = 0.28f;
+    private float groundOverlapHeight = 0.12f;
+    private float groundedLossGraceTime = 0.06f;
+    private float ungroundedCandidateTime = -999f;
+    private const float MinGroundContactNormalY = 0.2f;
+
+    private void RefreshLivesUI()
+    {
+        if (bar != null)
+            bar.SetHealth(lives);
+    }
 
     void Awake()
     {
@@ -250,6 +293,7 @@ public class Player : MonoBehaviour
         if (!anim) anim = GetComponent<Animator>();
         sr = GetComponent<SpriteRenderer>();
         bodyCollider = GetComponent<Collider2D>();
+        animOverride = GetComponent<PlayerAnimOverride>();
         cachedGravity = rb.gravityScale;
         currentWalkAnimSpeed = baseWalkAnimSpeed;
         anim.speed = baseWalkAnimSpeed;
@@ -262,7 +306,11 @@ public class Player : MonoBehaviour
 
     void Update()
     {
-        if (isDead) return;
+        if (isDead)
+        {
+            ClearRunningSmokeImmediate();
+            return;
+        }
         if (isSpawnIntroActive)
         {
             UpdateWalkAnimationSpeed();
@@ -273,6 +321,8 @@ public class Player : MonoBehaviour
             if (isTransformLock && Time.time >= transformLockEndTime)
             {
                 isTransformLock = false;
+                blockJumpUntilReleaseAfterTransform = false;
+                RageTransformFreezeController.Instance.EndNow(this);
                 ApplyLocomotionAnimation();
             }
             // ✅ 분노 끝나기 2초 전에만 1번 실행
@@ -285,18 +335,17 @@ public class Player : MonoBehaviour
             // ✅ 분노 끝났을 때
             if (Time.time >= rageEndTime)
             {
+                RageTransformFreezeController.Instance.EndNow(this);
                 isRageMode = false;
                 rageWarningBlinkPlayed = false;
                 StopRageSpeedEffect();
+                SetAttachedRageSmokesActive(false);
                 ClearRageTransformSmokes();
                 ApplyJumpParticleMaterial(false);
 
                 stats.attack = originalAttack;
-                lives = 3;
-                if (bar != null)
-                    bar.SetHealth(hp);
+                RefreshLivesUI();
 
-                var animOverride = GetComponent<PlayerAnimOverride>();
                 if (animOverride != null)
                 {
                     animOverride.SetRageMode(false);
@@ -315,6 +364,7 @@ public class Player : MonoBehaviour
                 currentAnim = "";
 
                 justRecoveredFromRage = true;
+                StopGroundedAttackRoutine();
                 EndP3AttackPhysicsLock();
                 isAttacking = false;
                 isLanding = false;
@@ -332,6 +382,13 @@ public class Player : MonoBehaviour
         SyncGroundedState();
         ResolveRageRangedGroundedFlyattack();
         ResolvePostRageAnimationRecovery();
+        RecoverGroundedStompState();
+
+        if (HandleMachineGunControlOverride())
+        {
+            UpdateWalkAnimationSpeed();
+            return;
+        }
 
         HandleMovement();
         HandleJump();
@@ -339,11 +396,51 @@ public class Player : MonoBehaviour
         HandleLandSequencing();
         RecoverStuckGroundAttack();
         UpdateWalkAnimationSpeed();
+        TrySpawnRunningSmoke();
+    }
+
+    private bool HandleMachineGunControlOverride()
+    {
+        if (activeMachineGun == null || !activeMachineGun.IsPlayerControlActive)
+            return false;
+
+        if (rb != null)
+            rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
+
+        if (!isTransformLock && currentAnim != "Still")
+            ChangeAnimation("Still");
+
+        activeMachineGun.HandlePlayerControl();
+        return true;
     }
 
     void LateUpdate()
     {
+        SyncRunningSmoke();
         SyncRageTransformSmokes();
+        UpdateRageSmokeAnimationState();
+    }
+
+    public void SetMachineGunController(MachineGun machineGun)
+    {
+        activeMachineGun = machineGun;
+        StopGroundedAttackRoutine();
+        StopLandingRoutine();
+        StopRageRangedGroundAttackTimer();
+        EndP3AttackPhysicsLock();
+        isAttacking = false;
+        isLanding = false;
+        hasLanded = false;
+        attackQueued = false;
+        p3NormalAttackQueued = false;
+    }
+
+    public void ClearMachineGunController(MachineGun machineGun)
+    {
+        if (activeMachineGun != machineGun)
+            return;
+
+        activeMachineGun = null;
     }
     private void ChangeAnimation(string triggerName)
     {
@@ -371,6 +468,7 @@ public class Player : MonoBehaviour
             if (animatorTrigger != "Flyattack")
                 anim.ResetTrigger("Flyattack");
 
+            anim.ResetTrigger("Die");
             anim.ResetTrigger("Jump");
             anim.ResetTrigger("Land");
             anim.ResetTrigger("Walk");
@@ -451,6 +549,182 @@ public class Player : MonoBehaviour
         anim.Play(stateName, 0, 0f);
         currentAnim = logicalName;
         UpdateJumpParticleEmission(logicalName);
+    }
+
+    private bool IsGroundAttackAnimationPlaying()
+    {
+        return isGrounded &&
+               (currentAnim == "Attack" || IsAnimatorShowingLogicalState("Attack"));
+    }
+
+    private bool IsFlyattackStateActive()
+    {
+        return currentAnim == "Flyattack" || IsAnimatorShowingLogicalState("Flyattack");
+    }
+
+    private IEnumerator WaitForGroundAttackAnimationToFinish()
+    {
+        if (anim == null)
+            yield break;
+
+        bool sawAttackState = false;
+
+        while (!isDead)
+        {
+            if (IsAnimatorShowingLogicalState("Attack"))
+                sawAttackState = true;
+            else if (sawAttackState)
+                yield break;
+
+            AnimatorStateInfo st = anim.GetCurrentAnimatorStateInfo(0);
+            if (st.IsName("Base Attack") && !anim.IsInTransition(0) && st.normalizedTime >= 0.98f)
+                yield break;
+
+            yield return null;
+        }
+    }
+
+    private IEnumerator WaitForAnimationStateToFinish(string logicalName, string stateName)
+    {
+        if (anim == null)
+            yield break;
+
+        bool sawState = false;
+
+        while (!isDead)
+        {
+            if (IsAnimatorShowingLogicalState(logicalName))
+                sawState = true;
+            else if (sawState)
+                yield break;
+
+            AnimatorStateInfo st = anim.GetCurrentAnimatorStateInfo(0);
+            if (st.IsName(stateName) && !anim.IsInTransition(0) && st.normalizedTime >= 0.98f)
+                yield break;
+
+            yield return null;
+        }
+    }
+
+    private bool RefreshGroundSurfaceFromProbe()
+    {
+        if (!TryGetGroundSurface(out var groundCol, out var groundTag, out _))
+            return false;
+
+        isGrounded = true;
+        lastGroundCol = groundCol;
+        lastGroundTag = !string.IsNullOrEmpty(groundTag)
+            ? groundTag
+            : groundCol != null ? groundCol.tag : null;
+        lastGroundedTime = Time.time;
+        return true;
+    }
+
+    private IEnumerator TransitionToWalkAfterLand(int playerType)
+    {
+        if (isTransformLock || currentAnim == "Transform")
+            yield break;
+
+        bool foundGround = RefreshGroundSurfaceFromProbe();
+
+        isAttacking = false;
+        attackStateStartTime = -999f;
+        hasLanded = false;
+
+        if (isDead)
+            yield break;
+
+        if (!foundGround)
+        {
+            isGrounded = false;
+            ForceAnimationState("Base Jump", "Jump");
+            yield break;
+        }
+
+        isGrounded = true;
+        lastStompTime = Time.time;
+
+        ForceAnimationState("Base Walk", "Walk");
+    }
+
+    private IEnumerator ResolveGroundAttackEndTransition(int playerType)
+    {
+        if (isTransformLock || currentAnim == "Transform")
+            yield break;
+
+        bool foundGround = RefreshGroundSurfaceFromProbe();
+
+        isAttacking = false;
+        attackStateStartTime = -999f;
+
+        if (!foundGround || isDead)
+            yield break;
+
+        if (playerType == T1 || playerType == T5)
+        {
+            isLanding = true;
+            hasLanded = false;
+
+            if (playerType == T1)
+                yield return StartCoroutine(P1_Land(isRageMode));
+            else
+                yield return StartCoroutine(P5_Land(true));
+
+            isLanding = false;
+            yield break;
+        }
+
+        ForceAnimationState("Base Walk", "Walk");
+    }
+
+    private void StartGroundedAttackRoutine(IEnumerator routine)
+    {
+        if (activeGroundAttackRoutine != null)
+        {
+            StopCoroutine(activeGroundAttackRoutine);
+            activeGroundAttackRoutine = null;
+            EndP3AttackPhysicsLock();
+            isAttacking = false;
+            attackStateStartTime = -999f;
+        }
+
+        activeGroundAttackRoutine = StartCoroutine(RunGroundedAttackRoutine(routine));
+    }
+
+    private IEnumerator RunGroundedAttackRoutine(IEnumerator routine)
+    {
+        yield return StartCoroutine(routine);
+        activeGroundAttackRoutine = null;
+    }
+
+    private void StopGroundedAttackRoutine()
+    {
+        if (activeGroundAttackRoutine == null)
+            return;
+
+        StopCoroutine(activeGroundAttackRoutine);
+        activeGroundAttackRoutine = null;
+    }
+
+    private void StartLandingRoutine(IEnumerator routine)
+    {
+        StopLandingRoutine();
+        activeLandingRoutine = StartCoroutine(RunLandingRoutine(routine));
+    }
+
+    private IEnumerator RunLandingRoutine(IEnumerator routine)
+    {
+        yield return StartCoroutine(routine);
+        activeLandingRoutine = null;
+    }
+
+    private void StopLandingRoutine()
+    {
+        if (activeLandingRoutine == null)
+            return;
+
+        StopCoroutine(activeLandingRoutine);
+        activeLandingRoutine = null;
     }
 
     private void UpdateJumpParticleEmission(string triggerName)
@@ -574,7 +848,7 @@ public class Player : MonoBehaviour
         if (isGrounded)
             return true;
 
-        if (!TryGetGroundSurface(out var groundCol))
+        if (!TryGetGroundSurface(out var groundCol, out var groundTag, out _))
             return false;
 
         isGrounded = true;
@@ -583,7 +857,7 @@ public class Player : MonoBehaviour
         if (groundCol != null)
         {
             lastGroundCol = groundCol;
-            lastGroundTag = groundCol.tag;
+            lastGroundTag = !string.IsNullOrEmpty(groundTag) ? groundTag : groundCol.tag;
         }
 
         return true;
@@ -745,6 +1019,12 @@ public class Player : MonoBehaviour
             return;
         }
 
+        if (IsGroundAttackAnimationPlaying())
+            return;
+
+        if (isAttacking)
+            return;
+
         if (isGrounded && !isAttacking && !isLanding)
         {
             ChangeAnimation("Walk");
@@ -794,6 +1074,36 @@ public class Player : MonoBehaviour
     {
         if (anim == null) return;
 
+        if (isLanding)
+            return;
+
+        if (isAttacking)
+        {
+            if (!isGrounded)
+            {
+                ForceAnimationState("Base Jump", "Jump");
+                return;
+            }
+
+            if (currentAnim == "Attack" || IsAnimatorShowingLogicalState("Attack"))
+            {
+                ForceAnimationState("Base Attack", "Attack");
+                return;
+            }
+
+            return;
+        }
+
+        if (TryGetGroundSurface(out var groundCol, out var groundTag, out var touchingFloorAndPlatform) &&
+            touchingFloorAndPlatform)
+        {
+            isGrounded = true;
+            lastGroundCol = groundCol;
+            lastGroundTag = groundTag;
+            ForceAnimationState("Base Walk", "Walk");
+            return;
+        }
+
         if (!isGrounded)
         {
             string airborneTrigger = GetAirborneAnimationTrigger();
@@ -807,14 +1117,75 @@ public class Player : MonoBehaviour
         ForceAnimationState("Base Walk", "Walk");
     }
 
+    private bool CanProcessAirJumpWhileAttackHeld(int playerType)
+    {
+        if (isGrounded || !Input.GetKey(KeyCode.DownArrow))
+            return true;
+
+        // Airborne input cases that should still allow jump:
+        // 1) attack held -> jump pressed
+        // 2) rapid attack taps overlap the jump frame
+        // 3) attack + jump are pressed on the same frame
+        // 4) a previous ranged flyattack is still latched when jump is held
+        return playerType == T2 || playerType == T4 || (playerType == T3 && isRageMode);
+    }
+
     // ---------- 점프 ----------
     private void HandleJump()
     {
-        if (!isGrounded && Input.GetKey(KeyCode.DownArrow)) return;
+        if (isTransformLock)
+        {
+            attackQueued = false;
+            rb.gravityScale = cachedGravity;
+
+            if (Input.GetKey(KeyCode.Space))
+                blockJumpUntilReleaseAfterTransform = true;
+            else if (Input.GetKeyUp(KeyCode.Space))
+                blockJumpUntilReleaseAfterTransform = false;
+
+            return;
+        }
+
+        if (blockJumpUntilReleaseAfterTransform)
+        {
+            rb.gravityScale = cachedGravity;
+            attackQueued = false;
+
+            if (!Input.GetKey(KeyCode.Space))
+                blockJumpUntilReleaseAfterTransform = false;
+
+            return;
+        }
+
+        if (Time.time < jumpObstacleJumpLockUntil && Input.GetKey(KeyCode.Space))
+        {
+            rb.gravityScale = cachedGravity;
+            return;
+        }
+
+        int t = GameData.Instance.selectedPlayerType;
+
+        if (!CanProcessAirJumpWhileAttackHeld(t))
+            return;
+
         if (Input.GetKey(KeyCode.Space))
         {
             justRecoveredFromRage = false;
-            int t = GameData.Instance.selectedPlayerType;
+            bool overridingJumpObstacleStomp =
+                resumeStompAttackAfterJumpObstacle &&
+                isAttacking &&
+                !isGrounded &&
+                !isLanding &&
+                Time.time >= jumpObstacleJumpLockUntil;
+
+            if (overridingJumpObstacleStomp)
+            {
+                // JumpObstacle rebound after a stomp should let jump input take over.
+                resumeStompAttackAfterJumpObstacle = false;
+                isAttacking = false;
+                hasLanded = false;
+                attackStateStartTime = -999f;
+            }
 
             // Player3 노멀 공격 중에는 Space 유지로 점프가 다시 걸리지 않게 막는다.
             // Rage 상태에서는 P2/P4처럼 공격 중 점프를 허용한다.
@@ -847,14 +1218,18 @@ public class Player : MonoBehaviour
         {
             rb.gravityScale = cachedGravity;
 
+            if (Time.time < jumpObstacleJumpLockUntil)
+            {
+                attackQueued = false;
+                return;
+            }
+
             // 스페이스 키를 뗄 때 예약 공격 실행
             if (Input.GetKeyUp(KeyCode.Space) && attackQueued)
             {
                 if (Time.time - attackQueuedTime <= attackQueueWindow)
                 {
                     attackQueued = false;
-
-                    int t = GameData.Instance.selectedPlayerType;
 
                     // ✅ 1️⃣ 분노 모드 공격을 최우선으로 실행
                     if (isRageMode)
@@ -887,6 +1262,66 @@ public class Player : MonoBehaviour
         }
     }
 
+    public void ApplyJumpObstacleBoost(float yVelocity, float jumpInputLockSeconds)
+    {
+        if (rb == null || isDead)
+            return;
+
+        bool shouldResumeAttack =
+            isAttacking &&
+            GameData.Instance != null &&
+            (GameData.Instance.selectedPlayerType == T1 || GameData.Instance.selectedPlayerType == T5);
+
+        rb.gravityScale = cachedGravity;
+        rb.linearVelocity = new Vector2(rb.linearVelocity.x, yVelocity);
+
+        isGrounded = false;
+        jumpedThisAirborne = true;
+        lastJumpTime = Time.time;
+        lastGroundCol = null;
+        lastGroundTag = null;
+
+        jumpObstacleJumpLockUntil = Time.time + Mathf.Max(0f, jumpInputLockSeconds);
+        resumeStompAttackAfterJumpObstacle = shouldResumeAttack;
+
+        if (!isTransformLock && currentAnim != "Jump")
+            ChangeAnimation("Jump");
+    }
+
+    private void ResumeJumpObstacleStompAttackIfNeeded()
+    {
+        if (!resumeStompAttackAfterJumpObstacle)
+            return;
+
+        if (isDead || rb == null || GameData.Instance == null)
+        {
+            resumeStompAttackAfterJumpObstacle = false;
+            return;
+        }
+
+        int t = GameData.Instance.selectedPlayerType;
+        if (t != T1 && t != T5)
+        {
+            resumeStompAttackAfterJumpObstacle = false;
+            return;
+        }
+
+        if (!isAttacking || isGrounded || isLanding || hasLanded)
+        {
+            resumeStompAttackAfterJumpObstacle = false;
+            return;
+        }
+
+        if (currentAnim != "Jump")
+            return;
+
+        if (rb.linearVelocity.y > 0.05f)
+            return;
+
+        resumeStompAttackAfterJumpObstacle = false;
+        ChangeAnimation("Flyattack");
+    }
+
     // ===================== Player2: 공 발사(45°, 속도 20) =====================
     private IEnumerator P2_FireRanged()
     {
@@ -894,7 +1329,10 @@ public class Player : MonoBehaviour
         bool airborneAttack = !isGrounded;
 
         // 애니: 지상=Attack, 공중=Flyattack
-        ChangeAnimation(airborneAttack ? "Flyattack" : "Attack");
+        if (airborneAttack)
+            ChangeAnimation("Flyattack");
+        else
+            ForceAnimationState("Base Attack", "Attack");
 
         // 진행 방향 기준 45° 하향
         float dirX = (sr != null && sr.flipX) ? -1f : +1f;
@@ -909,6 +1347,7 @@ public class Player : MonoBehaviour
             if (proj != null)
             {
                 proj.ConfigurePooling(fromPool, projectilePoolTag);
+                proj.SetSpawnSeparateHitbox(false);
                 proj.damage = 1;
                 proj.smokePrefab = smokeEffectPrefab; // 바닥 충돌 시 스모크
                 proj.ConfigureSmokePooling(p2ProjectileSmokePoolTag);
@@ -924,8 +1363,8 @@ public class Player : MonoBehaviour
         }
 
         yield return new WaitForSeconds(fireRecovery);
-        isAttacking = false;
-        if (isGrounded) ChangeAnimation("Walk");
+        yield return StartCoroutine(WaitForGroundAttackAnimationToFinish());
+        yield return StartCoroutine(ResolveGroundAttackEndTransition(T2));
     }
 
 
@@ -934,7 +1373,10 @@ public class Player : MonoBehaviour
     {
         isAttacking = true;
         bool airborneAttack = !isGrounded;
-        ChangeAnimation(airborneAttack ? "Flyattack" : "Attack");
+        if (airborneAttack)
+            ChangeAnimation("Flyattack");
+        else
+            ForceAnimationState("Base Attack", "Attack");
 
         bool left = (sr != null && sr.flipX);
         Vector2 down45 = Aim45(left, down: true); // 보이는 각도 45°(아래 대각선)
@@ -962,6 +1404,7 @@ public class Player : MonoBehaviour
             if (dummy != null)
             {
                 dummy.ConfigurePooling(fromPool, dummyProjectilePoolTag);
+                dummy.SetSpawnSeparateHitbox(false);
                 dummy.damage = 0; // 데미지 없음(스모크용)
                 // P4 노멀 공격 바닥 스모크는 전용 스모크를 우선 사용
                 GameObject p4Smoke = smokeEffectPrefabP4 ? smokeEffectPrefabP4 : smokeEffectPrefab;
@@ -980,8 +1423,8 @@ public class Player : MonoBehaviour
         }
 
         yield return new WaitForSeconds(fireRecovery);
-        isAttacking = false;
-        if (isGrounded) ChangeAnimation("Walk");
+        yield return StartCoroutine(WaitForGroundAttackAnimationToFinish());
+        yield return StartCoroutine(ResolveGroundAttackEndTransition(T4));
     }
 
     // 클래스 내부 아무 곳(예: 다른 메서드들 위/아래)에 추가
@@ -993,8 +1436,62 @@ public class Player : MonoBehaviour
         return new Vector2(x, y);
     }
 
+    private IEnumerator P1_GroundAttack()
+    {
+        if (!isGrounded || isLanding) yield break;
+
+        isAttacking = true;
+        attackStateStartTime = Time.time;
+        ForceAnimationState("Base Attack", "Attack");
+
+        var hb = SpawnHitboxFromPool(hitboxPrefabP1, hitboxP1PoolTag, transform.position);
+        if (hb != null)
+        {
+            hb.transform.parent = transform;
+            AdjustHitboxIfRage(hb);
+            var hbComp = hb.GetComponent<Hitbox>();
+            if (hbComp) hbComp.damage = isRageMode ? 1 : stats.attack;
+            StartCoroutine(ActivateAndDestroyCollider(hb, 0f, Mathf.Max(0.05f, fireRecovery)));
+        }
+
+        if (!isRageMode)
+            SpawnSmokeEffect();
+
+        yield return new WaitForSeconds(fireRecovery);
+        yield return StartCoroutine(WaitForGroundAttackAnimationToFinish());
+        yield return StartCoroutine(ResolveGroundAttackEndTransition(T1));
+    }
+
+    private IEnumerator P5_GroundAttack()
+    {
+        if (!isGrounded || isLanding) yield break;
+
+        isAttacking = true;
+        attackStateStartTime = Time.time;
+        ForceAnimationState("Base Attack", "Attack");
+
+        var hb = SpawnHitboxFromPool(hitboxPrefabP5, hitboxP5PoolTag, transform.position);
+        if (hb != null)
+        {
+            hb.transform.parent = transform;
+            AdjustHitboxIfRage(hb);
+            var hbComp = hb.GetComponent<Hitbox>();
+            if (hbComp) hbComp.damage = stats.attack;
+            StartCoroutine(ActivateAndDestroyCollider(hb, 0f, Mathf.Max(0.05f, fireRecovery)));
+        }
+
+        yield return StartCoroutine(WaitForGroundAttackAnimationToFinish());
+        yield return StartCoroutine(ResolveGroundAttackEndTransition(T5));
+    }
+
     private void HandleAttackInput()
     {
+        if (isTransformLock)
+            return;
+
+        if (Time.time < jumpObstacleJumpLockUntil)
+            return;
+
         if (!Input.GetKeyDown(KeyCode.DownArrow)) return;
         int t = GameData.Instance.selectedPlayerType;
 
@@ -1022,11 +1519,18 @@ public class Player : MonoBehaviour
         // 2) P2/P3/P4는 Space 눌러도 상관없이 즉시 공격 (중요)
         if (t == T2)
         {
-            StartCoroutine(P2_FireRanged());
+            if (isGrounded) StartGroundedAttackRoutine(P2_FireRanged());
+            else StartCoroutine(P2_FireRanged());
             return;
         }
         if (t == T3)
         {
+            if (isGrounded)
+            {
+                StartGroundedAttackRoutine(P3_AirStomp(false));
+                return;
+            }
+
             if (isAttacking)
             {
                 p3NormalAttackQueued = true;
@@ -1038,34 +1542,22 @@ public class Player : MonoBehaviour
         }
         if (t == T4)
         {
-            StartCoroutine(P4_FireLightning());
+            if (isGrounded) StartGroundedAttackRoutine(P4_FireLightning());
+            else StartCoroutine(P4_FireLightning());
             return;
         }
 
-        if (IsStompPlayerType(t) && isGrounded)
+        if (t == T1)
         {
-            if (Input.GetKey(KeyCode.Space))
-            {
-                attackQueued = true;
-                attackQueuedTime = Time.time;
-            }
+            if (isGrounded) StartGroundedAttackRoutine(P1_GroundAttack());
+            else StartCoroutine(P1_AirStomp());
             return;
         }
 
-        // 3) 나머지 플레이어(1/3/5)는 기존 스톰프 구조 유지
-        if (!isGrounded)
+        if (t == T5)
         {
-            switch (t)
-            {
-                case T1: StartCoroutine(P1_AirStomp()); break;
-                case T3:
-                {
-                    bool chainedAttack = Time.time - p3LastAttackEndTime <= p3ChainAttackWindow;
-                    StartCoroutine(P3_AirStomp(chainedAttack));
-                    break;
-                }
-                case T5: StartCoroutine(P5_AirStomp()); break;
-            }
+            if (isGrounded) StartGroundedAttackRoutine(P5_GroundAttack());
+            else StartCoroutine(P5_AirStomp());
         }
     }
 
@@ -1080,7 +1572,7 @@ public class Player : MonoBehaviour
 
         rb.gravityScale = cachedGravity;
         rb.linearVelocity = new Vector2(rb.linearVelocity.x, stompSpeed);
-        ChangeAnimation("Attack"); // Player1 Attack
+        ChangeAnimation("Flyattack");
 
         yield return null; // 착지 시 HandleLandSequencing에서 처리
     }
@@ -1094,7 +1586,7 @@ public class Player : MonoBehaviour
 
         rb.gravityScale = cachedGravity;
         rb.linearVelocity = new Vector2(rb.linearVelocity.x, stompSpeed*1.5f);
-        ChangeAnimation("Attack"); // Player5 Attack
+        ChangeAnimation("Flyattack");
 
         yield return null; // 착지 시 HandleLandSequencing에서 P5_DelayedLand 호출
     }
@@ -1105,14 +1597,15 @@ public class Player : MonoBehaviour
     {
         if (!isAttacking || !isGrounded || hasLanded || isLanding) return;  // isLanding 추가
         if (GameData.Instance == null) return;
+        if (!IsFlyattackStateActive()) return;
 
         hasLanded = true;
         isLanding = true;   // 추가
 
         switch (GameData.Instance.selectedPlayerType)
         {
-            case T1: StartCoroutine(P1_Land_Wrap()); break;
-            case T5: StartCoroutine(P5_Land_Wrap()); break;
+            case T1: StartLandingRoutine(P1_Land_Wrap()); break;
+            case T5: StartLandingRoutine(P5_Land_Wrap()); break;
             default:
                 hasLanded = false;
                 isLanding = false;
@@ -1123,36 +1616,64 @@ public class Player : MonoBehaviour
     private void SpawnSmokeEffect()
     {
         GameObject prefab = null;
-            // 바닥 밑 콜라이더 확인
-        Collider2D hit = Physics2D.OverlapCircle(transform.position + Vector3.down * 0.1f, 0.2f);
-        bool onPlatform = (hit != null && hit.CompareTag("platform"));
+        float scale = 1f;
+        string tag = smokePoolTag;
 
+        bool hasGround = TryGetGroundSurface(out Collider2D groundCol);
+        string groundTag = hasGround && groundCol != null ? groundCol.tag : lastGroundTag;
+        bool onPlatform = groundTag == "platform";
+        bool onFloor = groundTag == "floor";
 
-        switch (GameData.Instance.selectedPlayerType)
+        int selectedType = GameData.Instance.selectedPlayerType;
+
+        if (isRageMode)
         {
-            case T3: // P3 전용
-                prefab = smokeEffectPrefabP3;
-                break;
-            case T4: // P4 전용
-                prefab = smokeEffectPrefabP4;
-                break;
-            case T5: // P5 전용
-                prefab = smokeEffectPrefabP5;
-                break;
-            default: // P1, P2
-                prefab = smokeEffectPrefab;
-                break;
+            switch (selectedType)
+            {
+                case T1:
+                    if (onFloor && rage1SmokePrefab != null)
+                    {
+                        prefab = rage1SmokePrefab;
+                        tag = rage1SmokePoolTag;
+                    }
+                    break;
+                case T5:
+                    if (onFloor && rageAttackSmokePrefab != null)
+                    {
+                        prefab = rageAttackSmokePrefab;
+                        tag = rageAttackSmokePoolTag;
+                        scale = 4f;
+                    }
+                    break;
+            }
+        }
+
+        if (prefab == null)
+        {
+            switch (selectedType)
+            {
+                case T3: // P3 전용
+                    prefab = smokeEffectPrefabP3;
+                    tag = smokeP3PoolTag;
+                    break;
+                case T4: // P4 전용
+                    prefab = smokeEffectPrefabP4;
+                    tag = smokeP4PoolTag;
+                    break;
+                case T5: // P5 전용
+                    prefab = smokeEffectPrefabP5;
+                    tag = smokeP5PoolTag;
+                    break;
+                default: // P1, P2
+                    prefab = smokeEffectPrefab;
+                    tag = smokePoolTag;
+                    break;
+            }
         }
 
         if (!prefab) return;
-        // Rage + Platform → 차단
-        if (isRageMode && onPlatform) return;
         Vector3 pos = new Vector3(transform.position.x, transform.position.y - 0.5f, -0.5f);
-        string tag = smokePoolTag;
-        if (prefab == smokeEffectPrefabP3) tag = smokeP3PoolTag;
-        else if (prefab == smokeEffectPrefabP4) tag = smokeP4PoolTag;
-        else if (prefab == smokeEffectPrefabP5) tag = smokeP5PoolTag;
-        SpawnSmokeFromPrefab(prefab, pos, tag);
+        SpawnSmokeFromPrefab(prefab, pos, tag, scale);
     }
 
     private IEnumerator MoveToWorldPosition(Vector3 worldStart, Vector3 worldTarget, float duration)
@@ -1216,7 +1737,10 @@ public class Player : MonoBehaviour
             rb.linearVelocity = Vector2.zero;
         }
 
-        ChangeAnimation(isGrounded ? "Attack" : "Flyattack");
+        if (isGrounded)
+            ForceAnimationState("Base Attack", "Attack");
+        else
+            ChangeAnimation("Flyattack");
         SpawnP3NormalAttackSmoke();
 
         if (chainedAttack)
@@ -1254,7 +1778,11 @@ public class Player : MonoBehaviour
             yield break;
         }
 
-        if (isGrounded) ChangeAnimation("Walk");
+        if (isGrounded)
+        {
+            yield return StartCoroutine(WaitForGroundAttackAnimationToFinish());
+            yield return StartCoroutine(ResolveGroundAttackEndTransition(T3));
+        }
         else ChangeAnimation(GetAirborneAnimationTrigger());
     }
 
@@ -1287,22 +1815,31 @@ public class Player : MonoBehaviour
 
 
     // ---------- Player1 전용: 착지 처리 ----------
-    private IEnumerator P1_Land()
+    private IEnumerator P1_Land(bool spawnLandingSmoke = true)
     {
+        if (isTransformLock || currentAnim == "Transform")
+        {
+            isLanding = false;
+            hasLanded = false;
+            yield break;
+        }
+
         ChangeAnimation("Land");
         bool landedOnFloor = (lastGroundTag == "floor");
         bool landedOnPlatform = (lastGroundTag == "platform");
 
-        if (isRageMode)
+        if (spawnLandingSmoke && isRageMode)
         {
             // Rage 전용 히트박스
             var hb = SpawnHitboxFromPool(hitboxPrefabP1, hitboxP1PoolTag, transform.position);
-            if (hb == null) yield break;
-            hb.transform.parent = transform;
-            AdjustHitboxIfRage(hb);
-            var hbComp = hb.GetComponent<Hitbox>();
-            if (hbComp) hbComp.damage = 1;
-            StartCoroutine(ActivateAndDestroyCollider(hb, 0f, 0.2f));
+            if (hb != null)
+            {
+                hb.transform.parent = transform;
+                AdjustHitboxIfRage(hb);
+                var hbComp = hb.GetComponent<Hitbox>();
+                if (hbComp) hbComp.damage = 1;
+                StartCoroutine(ActivateAndDestroyCollider(hb, 0f, 0.2f));
+            }
             Vector3 pos = new Vector3(transform.position.x, transform.position.y - 0.5f, -0.5f);
             if (landedOnFloor && rage1SmokePrefab != null)
             {
@@ -1314,18 +1851,27 @@ public class Player : MonoBehaviour
             }
                 
         }
-        else
+        else if (spawnLandingSmoke)
         {
             var hb0 = SpawnHitboxFromPool(hitboxPrefabP1, hitboxP1PoolTag, transform.position);
-            if (hb0 == null) yield break;
-            hb0.transform.parent = transform;
-            var hbComp0 = hb0.GetComponent<Hitbox>();
-            if (hbComp0) hbComp0.damage = stats.attack;
+            if (hb0 != null)
+            {
+                hb0.transform.parent = transform;
+                var hbComp0 = hb0.GetComponent<Hitbox>();
+                if (hbComp0) hbComp0.damage = stats.attack;
+            }
             SpawnSmokeEffect();
         }
 
         // 🔹 P2/P3처럼 더 여유 있게 대기
         yield return new WaitForSeconds(landDuration * 1.5f);
+        if (isTransformLock || currentAnim == "Transform")
+        {
+            isLanding = false;
+            hasLanded = false;
+            yield break;
+        }
+
         if (!isGrounded)
         {
             // 이미 Jump 애니 실행 중 → 착지 처리 스킵
@@ -1334,13 +1880,7 @@ public class Player : MonoBehaviour
             isLanding = false;
             yield break;
         }
-
-        isAttacking = false;
-        attackStateStartTime = -999f;
-        hasLanded = false;
-        isGrounded = true;
-        lastStompTime = Time.time;
-        ChangeAnimation("Walk");
+        yield return StartCoroutine(TransitionToWalkAfterLand(T1));
         isLanding = false;
     }
 
@@ -1348,18 +1888,27 @@ public class Player : MonoBehaviour
     // ---------- P3 Land ----------
     private IEnumerator P3_Land()
     {
+        if (isTransformLock || currentAnim == "Transform")
+        {
+            isLanding = false;
+            hasLanded = false;
+            yield break;
+        }
+
         ChangeAnimation("Land");
         bool landedOnFloor = (lastGroundTag == "floor");
 
         var hb = SpawnHitboxFromPool(hitboxPrefabP3, hitboxP3PoolTag, transform.position);
-        if (hb == null) yield break;
-        hb.transform.parent = transform;
-        AdjustHitboxIfRage(hb);
+        if (hb != null)
+        {
+            hb.transform.parent = transform;
+            AdjustHitboxIfRage(hb);
 
-        var hbComp = hb.GetComponent<Hitbox>();
-        if (hbComp) hbComp.damage = stats.attack;
+            var hbComp = hb.GetComponent<Hitbox>();
+            if (hbComp) hbComp.damage = stats.attack;
 
-        StartCoroutine(ActivateAndDestroyCollider(hb, 0f, landDuration));
+            StartCoroutine(ActivateAndDestroyCollider(hb, 0f, landDuration));
+        }
 
         if (isRageMode && landedOnFloor && rage3SmokePrefab != null)
         {
@@ -1368,6 +1917,13 @@ public class Player : MonoBehaviour
             SpawnSmokeFromPrefab(rage3SmokePrefab, pos, rage3SmokePoolTag);
         }
         yield return new WaitForSeconds(landDuration * 1.5f);
+        if (isTransformLock || currentAnim == "Transform")
+        {
+            isLanding = false;
+            hasLanded = false;
+            yield break;
+        }
+
         if (!isGrounded)
         {
             // 이미 Jump 애니 실행 중 → 착지 처리 스킵
@@ -1387,22 +1943,31 @@ public class Player : MonoBehaviour
     }
 
 
-    private IEnumerator P5_Land()
+    private IEnumerator P5_Land(bool spawnLandingSmoke = true)
     {
+        if (isTransformLock || currentAnim == "Transform")
+        {
+            isLanding = false;
+            hasLanded = false;
+            yield break;
+        }
+
         ChangeAnimation("Land");
         bool landedOnFloor = (lastGroundTag == "floor");
         bool landedOnPlatform = (lastGroundTag == "platform");
 
         var hb = SpawnHitboxFromPool(hitboxPrefabP5, hitboxP5PoolTag, transform.position);
-        if (hb == null) yield break;
-        hb.transform.parent = transform;
-        AdjustHitboxIfRage(hb);
+        if (hb != null)
+        {
+            hb.transform.parent = transform;
+            AdjustHitboxIfRage(hb);
 
-        var hbComp = hb.GetComponent<Hitbox>();
-        if (hbComp) hbComp.damage = stats.attack;
+            var hbComp = hb.GetComponent<Hitbox>();
+            if (hbComp) hbComp.damage = stats.attack;
+        }
 
         // ✅ Rage 상태일 때 연기 크기 1.5배
-        if (landedOnFloor && isRageMode && isGrounded)
+        if (spawnLandingSmoke && landedOnFloor && isRageMode && isGrounded)
         {
             if (rageAttackSmokePrefab != null)
             {
@@ -1410,12 +1975,19 @@ public class Player : MonoBehaviour
                 SpawnSmokeFromPrefab(rageAttackSmokePrefab, pos, rageAttackSmokePoolTag, 4f);  // 🔥 크기 4배
             }
         }
-        else
+        else if (spawnLandingSmoke)
         {
             SpawnSmokeEffect(); // 일반 연기
         }
 
         yield return new WaitForSeconds(landDuration * 2f);
+        if (isTransformLock || currentAnim == "Transform")
+        {
+            isLanding = false;
+            hasLanded = false;
+            yield break;
+        }
+
         if (!isGrounded)
         {
             // 이미 Jump 애니 실행 중 → 착지 처리 스킵
@@ -1424,27 +1996,31 @@ public class Player : MonoBehaviour
             isLanding = false;
             yield break;
         }
-
-        isAttacking = false;
-        attackStateStartTime = -999f;
-        hasLanded = false;
-        isGrounded = true;
-        lastStompTime = Time.time;
-        ChangeAnimation("Walk");  
+        yield return StartCoroutine(TransitionToWalkAfterLand(T5));
         isLanding = false;
     }
 
     private void OnCollisionEnter2D(Collision2D c)
     {
-        if (c.gameObject.CompareTag("floor") || 
-            c.gameObject.CompareTag("Obstacle") || 
-            c.gameObject.CompareTag("platform"))
+        bool isJumpObstacleContact = IsJumpObstacleSource(c.gameObject) || IsJumpObstacleSource(c.collider != null ? c.collider.gameObject : null);
+        bool isStompingIntoJumpObstacle =
+            isJumpObstacleContact &&
+            isAttacking &&
+            GameData.Instance != null &&
+            IsStompPlayerType(GameData.Instance.selectedPlayerType);
+
+        if (HasSupportGroundContact(c) &&
+            TryResolveGroundSurface(c.collider, out var resolvedGroundCol, out var resolvedGroundTag))
         {
+            if (isStompingIntoJumpObstacle)
+                return;
+
             isGrounded = true;
+            ungroundedCandidateTime = -999f;
             jumpedThisAirborne = false;
             lastGroundedTime = Time.time;
-            lastGroundTag = c.collider.tag;
-            lastGroundCol = c.collider;
+            lastGroundTag = resolvedGroundTag;
+            lastGroundCol = resolvedGroundCol;
 
             int t = GameData.Instance.selectedPlayerType;
             if (t == T3 && isAttacking && currentAnim == "Flyattack" &&
@@ -1475,6 +2051,22 @@ public class Player : MonoBehaviour
         {
             HandleHazardEnter(c.collider, c.gameObject);
         }
+    }
+
+    private void OnCollisionStay2D(Collision2D c)
+    {
+        if (!HasSupportGroundContact(c) ||
+            !TryResolveGroundSurface(c.collider, out var resolvedGroundCol, out var resolvedGroundTag))
+            return;
+
+        bool wasGrounded = isGrounded;
+        isGrounded = true;
+        ungroundedCandidateTime = -999f;
+        jumpedThisAirborne = false;
+        if (!wasGrounded)
+            lastGroundedTime = Time.time;
+        lastGroundTag = resolvedGroundTag;
+        lastGroundCol = resolvedGroundCol;
     }
 
 
@@ -1535,12 +2127,24 @@ public class Player : MonoBehaviour
 
     private void OnCollisionExit2D(Collision2D c)
     {
-        if ((c.gameObject.CompareTag("floor") || c.gameObject.CompareTag("Obstacle") || c.gameObject.CompareTag("platform")) &&
+        if (TryResolveGroundSurface(c.collider, out _, out _) &&
             c.collider == lastGroundCol)
         {
-            isGrounded = false;
-            lastGroundTag = null;
-            lastGroundCol = null;
+            if (TryGetGroundSurface(out var fallbackGround))
+            {
+                isGrounded = true;
+                ungroundedCandidateTime = -999f;
+                lastGroundCol = fallbackGround;
+                lastGroundTag = fallbackGround != null && TryResolveGroundSurface(fallbackGround, out _, out var resolvedTag)
+                    ? resolvedTag
+                    : fallbackGround != null ? fallbackGround.tag : null;
+            }
+            else
+            {
+                lastGroundTag = null;
+                lastGroundCol = null;
+                ungroundedCandidateTime = Time.time;
+            }
         }
 
         if (c.gameObject.CompareTag("Obstacle"))
@@ -1553,11 +2157,14 @@ public class Player : MonoBehaviour
     {
         if (hazardCollider == null && hazardObject == null) return;
 
+        GameObject source = hazardObject != null ? hazardObject : hazardCollider.gameObject;
+        if (IsJumpObstacleSource(source))
+            return;
+
         int contactId = GetHazardContactId(hazardCollider, hazardObject);
         if (contactId != 0 && !activeHazardContactIds.Add(contactId))
             return;
 
-        GameObject source = hazardObject != null ? hazardObject : hazardCollider.gameObject;
         lastHitObstacleType = GetCachedObstacleType(source);
 
         if (IsP3AttackInvulnerable())
@@ -1601,6 +2208,16 @@ public class Player : MonoBehaviour
         if (hazardCollider != null)
             return hazardCollider.GetInstanceID();
         return 0;
+    }
+
+    private bool IsJumpObstacleSource(GameObject obj)
+    {
+        if (obj == null)
+            return false;
+
+        return obj.GetComponent<JumpObstacle>() != null ||
+               obj.GetComponentInParent<JumpObstacle>() != null ||
+               obj.GetComponentInChildren<JumpObstacle>(true) != null;
     }
 
     private ObstacleType GetCachedObstacleType(GameObject obj)
@@ -1678,6 +2295,7 @@ public class Player : MonoBehaviour
 
     void Start()
     {
+        SetAttachedRageSmokesActive(false);
         int playerType = Mathf.Clamp(GameData.Instance.selectedPlayerType, 1, 5);
         PrewarmEffectPools();
         int playerLevel = GameData.Instance.playerLevels[playerType];
@@ -1691,9 +2309,8 @@ public class Player : MonoBehaviour
 
         if (bar != null)
         {
-            bar.SetHealth(lives); // 하트 3개 다 켜짐
+            RefreshLivesUI(); // 하트 3개 다 켜짐
         }
-        var animOverride = GetComponent<PlayerAnimOverride>();
         if (animOverride != null)
             animOverride.PreWarm();
         anim.Rebind();
@@ -1708,7 +2325,7 @@ public class Player : MonoBehaviour
         if (isInvincible || isRageMode || IsP3AttackInvulnerable()) return;  // 🔹 Hurt 중엔 무시
 
         lives = Mathf.Max(0, lives - dmg);
-        if (bar != null) bar.SetHealth(lives);
+        RefreshLivesUI();
 
         if (lives <= 0)
         {
@@ -1893,6 +2510,8 @@ public class Player : MonoBehaviour
         if (duration <= 0f) duration = rageDuration;
         isRageMode = true;
         rageEndTime = Time.time + duration;
+        StopGroundedAttackRoutine();
+        StopLandingRoutine();
         EndP3AttackPhysicsLock();
         isAttacking = false;
         isLanding = false;
@@ -1903,6 +2522,7 @@ public class Player : MonoBehaviour
         attackStateStartTime = -999f;
         StopRangedFlyattackLatch();
         StopRageRangedGroundAttackTimer();
+        blockJumpUntilReleaseAfterTransform = Input.GetKey(KeyCode.Space);
 
         // 원래 값 저장
         originalAttack = stats.attack;
@@ -1912,14 +2532,13 @@ public class Player : MonoBehaviour
         stats.attack = 1;
         maxHp = 1000;
         hp = maxHp;
+        lives = Mathf.Min(3, lives + 1);
 
-        if (bar != null)
-            bar.SetHealth(hp);
+        RefreshLivesUI();
 
         ApplyJumpParticleMaterial(true);
 
         // Rage 애니 적용
-        var animOverride = GetComponent<PlayerAnimOverride>();
         AnimationClip rageTransformClip = null;
         if (animOverride != null)
         {
@@ -1938,11 +2557,13 @@ public class Player : MonoBehaviour
         float clipDuration = rageTransformClip != null ? rageTransformClip.length : 0f;
         transformLockEndTime = Time.time + Mathf.Max(transformLockDuration, clipDuration);
 
+        SetAttachedRageSmokesActive(true);
         SpawnRageTransformSmokes();
 
         StartRageSpeedEffect();
 
         StartCoroutine(SpawnRageTransformCollider());
+        RageTransformFreezeController.Instance.Begin(this, transformLockEndTime - Time.time, 0.15f, 0.15f);
 
         Debug.Log("🔥 Rage Mode ON");
     }
@@ -2025,6 +2646,8 @@ public class Player : MonoBehaviour
             secondaryPrefab,
             secondaryTag,
             rageSmokeOffsetSecondary);
+
+        ApplyRageSmokeDirectionToAll(force: true);
     }
 
     private GameObject SpawnTrackedRageSmoke(GameObject prefab, string poolTag, Vector3 offset)
@@ -2055,6 +2678,112 @@ public class Player : MonoBehaviour
 
         string secondaryTag = string.IsNullOrEmpty(rageSmokePoolTagSecondary) ? rageSmokePoolTag : rageSmokePoolTagSecondary;
         activeRageSmokeSecondary = ReturnRageTransformSmoke(activeRageSmokeSecondary, secondaryTag);
+        currentRageSmokeDirection = RageSmokeDirection.None;
+    }
+
+    private void SetAttachedRageSmokesActive(bool active)
+    {
+        runtimeAttachedRageSmokePrimary = ResolveAttachedRageSmoke(runtimeAttachedRageSmokePrimary, rageAttachedSmokePrimary);
+        runtimeAttachedRageSmokeSecondary = ResolveAttachedRageSmoke(runtimeAttachedRageSmokeSecondary, rageAttachedSmokeSecondary);
+
+        ApplyAttachedRageSmokeState(runtimeAttachedRageSmokePrimary, rageAttachedSmokeLocalPosPrimary, active);
+        ApplyAttachedRageSmokeState(runtimeAttachedRageSmokeSecondary, rageAttachedSmokeLocalPosSecondary, active);
+    }
+
+    private GameObject ResolveAttachedRageSmoke(GameObject runtimeSmoke, GameObject configuredSmoke)
+    {
+        if (runtimeSmoke != null)
+            return runtimeSmoke;
+
+        if (configuredSmoke == null)
+            return null;
+
+        if (configuredSmoke.scene.IsValid())
+            return configuredSmoke;
+
+        GameObject spawnedSmoke = Instantiate(configuredSmoke, transform);
+        spawnedSmoke.name = configuredSmoke.name;
+        return spawnedSmoke;
+    }
+
+    private void ApplyAttachedRageSmokeState(GameObject smoke, Vector2 localPos, bool active)
+    {
+        if (smoke == null)
+            return;
+
+        Transform smokeTransform = smoke.transform;
+        if (smokeTransform.parent != transform)
+            smokeTransform.SetParent(transform, false);
+
+        Vector3 currentLocalPos = smokeTransform.localPosition;
+        smokeTransform.localPosition = new Vector3(localPos.x, localPos.y, currentLocalPos.z);
+        smokeTransform.localRotation = Quaternion.identity;
+
+        if (smoke.activeSelf != active)
+            smoke.SetActive(active);
+
+        if (active)
+            ApplyRageSmokeDirection(smoke, ResolveRageSmokeDirection());
+    }
+
+    private void UpdateRageSmokeAnimationState()
+    {
+        if (!isRageMode)
+            return;
+
+        ApplyRageSmokeDirectionToAll(force: false);
+    }
+
+    private void ApplyRageSmokeDirectionToAll(bool force)
+    {
+        RageSmokeDirection nextDirection = ResolveRageSmokeDirection();
+        if (!force && currentRageSmokeDirection == nextDirection)
+            return;
+
+        currentRageSmokeDirection = nextDirection;
+
+        ApplyRageSmokeDirection(activeRageSmokePrimary, nextDirection);
+        ApplyRageSmokeDirection(activeRageSmokeSecondary, nextDirection);
+        ApplyRageSmokeDirection(runtimeAttachedRageSmokePrimary, nextDirection);
+        ApplyRageSmokeDirection(runtimeAttachedRageSmokeSecondary, nextDirection);
+    }
+
+    private RageSmokeDirection ResolveRageSmokeDirection()
+    {
+        float yVelocity = rb != null ? rb.linearVelocity.y : 0f;
+
+        if (yVelocity < -1f)
+            return RageSmokeDirection.Down;
+        if (yVelocity > 1f)
+            return RageSmokeDirection.Up;
+        return RageSmokeDirection.Normal;
+    }
+
+    private void ApplyRageSmokeDirection(GameObject smoke, RageSmokeDirection direction)
+    {
+        if (smoke == null || !smoke.activeInHierarchy)
+            return;
+
+        Animator smokeAnimator = smoke.GetComponent<Animator>();
+        if (smokeAnimator == null)
+            return;
+
+        smokeAnimator.ResetTrigger("normal");
+        smokeAnimator.ResetTrigger("up");
+        smokeAnimator.ResetTrigger("down");
+
+        switch (direction)
+        {
+            case RageSmokeDirection.Up:
+                smokeAnimator.SetTrigger("up");
+                break;
+            case RageSmokeDirection.Down:
+                smokeAnimator.SetTrigger("down");
+                break;
+            default:
+                smokeAnimator.SetTrigger("normal");
+                break;
+        }
     }
 
     private GameObject ReturnRageTransformSmoke(GameObject smoke, string poolTag)
@@ -2117,9 +2846,11 @@ public class Player : MonoBehaviour
         hp = maxHp;
         isRageMode = false;
         StopRageSpeedEffect();
+        SetAttachedRageSmokesActive(false);
         ClearRageTransformSmokes();
         ApplyJumpParticleMaterial(false);
         EndP3AttackPhysicsLock();
+        StopLandingRoutine();
         isAttacking = false;
         isLanding = false;
         hasLanded = false;
@@ -2127,10 +2858,12 @@ public class Player : MonoBehaviour
         attackQueued = false;
         p3NormalAttackQueued = false;
         isTransformLock = false;
+        blockJumpUntilReleaseAfterTransform = false;
         isInvincible = false;
         obstacleTouchCount = 0;
         activeHazardContactIds.Clear();
         cachedObstacleTypes.Clear();
+        jumpObstacleJumpLockUntil = -1f;
 
         rb.simulated = true;
         var col = GetComponent<Collider2D>();
@@ -2148,7 +2881,7 @@ public class Player : MonoBehaviour
 
         if (bar != null)
         {
-            bar.SetHealth(lives);
+            RefreshLivesUI();
         }
         
         anim.ResetTrigger("Jump");
@@ -2225,7 +2958,9 @@ public class Player : MonoBehaviour
                 isGrounded = true;
                 lastGroundedTime = Time.time;
                 lastGroundCol = groundCol;
-                lastGroundTag = groundCol != null ? groundCol.tag : null;
+                lastGroundTag = groundCol != null && TryResolveGroundSurface(groundCol, out _, out var resolvedTag)
+                    ? resolvedTag
+                    : groundCol != null ? groundCol.tag : null;
                 landed = true;
                 break;
             }
@@ -2320,36 +3055,50 @@ public class Player : MonoBehaviour
             obstacleTouchCount = 0;
             activeHazardContactIds.Clear();
             StartRageSpeedEffect();
+            SetAttachedRageSmokesActive(true);
         }
         else
         {
             StopRageSpeedEffect();
+            SetAttachedRageSmokesActive(false);
         }
 
-        var animOverride = GetComponent<PlayerAnimOverride>();
         if (animOverride != null)
             animOverride.SetRageMode(active);
 
         if (!active)
         {
+            RageTransformFreezeController.Instance.EndNow(this);
             anim.Rebind();      // 🔥 애니메이터 리셋
             anim.Update(0f);
             currentAnim = "";
             ApplyLocomotionAnimation();
         }
     }
-    // 공격을 Land로 강제 연결
+    // Flyattack만 Land로 강제 연결
     private void ForceLandFromHit()
     {
         if (isLanding) return;
+
+        int type = GameData.Instance.selectedPlayerType;
+        bool shouldForceLand =
+            (type == T1 || type == T5) &&
+            currentAnim == "Flyattack";
+
+        if (!shouldForceLand)
+        {
+            CancelAttackToWalk();
+            return;
+        }
+
         isLanding = true;
         isGrounded = true;
         hasLanded = false;
 
-        switch (GameData.Instance.selectedPlayerType)
+        switch (type)
         {
-            case T1: StartCoroutine(P1_Land_Wrap()); break;
-            case T5: StartCoroutine(P5_Land_Wrap()); break;
+            case T1: StartLandingRoutine(P1_Land_Wrap()); break;
+            case T5: StartLandingRoutine(P5_Land_Wrap()); break;
             case T2:
             case T3:
             case T4:
@@ -2362,6 +3111,7 @@ public class Player : MonoBehaviour
 
     private void CancelAttackToWalk()
     {
+        StopGroundedAttackRoutine();
         EndP3AttackPhysicsLock();
         isAttacking = false;
         attackStateStartTime = -999f;
@@ -2394,9 +3144,15 @@ public class Player : MonoBehaviour
         StartCoroutine(InvincibleAlphaAfterHurt(2.5f));
         // 4) 이후에 Walk/Jump로 정상 전환
         if (isGrounded)
+        {
             ChangeAnimation("Walk");
+        }
         else
-            ChangeAnimation(GetAirborneAnimationTrigger());
+        {
+            // Hurt 중 접촉 흔들림으로 jumpedThisAirborne가 false로 남으면 Still에 고정될 수 있다.
+            jumpedThisAirborne = true;
+            ChangeAnimation("Jump");
+        }
     }
     private void SpawnBloodFx()
     {
@@ -2493,6 +3249,111 @@ public class Player : MonoBehaviour
         return tag == "floor" || tag == "platform" || tag == "Obstacle";
     }
 
+    private static int GetGroundSurfacePriority(string tag)
+    {
+        return tag switch
+        {
+            "floor" => 0,
+            "platform" => 1,
+            "Obstacle" => 2,
+            _ => int.MaxValue
+        };
+    }
+
+    private bool TryResolveGroundSurface(Collider2D sourceCollider, out Collider2D resolvedCollider, out string resolvedTag)
+    {
+        resolvedCollider = null;
+        resolvedTag = null;
+
+        if (sourceCollider == null)
+            return false;
+
+        Transform current = sourceCollider.transform;
+        while (current != null)
+        {
+            if (IsGroundSurfaceTag(current.tag))
+            {
+                resolvedCollider = sourceCollider;
+                resolvedTag = current.tag;
+                return true;
+            }
+
+            current = current.parent;
+        }
+
+        return false;
+    }
+
+    private bool RegisterGroundSurfaceCandidate(
+        Collider2D sourceCollider,
+        ref Collider2D bestCollider,
+        ref string bestTag,
+        ref bool foundFloor,
+        ref bool foundPlatform)
+    {
+        if (!TryResolveGroundSurface(sourceCollider, out var resolvedCollider, out var resolvedTag))
+            return false;
+
+        if (resolvedTag == "floor")
+            foundFloor = true;
+        else if (resolvedTag == "platform")
+            foundPlatform = true;
+
+        if (bestCollider == null || GetGroundSurfacePriority(resolvedTag) < GetGroundSurfacePriority(bestTag))
+        {
+            bestCollider = resolvedCollider;
+            bestTag = resolvedTag;
+        }
+
+        return true;
+    }
+
+    private bool TryGetGroundSurfaceFromContacts(out Collider2D groundCol, out string groundTag)
+    {
+        groundCol = null;
+        groundTag = null;
+
+        if (bodyCollider == null)
+            return false;
+
+        bool foundFloor = false;
+        bool foundPlatform = false;
+
+        int contactCount = bodyCollider.GetContacts(groundContactPoints);
+        for (int i = 0; i < contactCount; i++)
+        {
+            ContactPoint2D contactPoint = groundContactPoints[i];
+            groundContactPoints[i] = default;
+
+            if (contactPoint.normal.y < MinGroundContactNormalY)
+                continue;
+
+            Collider2D contact = contactPoint.collider;
+            if (contact == null || contact == bodyCollider)
+                continue;
+
+            RegisterGroundSurfaceCandidate(contact, ref groundCol, ref groundTag, ref foundFloor, ref foundPlatform);
+        }
+
+        return groundCol != null;
+    }
+
+    private bool HasSupportGroundContact(Collision2D collision)
+    {
+        if (collision == null)
+            return false;
+
+        int contactCount = collision.contactCount;
+        for (int i = 0; i < contactCount; i++)
+        {
+            ContactPoint2D contact = collision.GetContact(i);
+            if (contact.normal.y >= MinGroundContactNormalY)
+                return true;
+        }
+
+        return false;
+    }
+
     private bool IsStandingOnGround()
     {
         return TryGetGroundSurface(out _);
@@ -2500,25 +3361,53 @@ public class Player : MonoBehaviour
 
     private bool TryGetGroundSurface(out Collider2D groundCol)
     {
+        return TryGetGroundSurface(out groundCol, out _, out _);
+    }
+
+    private bool TryGetGroundSurface(out Collider2D groundCol, out string groundTag, out bool touchingFloorAndPlatform)
+    {
         groundCol = null;
+        groundTag = null;
+        touchingFloorAndPlatform = false;
         if (bodyCollider == null) return false;
 
         Bounds bounds = bodyCollider.bounds;
         float y = bounds.min.y + 0.02f;
         float inset = Mathf.Min(bounds.extents.x * 0.8f, 0.2f);
         float[] xs = { bounds.center.x, bounds.center.x - inset, bounds.center.x + inset };
+        bool foundFloor = false;
+        bool foundPlatform = false;
 
         for (int i = 0; i < xs.Length; i++)
         {
-            RaycastHit2D hit = Physics2D.Raycast(new Vector2(xs[i], y), Vector2.down, 0.18f);
+            RaycastHit2D hit = Physics2D.Raycast(new Vector2(xs[i], y), Vector2.down, groundProbeDistance);
             if (hit.collider == null || hit.collider == bodyCollider) continue;
-            if (!IsGroundSurfaceTag(hit.collider.tag)) continue;
-
-            groundCol = hit.collider;
-            return true;
+            RegisterGroundSurfaceCandidate(hit.collider, ref groundCol, ref groundTag, ref foundFloor, ref foundPlatform);
         }
 
-        return false;
+        Vector2 overlapSize = new Vector2(Mathf.Max(0.05f, bounds.size.x - 0.04f), groundOverlapHeight);
+        Vector2 overlapCenter = new Vector2(bounds.center.x, bounds.min.y - overlapSize.y * 0.5f);
+        int overlapCount = Physics2D.OverlapBoxNonAlloc(overlapCenter, overlapSize, 0f, groundOverlapResults);
+        for (int i = 0; i < overlapCount; i++)
+        {
+            Collider2D overlap = groundOverlapResults[i];
+            groundOverlapResults[i] = null;
+
+            if (overlap == null || overlap == bodyCollider) continue;
+            RegisterGroundSurfaceCandidate(overlap, ref groundCol, ref groundTag, ref foundFloor, ref foundPlatform);
+        }
+
+        if (TryGetGroundSurfaceFromContacts(out var contactGroundCol, out var contactGroundTag))
+        {
+            RegisterGroundSurfaceCandidate(contactGroundCol, ref groundCol, ref groundTag, ref foundFloor, ref foundPlatform);
+            if (contactGroundTag == "floor")
+                foundFloor = true;
+            else if (contactGroundTag == "platform")
+                foundPlatform = true;
+        }
+
+        touchingFloorAndPlatform = foundFloor && foundPlatform;
+        return groundCol != null;
     }
 
     private void SyncGroundedState()
@@ -2529,21 +3418,38 @@ public class Player : MonoBehaviour
         if (risingFromJump) return;
 
         bool wasGrounded = isGrounded;
-        bool groundedNow = TryGetGroundSurface(out var groundCol);
+        bool groundedNow = TryGetGroundSurface(out var groundCol, out var groundTag, out var touchingFloorAndPlatform);
         if (groundedNow)
         {
             if (!wasGrounded)
                 lastGroundedTime = Time.time;
             isGrounded = true;
+            ungroundedCandidateTime = -999f;
             jumpedThisAirborne = false;
             if (groundCol != null)
             {
                 lastGroundCol = groundCol;
-                lastGroundTag = groundCol.tag;
+                lastGroundTag = !string.IsNullOrEmpty(groundTag)
+                    ? groundTag
+                    : TryResolveGroundSurface(groundCol, out _, out var resolvedTag) ? resolvedTag : groundCol.tag;
             }
         }
         else
         {
+            bool canUseGroundGrace =
+                wasGrounded &&
+                !jumpedThisAirborne &&
+                rb.linearVelocity.y <= 0.05f;
+
+            if (canUseGroundGrace)
+            {
+                if (ungroundedCandidateTime < 0f)
+                    ungroundedCandidateTime = Time.time;
+
+                if (Time.time - ungroundedCandidateTime < groundedLossGraceTime)
+                    return;
+            }
+
             isGrounded = false;
         }
     }
@@ -2565,7 +3471,7 @@ public class Player : MonoBehaviour
 
         int t = GameData.Instance.selectedPlayerType;
         if (!IsStompPlayerType(t)) return;
-        if (!isAttacking || currentAnim != "Attack") return;
+        if (!isAttacking || !IsFlyattackStateActive()) return;
 
         bool groundedNow = isGrounded || IsStandingOnGround();
         if (!groundedNow) return;
@@ -2583,6 +3489,73 @@ public class Player : MonoBehaviour
         {
             CancelAttackToWalk();
         }
+    }
+
+    private void RecoverGroundedStompState()
+    {
+        if (GameData.Instance == null || rb == null) return;
+
+        int t = GameData.Instance.selectedPlayerType;
+        if (!IsStompPlayerType(t)) return;
+
+        bool groundedNow = isGrounded || IsStandingOnGround();
+        if (!groundedNow) return;
+
+        float groundedFor = Time.time - lastGroundedTime;
+        float verticalSpeed = Mathf.Abs(rb.linearVelocity.y);
+        float attackFor = attackStateStartTime > -999f
+            ? Time.time - attackStateStartTime
+            : 0f;
+
+        bool stuckLanding =
+            isLanding &&
+            groundedFor >= 0.2f &&
+            verticalSpeed <= 0.05f;
+
+        bool stuckAirAttack =
+            isAttacking &&
+            (currentAnim == "Jump" || currentAnim == "Flyattack") &&
+            groundedFor >= 0.12f &&
+            verticalSpeed <= 0.05f;
+
+        bool groundedJumpPoseOnly =
+            !isAttacking &&
+            !isLanding &&
+            currentAnim == "Jump" &&
+            groundedFor >= 0.12f &&
+            verticalSpeed <= 0.05f;
+
+        bool groundedFlyattackPoseOnly =
+            !isAttacking &&
+            !isLanding &&
+            IsFlyattackStateActive() &&
+            groundedFor >= 0.12f &&
+            verticalSpeed <= 0.05f;
+
+        bool stuckGroundAttack =
+            currentAnim == "Attack" &&
+            groundedFor >= 0.12f &&
+            verticalSpeed <= 0.05f &&
+            attackFor >= fireRecovery + 0.05f;
+
+        if (!stuckLanding && !stuckAirAttack && !groundedJumpPoseOnly && !groundedFlyattackPoseOnly && !stuckGroundAttack)
+            return;
+
+        StopGroundedAttackRoutine();
+        StopRangedFlyattackLatch();
+        StopRageRangedGroundAttackTimer();
+        EndP3AttackPhysicsLock();
+
+        isGrounded = true;
+        isAttacking = false;
+        isLanding = false;
+        hasLanded = false;
+        attackQueued = false;
+        p3NormalAttackQueued = false;
+        resumeStompAttackAfterJumpObstacle = false;
+        attackStateStartTime = -999f;
+
+        ForceAnimationState("Base Walk", "Walk");
     }
 
     private GameObject SpawnWithPool(GameObject prefab, string tag, Vector3 pos, Quaternion rot, out bool spawnedFromPool, int initialSize = 0)
@@ -2654,6 +3627,95 @@ public class Player : MonoBehaviour
     {
         if (speedEffectPrefab == null) return;
         nextSpeedEffectSpawnTime = Time.time;
+    }
+
+    private void TrySpawnRunningSmoke()
+    {
+        if (!CanSpawnRunningSmoke())
+        {
+            ClearRunningSmokeImmediate();
+            return;
+        }
+
+        if (activeRunningSmoke != null && activeRunningSmoke.activeInHierarchy)
+            return;
+
+        activeRunningSmoke = SpawnRunningSmokeOnce();
+    }
+
+    private bool CanSpawnRunningSmoke()
+    {
+        if (isDead || runningSmokePrefab == null || !isGrounded)
+            return false;
+
+        if (lastGroundTag != "floor" && lastGroundTag != "platform")
+            return false;
+
+        if (GameData.Instance == null)
+            return true;
+
+        float currentMult = GameData.Instance.GetStageSpeedMult();
+        float normalMult = GameData.Instance.GetStageSpeedMultIgnoringObstacleSlowdown();
+        if (currentMult <= 0f || normalMult <= 0f)
+            return false;
+
+        return currentMult >= normalMult - 0.01f;
+    }
+
+    private GameObject SpawnRunningSmokeOnce()
+    {
+        Vector3 spawnPos = transform.TransformPoint(runningSmokeLocalOffset);
+        GameObject smoke = SpawnSmokeFromPrefab(runningSmokePrefab, spawnPos, runningSmokePoolTag);
+        ApplyRunningSmokePlayback(smoke);
+        return smoke;
+    }
+
+    private void SyncRunningSmoke()
+    {
+        if (activeRunningSmoke == null || !activeRunningSmoke.activeInHierarchy)
+        {
+            activeRunningSmoke = null;
+            return;
+        }
+
+        activeRunningSmoke.transform.position = transform.TransformPoint(runningSmokeLocalOffset);
+        ApplyRunningSmokePlayback(activeRunningSmoke);
+    }
+
+    private void ApplyRunningSmokePlayback(GameObject smoke)
+    {
+        if (smoke == null)
+            return;
+
+        Animator smokeAnimator = smoke.GetComponent<Animator>();
+        if (smokeAnimator == null)
+            return;
+
+        smokeAnimator.speed = isRageMode
+            ? Mathf.Max(0f, runningSmokeRageSpeed)
+            : Mathf.Max(0f, runningSmokeNormalSpeed);
+    }
+
+    private void ClearRunningSmokeImmediate()
+    {
+        if (activeRunningSmoke == null)
+            return;
+
+        if (activeRunningSmoke.activeInHierarchy)
+        {
+            if (ObjectPool.Instance != null &&
+                !string.IsNullOrEmpty(runningSmokePoolTag) &&
+                ObjectPool.Instance.HasPool(runningSmokePoolTag))
+            {
+                ObjectPool.Instance.ReturnToPool(runningSmokePoolTag, activeRunningSmoke);
+            }
+            else
+            {
+                Destroy(activeRunningSmoke);
+            }
+        }
+
+        activeRunningSmoke = null;
     }
 
     private void TrySpawnRageSpeedEffect()
@@ -2816,6 +3878,8 @@ public class Player : MonoBehaviour
             floorSmokePoolTag = "FloorSmoke";
         if (string.IsNullOrEmpty(speedEffectPoolTag))
             speedEffectPoolTag = "SpeedEffect";
+        if (string.IsNullOrEmpty(runningSmokePoolTag))
+            runningSmokePoolTag = "RunningSmoke";
 
         // 기본 스모크(P1/P2 일반)가 미사일과 같은 "Smoke" 풀을 쓰면 잘못된 프리팹이 재사용될 수 있다.
         if (smokeEffectPrefab != null)
@@ -2916,6 +3980,7 @@ public class Player : MonoBehaviour
             PrewarmPool(rageSmokePoolTagSecondary, secondaryPrefab, 8);
         }
         PrewarmPool(rageAttackSmokePoolTag, rageAttackSmokePrefab, 8);
+        PrewarmPool(runningSmokePoolTag, runningSmokePrefab, 12);
         int speedEffectPoolSize = speedEffectSpawnWorldPositions != null && speedEffectSpawnWorldPositions.Length > 0
             ? speedEffectSpawnWorldPositions.Length * 2
             : 4;
