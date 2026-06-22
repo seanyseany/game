@@ -105,6 +105,7 @@ GameObject:
   - component: {fileID: -4152039247068140334}
   - component: {fileID: 7682711828950237180}
   - component: {fileID: -6161950709721481508}
+  - component: {fileID: -3888853934678022014}
   m_Layer: 0
   m_Name: Obstacle_A (2)
   m_TagString: Obstacle
@@ -279,14 +280,14 @@ EdgeCollider2D:
   m_EdgeRadius: 0
   m_Points:
   - {x: -8.598014, y: -2.808111}
-  - {x: -8.407511, y: -1.5545756}
-  - {x: -6.643813, y: -1.0669719}
-  - {x: -3.3888178, y: 0.6430701}
+  - {x: -8.248592, y: -1.6050249}
+  - {x: -5.681481, y: -0.7743621}
+  - {x: -3.4947639, y: 0.5522605}
   - {x: -0.6217413, y: 2.7257872}
   - {x: 0.6185479, y: 2.9744124}
   - {x: 2.032928, y: 2.62392}
-  - {x: 3.814735, y: 1.6399472}
-  - {x: 8.072722, y: -1.5364994}
+  - {x: 3.802981, y: 1.5056236}
+  - {x: 8.092394, y: -1.6264281}
   - {x: 8.601477, y: -2.8081946}
   - {x: -8.634422, y: -2.7593799}
   m_AdjacentStartPoint: {x: 0, y: 0}
@@ -306,3 +307,20 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ObstacleInfo
   type: 3
+--- !u!114 &-3888853934678022014
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6202560991115209795}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5b5c095c583a7490498ed9e1c4f8e8b3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::tangling
+  stretchAmountX: 0.013
+  stretchAmountY: 0.035
+  stretchSpeed: 4
+  stretchDuration: 1
+  useTriggerContact: 1

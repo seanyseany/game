@@ -82,7 +82,7 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 4
+  m_SortingOrder: 7
   m_Sprite: {fileID: -176314628694759578, guid: 9b6e23557a4fe406aaff7bf8ca9f92c4, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -161,6 +161,8 @@ MonoBehaviour:
   autoExplodeTime: 1
   poolTag: Bomb
   hitboxTag: BombHitBox
+  hitboxFallbackPrefab: {fileID: 0}
+  smokeFallbackPrefab: {fileID: 0}
 --- !u!1 &6730912450813396451
 GameObject:
   m_ObjectHideFlags: 0

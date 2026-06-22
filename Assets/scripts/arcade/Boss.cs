@@ -179,7 +179,7 @@ public class Boss : MonoBehaviour, IReinitializable
 
     public void Begin()
     {
-        if (state != State.Inactive) return;
+        if (state != State.Inactive || mainRoutine != null) return;
         spawnTime = Time.time;
         UpdateBossUI();
         mainRoutine = StartCoroutine(CoMain());
@@ -248,6 +248,9 @@ public class Boss : MonoBehaviour, IReinitializable
 
     void Update()
     {
+        if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            return;
+
         if (state != State.Active) return;
 
         UpdateBossUI();
@@ -309,6 +312,9 @@ public class Boss : MonoBehaviour, IReinitializable
 
     private void RoamTick()
     {
+        if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            return;
+
         if (Time.time >= nextRoamPickTime)
         {
             PickNewRoamTarget();
@@ -323,6 +329,12 @@ public class Boss : MonoBehaviour, IReinitializable
         float t = 0f;
         while (t < sec && state == State.Active)
         {
+            if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            {
+                yield return null;
+                continue;
+            }
+
             RoamTick();
             t += Time.deltaTime;
             yield return null;
@@ -334,6 +346,12 @@ public class Boss : MonoBehaviour, IReinitializable
         float t = 0f;
         while (t < sec && state == State.Active)
         {
+            if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            {
+                yield return null;
+                continue;
+            }
+
             t += Time.deltaTime;
             yield return null;
         }
@@ -387,6 +405,12 @@ public class Boss : MonoBehaviour, IReinitializable
         float t = 0f;
         while (t < sec && state == State.Active)
         {
+            if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            {
+                yield return null;
+                continue;
+            }
+
             float k = sec <= 0.0001f ? 1f : (t / sec);
 
             if (rightCapObj) rightCapObj.transform.localPosition = Vector3.Lerp(rightCapStartLocalOffset, rightCapFireLocalOffset, k);
@@ -499,10 +523,16 @@ public class Boss : MonoBehaviour, IReinitializable
             float midMoveTargetY = PickRageStopYExcept(burstAnchorY);
             float midMoveSpeed = Mathf.Max(0.01f, rageBurstShiftSpeed);
             bool startedShiftMove = false;
-            while (fireElapsed < fireDuration && state == State.Active)
+        while (fireElapsed < fireDuration && state == State.Active)
+        {
+            if (RageTransformFreezeController.ShouldSkipGameplayFrame())
             {
-                fireElapsed += Time.deltaTime;
-                shotTimer += Time.deltaTime;
+                yield return null;
+                continue;
+            }
+
+            fireElapsed += Time.deltaTime;
+            shotTimer += Time.deltaTime;
 
                 if (!startedShiftMove && fireElapsed >= phaseDuration)
                     startedShiftMove = true;
@@ -680,6 +710,12 @@ public class Boss : MonoBehaviour, IReinitializable
         float t = 0f;
         while (t < time && state == State.Active)
         {
+            if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            {
+                yield return null;
+                continue;
+            }
+
             float k = time <= 0.0001f ? 1f : (t / time);
             transform.position = Vector3.Lerp(start, end, k);
             t += Time.deltaTime;
@@ -727,6 +763,12 @@ public class Boss : MonoBehaviour, IReinitializable
 
         while (state == State.Active && elapsed < fallback)
         {
+            if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            {
+                yield return null;
+                continue;
+            }
+
             AnimatorStateInfo st = bossAnimator.GetCurrentAnimatorStateInfo(0);
             if (!string.IsNullOrEmpty(rageOffStateName) && st.IsName(rageOffStateName) && st.normalizedTime >= 0.98f)
                 yield break;
@@ -804,13 +846,13 @@ public class Boss : MonoBehaviour, IReinitializable
         float t2 = total - t0 - t1;
 
         visualRoot.position = basePos + Vector3.left * shakeLeft;
-        yield return new WaitForSeconds(t0);
+        yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(t0);
 
         visualRoot.position = basePos + Vector3.right * shakeRight;
-        yield return new WaitForSeconds(t1);
+        yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(t1);
 
         visualRoot.position = basePos;
-        if (t2 > 0f) yield return new WaitForSeconds(t2);
+        if (t2 > 0f) yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(t2);
     }
 
     private void DieByPlayer()
@@ -839,6 +881,12 @@ public class Boss : MonoBehaviour, IReinitializable
         float cycle = Mathf.Max(0.01f, deathByHpShakeCycle);
         while (t < delay)
         {
+            if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            {
+                yield return null;
+                continue;
+            }
+
             float k = delay <= 0.0001f ? 1f : (t / delay);
             transform.position = Vector3.Lerp(startPos, endPos, k);
 
@@ -886,6 +934,12 @@ public class Boss : MonoBehaviour, IReinitializable
         float t = 0f;
         while (t < dashDuration)
         {
+            if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            {
+                yield return null;
+                continue;
+            }
+
             float k = dashDuration <= 0.0001f ? 1f : (t / dashDuration);
             transform.position = Vector3.Lerp(start, end, k);
             t += Time.deltaTime;
@@ -916,6 +970,12 @@ public class Boss : MonoBehaviour, IReinitializable
         float t = 0f;
         while (t < time)
         {
+            if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            {
+                yield return null;
+                continue;
+            }
+
             float k = time <= 0.0001f ? 1f : (t / time);
             transform.position = Vector3.Lerp(start, target, k);
             t += Time.deltaTime;
@@ -991,7 +1051,7 @@ public class Boss : MonoBehaviour, IReinitializable
             CacheAllRenderers();
 
         SetAllRenderersColor(hitColor);
-        yield return new WaitForSeconds(hitFlashDuration);
+        yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(hitFlashDuration);
         RestoreOriginalColors();
     }
 

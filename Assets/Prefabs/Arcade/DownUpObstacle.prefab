@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 4634213695212495916}
   - component: {fileID: 6645728016475824095}
   - component: {fileID: 4395322103404143713}
+  - component: {fileID: 7167834926222167008}
   m_Layer: 3
   m_Name: DownUpObstacle
   m_TagString: Untagged
@@ -120,6 +121,20 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ObstacleInfo
   type: 2
+--- !u!114 &7167834926222167008
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 317648421664537972}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce4c00462992547d0bfa5fbfdf523201, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ObstacleRageMover
+  moveDistance: 10
+  isTop: 1
 --- !u!1 &7591343653993603607
 GameObject:
   m_ObjectHideFlags: 0
@@ -315,6 +330,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   moveDistance: 2.5
   moveSpeed: 2
+  startDelay: 0
   verticalObstacle: {fileID: 709165325922142800}
 --- !u!114 &5580755294016513861
 MonoBehaviour:
@@ -329,7 +345,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   anim: {fileID: 6084359445687743482}
-  poolTag: 
 --- !u!114 &3591459029311814746
 MonoBehaviour:
   m_ObjectHideFlags: 0

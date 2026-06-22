@@ -3,8 +3,14 @@ using UnityEngine;
 public class PhaseCache : MonoBehaviour
 {
     public Rigidbody2D[] rbs;
+    public Renderer[] renderers;
+    public SpriteRenderer[] spriteRenderers;
     public Mover mover;
+    public PhaseEndTrigger phaseEndTrigger;
     public bool hasChildMovers;
+
+    private Sprite[] initialSprites;
+    private Color[] initialColors;
 
     void Awake()
     {
@@ -14,7 +20,25 @@ public class PhaseCache : MonoBehaviour
     public void RefreshCache()
     {
         rbs = GetComponentsInChildren<Rigidbody2D>(true);
+        renderers = GetComponentsInChildren<Renderer>(true);
+        spriteRenderers = GetComponentsInChildren<SpriteRenderer>(true);
         mover = GetComponent<Mover>();
+        phaseEndTrigger = GetComponentInChildren<PhaseEndTrigger>(true);
+
+        if (spriteRenderers != null)
+        {
+            initialSprites = new Sprite[spriteRenderers.Length];
+            initialColors = new Color[spriteRenderers.Length];
+            for (int i = 0; i < spriteRenderers.Length; i++)
+            {
+                SpriteRenderer sr = spriteRenderers[i];
+                if (sr == null)
+                    continue;
+
+                initialSprites[i] = sr.sprite;
+                initialColors[i] = sr.color;
+            }
+        }
 
         hasChildMovers = false;
         var movers = GetComponentsInChildren<Mover>(true);
@@ -31,6 +55,34 @@ public class PhaseCache : MonoBehaviour
 
     public void ResetCached()
     {
+        if (renderers != null)
+        {
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer renderer = renderers[i];
+                if (renderer != null)
+                    renderer.enabled = true;
+            }
+        }
+
+        if (spriteRenderers != null)
+        {
+            for (int i = 0; i < spriteRenderers.Length; i++)
+            {
+                SpriteRenderer sr = spriteRenderers[i];
+                if (sr == null)
+                    continue;
+
+                sr.enabled = true;
+
+                if (initialSprites != null && i < initialSprites.Length && initialSprites[i] != null)
+                    sr.sprite = initialSprites[i];
+
+                if (initialColors != null && i < initialColors.Length)
+                    sr.color = initialColors[i];
+            }
+        }
+
         // Rigidbody2D 복구
         foreach (var rb in rbs)
         {

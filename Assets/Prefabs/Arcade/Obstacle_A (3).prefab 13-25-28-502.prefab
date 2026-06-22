@@ -108,6 +108,7 @@ GameObject:
   - component: {fileID: -2358734250794425631}
   - component: {fileID: 1328193947659648288}
   - component: {fileID: 1467260070345202122}
+  - component: {fileID: -7606942988365800182}
   m_Layer: 0
   m_Name: Obstacle_A (3).prefab 13-25-28-502
   m_TagString: Obstacle
@@ -311,3 +312,20 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ObstacleInfo
   type: 3
+--- !u!114 &-7606942988365800182
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7820979586199057244}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5b5c095c583a7490498ed9e1c4f8e8b3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::tangling
+  stretchAmountX: 0.013
+  stretchAmountY: 0.035
+  stretchSpeed: 4
+  stretchDuration: 1
+  useTriggerContact: 1

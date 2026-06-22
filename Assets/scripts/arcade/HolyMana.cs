@@ -32,17 +32,7 @@ public class holyMana : MonoBehaviour, IReinitializable
             sr.color = new Color(c.r, c.g, c.b, 1f);
         }
 
-        if (GameData.Instance == null) return;
-
-        // 꺼진 phase면 비활성
-        if (GameData.Instance.currentHolyManaDisabled)
-        {
-            gameObject.SetActive(false);
-            return;
-        }
-
-        // 일단 1개만 쓰니까 그냥 true
-        gameObject.SetActive(true);
+        gameObject.SetActive(false);
     }
 
     public void Collect()
@@ -51,10 +41,6 @@ public class holyMana : MonoBehaviour, IReinitializable
         collected = true;
 
         if (col != null) col.enabled = false;
-
-        // ✅ Holy 트리거
-        if (GameData.Instance != null)
-            GameData.Instance.CollectHolyMana();
 
         StartCoroutine(FadeAndFloatUp());
     }

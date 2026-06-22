@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 3878306062186373023}
   - component: {fileID: -7511342457959104933}
   - component: {fileID: 3863570834917802535}
+  - component: {fileID: -128200475052660533}
   m_Layer: 3
   m_Name: RopeAnchor
   m_TagString: Untagged
@@ -89,6 +90,20 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ObstacleInfo
   type: 2
+--- !u!114 &-128200475052660533
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 574826466508047915}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce4c00462992547d0bfa5fbfdf523201, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ObstacleRageMover
+  moveDistance: 10
+  isTop: 1
 --- !u!1 &1510817673052547927
 GameObject:
   m_ObjectHideFlags: 0
@@ -415,7 +430,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   anim: {fileID: 7320562296313403193}
-  poolTag: 
 --- !u!114 &6579621007682118152
 MonoBehaviour:
   m_ObjectHideFlags: 0

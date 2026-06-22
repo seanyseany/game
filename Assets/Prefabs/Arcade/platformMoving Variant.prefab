@@ -9,12 +9,36 @@ PrefabInstance:
     m_TransformParent: {fileID: 0}
     m_Modifications:
     - target: {fileID: 1215820586849298739, guid: 322e6f984285844108050dc27d896883, type: 3}
+      propertyPath: m_Size.x
+      value: 5.7
+      objectReference: {fileID: 0}
+    - target: {fileID: 1215820586849298739, guid: 322e6f984285844108050dc27d896883, type: 3}
+      propertyPath: m_Size.y
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1215820586849298739, guid: 322e6f984285844108050dc27d896883, type: 3}
+      propertyPath: m_Sprite
+      value: 
+      objectReference: {fileID: -273248299592039967, guid: e918133b6749b49faaaea774d6f6a1e1, type: 3}
+    - target: {fileID: 1215820586849298739, guid: 322e6f984285844108050dc27d896883, type: 3}
       propertyPath: m_SortingOrder
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1215820586849298739, guid: 322e6f984285844108050dc27d896883, type: 3}
+      propertyPath: m_WasSpriteAssigned
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 3820637327448370436, guid: 322e6f984285844108050dc27d896883, type: 3}
       propertyPath: m_Name
       value: platformMoving Variant
+      objectReference: {fileID: 0}
+    - target: {fileID: 4405482632935741665, guid: 322e6f984285844108050dc27d896883, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 1.2
+      objectReference: {fileID: 0}
+    - target: {fileID: 4405482632935741665, guid: 322e6f984285844108050dc27d896883, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 4405482632935741665, guid: 322e6f984285844108050dc27d896883, type: 3}
       propertyPath: m_LocalPosition.x
@@ -56,6 +80,38 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 7719037910914538247, guid: 322e6f984285844108050dc27d896883, type: 3}
+      propertyPath: m_Size.x
+      value: 3.628587
+      objectReference: {fileID: 0}
+    - target: {fileID: 7719037910914538247, guid: 322e6f984285844108050dc27d896883, type: 3}
+      propertyPath: m_Size.y
+      value: 0.41070324
+      objectReference: {fileID: 0}
+    - target: {fileID: 7719037910914538247, guid: 322e6f984285844108050dc27d896883, type: 3}
+      propertyPath: m_Offset.x
+      value: 0.0062457323
+      objectReference: {fileID: 0}
+    - target: {fileID: 7719037910914538247, guid: 322e6f984285844108050dc27d896883, type: 3}
+      propertyPath: m_Offset.y
+      value: -0.020556599
+      objectReference: {fileID: 0}
+    - target: {fileID: 7719037910914538247, guid: 322e6f984285844108050dc27d896883, type: 3}
+      propertyPath: m_SpriteTilingProperty.newSize.x
+      value: 5.7
+      objectReference: {fileID: 0}
+    - target: {fileID: 7719037910914538247, guid: 322e6f984285844108050dc27d896883, type: 3}
+      propertyPath: m_SpriteTilingProperty.newSize.y
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7719037910914538247, guid: 322e6f984285844108050dc27d896883, type: 3}
+      propertyPath: m_SpriteTilingProperty.oldSize.x
+      value: 3.64
+      objectReference: {fileID: 0}
+    - target: {fileID: 7719037910914538247, guid: 322e6f984285844108050dc27d896883, type: 3}
+      propertyPath: m_SpriteTilingProperty.oldSize.y
+      value: 0.47
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -63,6 +119,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 3820637327448370436, guid: 322e6f984285844108050dc27d896883, type: 3}
       insertIndex: -1
       addedObject: {fileID: 6361741927653052339}
+    - targetCorrespondingSourceObject: {fileID: 3820637327448370436, guid: 322e6f984285844108050dc27d896883, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: -6996607610634166759}
   m_SourcePrefab: {fileID: 100100000, guid: 322e6f984285844108050dc27d896883, type: 3}
 --- !u!1 &2536975090299267198 stripped
 GameObject:
@@ -83,3 +142,17 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   baseSpeed: 6
   defaultBaseSpeed: 0
+--- !u!114 &-6996607610634166759
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2536975090299267198}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce4c00462992547d0bfa5fbfdf523201, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ObstacleRageMover
+  moveDistance: 10
+  isTop: 0

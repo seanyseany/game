@@ -82,7 +82,7 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_Sprite: {fileID: 2105631200901749739, guid: 0c60e3bfabbb94ef4b005ea4add638e0, type: 3}
+  m_Sprite: {fileID: -3020887872289503365, guid: 20fa9a53184cd44469d8dd3747bd6a30, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -130,7 +130,7 @@ BoxCollider2D:
   m_Offset: {x: 13.7342415, y: -0.13140982}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
-    pivot: {x: -0.026199501, y: 0.6360005}
+    pivot: {x: -0.022174448, y: 0.666555}
     oldSize: {x: 26.385714, y: 1.2285714}
     newSize: {x: 26.385714, y: 1.2285714}
     adaptiveTilingThreshold: 0.5
@@ -178,14 +178,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d499df8f76bfe41b1bfda5fb7fdef6a9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  life: 0.32
+  life: 0.42
   damage: 0
   lightningFrames:
-  - {fileID: 2105631200901749739, guid: 0c60e3bfabbb94ef4b005ea4add638e0, type: 3}
-  - {fileID: 8421530498721286552, guid: 0c60e3bfabbb94ef4b005ea4add638e0, type: 3}
-  - {fileID: 2105631200901749739, guid: 0c60e3bfabbb94ef4b005ea4add638e0, type: 3}
-  - {fileID: 8421530498721286552, guid: 0c60e3bfabbb94ef4b005ea4add638e0, type: 3}
-  frameRate: 0.08
+  - {fileID: -3020887872289503365, guid: 20fa9a53184cd44469d8dd3747bd6a30, type: 3}
+  - {fileID: -8738697924272023607, guid: 20fa9a53184cd44469d8dd3747bd6a30, type: 3}
+  - {fileID: -2069959816776989710, guid: 20fa9a53184cd44469d8dd3747bd6a30, type: 3}
+  - {fileID: -2069959816776989710, guid: 20fa9a53184cd44469d8dd3747bd6a30, type: 3}
+  - {fileID: 4398520260047405121, guid: 20fa9a53184cd44469d8dd3747bd6a30, type: 3}
+  - {fileID: -8234512803829808530, guid: 20fa9a53184cd44469d8dd3747bd6a30, type: 3}
+  frameRate: 0.07
   colliderEnabledOnSpawn: 1
   usePool: 1
   poolTag: Lightening

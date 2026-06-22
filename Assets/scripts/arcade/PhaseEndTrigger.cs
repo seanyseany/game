@@ -41,7 +41,7 @@ public class PhaseEndTrigger : MonoBehaviour
         ;
 
         if (StageManager.Instance != null)
-            StageManager.Instance.OnPhasePassed();
+            StageManager.Instance.OnPhasePassed(this);
 
         // 10초 뒤 다시 활성화
         StartCoroutine(ReactivateAfterDelay());
@@ -55,5 +55,15 @@ public class PhaseEndTrigger : MonoBehaviour
 
         if (col != null)
             col.enabled = true;
+    }
+
+    public void SuppressFuturePasses()
+    {
+        triggered = true;
+
+        if (col != null)
+            col.enabled = false;
+
+        StopAllCoroutines();
     }
 }

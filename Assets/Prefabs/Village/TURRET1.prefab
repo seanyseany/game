@@ -99,6 +99,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 7608901885438138369}
+  - component: {fileID: 4982626350162984040}
   m_Layer: 0
   m_Name: TURRET1
   m_TagString: Untagged
@@ -126,6 +127,47 @@ Transform:
   - {fileID: 6189794865141496931}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &4982626350162984040
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2666589568459783854}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fb9e108cd0e584f9fa4a6c0aa3c20377, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Turret1
+  turretId: 
+  slotId: 
+  level: 1
+  rangeMinLocal: {x: -3, y: -2}
+  rangeMaxLocal: {x: 3, y: 2}
+  turretStart: {fileID: 0}
+  turretEnd: {fileID: 0}
+  bottomLocalPosition: {x: 0, y: 0}
+  exclamationPrefab: {fileID: 0}
+  level1Data:
+    sprite: {fileID: 0}
+    oxygenPrice: 10
+    ammoCapacity: 10
+    upgradePrefab: {fileID: 0}
+    reloadVisualPrefab: {fileID: 0}
+  level2Data:
+    sprite: {fileID: 0}
+    oxygenPrice: 10
+    ammoCapacity: 10
+    upgradePrefab: {fileID: 0}
+    reloadVisualPrefab: {fileID: 0}
+  level3Data:
+    sprite: {fileID: 0}
+    oxygenPrice: 10
+    ammoCapacity: 10
+    upgradePrefab: {fileID: 0}
+    reloadVisualPrefab: {fileID: 0}
+  bulletSpawnPoint: {fileID: 0}
+  bulletPrefab: {fileID: 0}
 --- !u!1 &3189862840086457436
 GameObject:
   m_ObjectHideFlags: 0

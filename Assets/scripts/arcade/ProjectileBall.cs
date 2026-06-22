@@ -1,11 +1,12 @@
 using UnityEngine;
 
-public class ProjectileBall : MonoBehaviour
+public class ProjectileBall : MonoBehaviour, IRageTransformPauseHandler
 {
     public float speed = 12f;
     public float life = 3f;
     public int damage = 1;
-    public GameObject hitboxPrefab; 
+    public GameObject hitboxPrefab;
+    [SerializeField] private bool spawnSeparateHitbox = true;
 
     public Rigidbody2D rb;
     public SpriteRenderer sr;     
@@ -27,6 +28,8 @@ public class ProjectileBall : MonoBehaviour
     private bool castFilterInitialized = false;
     private bool pendingSurfaceHit = false;
     private Vector2 pendingSurfacePos = Vector2.zero;
+    private float despawnAtTime = -1f;
+    private float pausedRemainingLife = -1f;
 
     void Awake()
     {
@@ -61,6 +64,8 @@ public class ProjectileBall : MonoBehaviour
         if (rb != null) rb.linearVelocity = Vector2.zero;
         isDespawning = false;
         pendingSurfaceHit = false;
+        despawnAtTime = -1f;
+        pausedRemainingLife = -1f;
     }
 
     public void Fire(Vector2 origin, Vector2 dir, float? overrideSpeed = null)
@@ -71,9 +76,9 @@ public class ProjectileBall : MonoBehaviour
         transform.rotation = Quaternion.identity;
         rb.linearVelocity = (overrideSpeed ?? speed) * dir.normalized;
         lastPhysicsPos = rb.position;
-        CancelInvoke(); Invoke(nameof(Despawn), life);
+        ScheduleDespawn(life);
         // ✅ 공격용 히트박스 추가
-        if (hitboxPrefab != null)
+        if (spawnSeparateHitbox && hitboxPrefab != null)
         {
             bool hbFromPool = false;
             var hb = SpawnUsingPool(hitboxPrefab, "ProjectileHitbox", transform.position, Quaternion.identity, out hbFromPool, 6);
@@ -91,8 +96,16 @@ public class ProjectileBall : MonoBehaviour
         }
     }
 
+    public void SetSpawnSeparateHitbox(bool enabled)
+    {
+        spawnSeparateHitbox = enabled;
+    }
+
     void Update()
     {
+        if (RageTransformFreezeController.IsGameplayPauseActive)
+            return;
+
         if (faceDirection && rb.linearVelocity.sqrMagnitude > 0.0001f)
         {
             var v = rb.linearVelocity.normalized;
@@ -113,6 +126,9 @@ public class ProjectileBall : MonoBehaviour
 
     void FixedUpdate()
     {
+        if (RageTransformFreezeController.IsGameplayPauseActive)
+            return;
+
         if (isDespawning || rb == null) return;
 
         Vector2 now = rb.position;
@@ -197,6 +213,40 @@ public class ProjectileBall : MonoBehaviour
         }
 
         return false;
+    }
+
+    public void OnRageTransformPauseStarted()
+    {
+        if (!isActiveAndEnabled || isDespawning || despawnAtTime < 0f)
+            return;
+
+        pausedRemainingLife = Mathf.Max(0f, despawnAtTime - Time.time);
+        CancelInvoke(nameof(Despawn));
+    }
+
+    public void OnRageTransformPauseEnded()
+    {
+        if (!isActiveAndEnabled || isDespawning || pausedRemainingLife < 0f)
+            return;
+
+        ScheduleDespawn(pausedRemainingLife);
+        pausedRemainingLife = -1f;
+    }
+
+    private void ScheduleDespawn(float delay)
+    {
+        float clampedDelay = Mathf.Max(0f, delay);
+        pausedRemainingLife = -1f;
+        despawnAtTime = Time.time + clampedDelay;
+        CancelInvoke(nameof(Despawn));
+
+        if (clampedDelay <= 0f)
+        {
+            Despawn();
+            return;
+        }
+
+        Invoke(nameof(Despawn), clampedDelay);
     }
 
     private bool TryHitNearbyEnemy()

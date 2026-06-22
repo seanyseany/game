@@ -83,7 +83,7 @@ public class BossSlimeCanon : MonoBehaviour, IReinitializable
         canonAnimator.SetTrigger(fireTrigger);
 
         float wait = Mathf.Max(0.01f, fireAnimReturnDelay);
-        yield return new WaitForSeconds(wait);
+        yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(wait);
 
         TryPlayState(canonAnimator, idleStateName, 0f);
 
@@ -134,7 +134,7 @@ public class BossSlimeCanon : MonoBehaviour, IReinitializable
             CacheRendererColors();
 
         SetAllRenderersColor(color);
-        yield return new WaitForSeconds(Mathf.Max(0.01f, duration));
+        yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(Mathf.Max(0.01f, duration));
         RestoreRendererColors();
         flashRoutine = null;
     }

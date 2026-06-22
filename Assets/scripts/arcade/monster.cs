@@ -2,39 +2,78 @@ using System.Collections;
 using UnityEngine;
 
 [DisallowMultipleComponent]
+[RequireComponent(typeof(Collider2D))]
+[RequireComponent(typeof(SpriteRenderer))]
 public class Monster : MonoBehaviour, IReinitializable
 {
     [Header("Animation")]
-    [SerializeField] private Animator anim;
-    [SerializeField] private string walkTrigger = "walk";
-    [SerializeField] private string dieTrigger = "die";
-    [SerializeField] private float dieDespawnDelay = 0.6f;
+    [SerializeField] private Animator targetAnimator;
+    [SerializeField] private string destroyTriggerName = "die";
+    [SerializeField] private AnimationClip destroyAnimationClip;
+    [SerializeField] private float destroyAnimationDuration = 0.6f;
 
     [Header("Gate")]
     [SerializeField] private string gateTag = "Gate";
     [SerializeField] private bool damageGateOnContact = true;
 
-    [Header("Pooling")]
-    [SerializeField] private bool usePool = false;
-    [SerializeField] private string poolTag = "";
-
-    private Collider2D[] cachedColliders;
+    private SpriteRenderer spriteRenderer;
+    private Collider2D hitCollider;
+    private Rigidbody2D body2D;
+    private ObstacleRageMover rageMover;
+    private Coroutine destroyRoutine;
     private bool dead;
     private bool rageCounted;
-    private Coroutine dieRoutine;
+    private Color initialColor;
+    private Sprite initialSprite;
     private RageUIController rageUi;
 
-    void Awake()
+    private void Awake()
     {
-        if (anim == null)
-            anim = GetComponent<Animator>() ?? GetComponentInChildren<Animator>(true);
+        spriteRenderer = GetComponent<SpriteRenderer>();
+        hitCollider = GetComponent<Collider2D>();
+        body2D = GetComponent<Rigidbody2D>();
+        rageMover = GetComponent<ObstacleRageMover>();
 
-        cachedColliders = GetComponentsInChildren<Collider2D>(true);
+        if (targetAnimator == null)
+            targetAnimator = GetComponent<Animator>() ?? GetComponentInChildren<Animator>(true);
+
+        if (spriteRenderer != null)
+        {
+            initialColor = spriteRenderer.color;
+            initialSprite = spriteRenderer.sprite;
+        }
     }
 
-    void OnEnable()
+    private void OnEnable()
     {
+        GameData.OnRageStart += HandleRageStart;
+        GameData.OnMachineGunTrigger += HandleMachineGunTrigger;
+
+        if (spriteRenderer == null)
+            spriteRenderer = GetComponent<SpriteRenderer>();
+
+        if (hitCollider == null)
+            hitCollider = GetComponent<Collider2D>();
+
+        if (body2D == null)
+            body2D = GetComponent<Rigidbody2D>();
+
+        if (rageMover == null)
+            rageMover = GetComponent<ObstacleRageMover>();
+
         Reinit();
+    }
+
+    private void OnDisable()
+    {
+        GameData.OnRageStart -= HandleRageStart;
+        GameData.OnMachineGunTrigger -= HandleMachineGunTrigger;
+
+        if (destroyRoutine != null)
+        {
+            StopCoroutine(destroyRoutine);
+            destroyRoutine = null;
+        }
     }
 
     public void Reinit()
@@ -42,38 +81,100 @@ public class Monster : MonoBehaviour, IReinitializable
         dead = false;
         rageCounted = false;
 
-        if (dieRoutine != null)
+        if (destroyRoutine != null)
         {
-            StopCoroutine(dieRoutine);
-            dieRoutine = null;
+            StopCoroutine(destroyRoutine);
+            destroyRoutine = null;
         }
 
-        SetAllColliders(true);
-        PlayWalk();
+        if (hitCollider != null)
+            hitCollider.enabled = true;
+
+        if (body2D != null)
+        {
+            body2D.simulated = true;
+            if (body2D.bodyType != RigidbodyType2D.Static)
+            {
+                body2D.linearVelocity = Vector2.zero;
+                body2D.angularVelocity = 0f;
+                body2D.WakeUp();
+            }
+        }
+
+        bool phaseOwned = IsPhaseOwnedMonster();
+        if (rageMover != null)
+        {
+            if (phaseOwned)
+            {
+                rageMover.ResumeMovement();
+                rageMover.enabled = true;
+            }
+            else
+            {
+                rageMover.enabled = false;
+            }
+        }
+
+        if (targetAnimator != null)
+        {
+            if (!string.IsNullOrEmpty(destroyTriggerName))
+                targetAnimator.ResetTrigger(destroyTriggerName);
+
+            targetAnimator.Rebind();
+            targetAnimator.Update(0f);
+        }
+
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.enabled = true;
+
+            if (initialSprite != null)
+                spriteRenderer.sprite = initialSprite;
+
+            Color restoredColor = initialColor;
+            restoredColor.a = 1f;
+            spriteRenderer.color = restoredColor;
+        }
     }
 
-    public void ConfigurePooling(bool shouldUsePool, string tag)
-    {
-        usePool = shouldUsePool;
-        poolTag = tag;
-    }
-
-    // Hitbox / ProjectileBall / ZigzagLightning에서 SendMessage("Hit", damage)로 호출됨
     public void Hit(int damage)
     {
-        if (dead) return;
-        StartDie(byPlayerKill: true);
+        Hit(damage, true);
     }
 
-    // 호환용
+    public void Hit(int damage, bool countAsPlayerKill)
+    {
+        if (dead)
+            return;
+
+        StartDie(byPlayerKill: countAsPlayerKill);
+    }
+
     public void TakeDamage(int damage)
     {
         Hit(damage);
     }
 
-    void OnTriggerEnter2D(Collider2D other)
+    private void HandleRageStart()
     {
-        if (dead || other == null) return;
+        if (!isActiveAndEnabled || dead)
+            return;
+
+        StartDie(byPlayerKill: false);
+    }
+
+    private void HandleMachineGunTrigger()
+    {
+        if (!isActiveAndEnabled || dead)
+            return;
+
+        StartDie(byPlayerKill: false);
+    }
+
+    private void OnTriggerEnter2D(Collider2D other)
+    {
+        if (dead || other == null)
+            return;
 
         if (ShouldDamageGate(other))
         {
@@ -88,11 +189,14 @@ public class Monster : MonoBehaviour, IReinitializable
             StartDie(byPlayerKill: true);
     }
 
-    void OnCollisionEnter2D(Collision2D collision)
+    private void OnCollisionEnter2D(Collision2D collision)
     {
-        if (dead || collision == null) return;
-        var other = collision.collider;
-        if (other == null) return;
+        if (dead || collision == null)
+            return;
+
+        Collider2D other = collision.collider;
+        if (other == null)
+            return;
 
         if (ShouldDamageGate(other))
         {
@@ -105,37 +209,71 @@ public class Monster : MonoBehaviour, IReinitializable
 
     private void StartDie(bool byPlayerKill)
     {
-        if (dead) return;
+        if (dead)
+            return;
+
         dead = true;
 
-        SetAllColliders(false);
-        PlayDie();
+        if (hitCollider != null)
+            hitCollider.enabled = false;
+
+        if (body2D != null)
+        {
+            if (body2D.bodyType != RigidbodyType2D.Static)
+            {
+                body2D.linearVelocity = Vector2.zero;
+                body2D.angularVelocity = 0f;
+            }
+            body2D.simulated = false;
+        }
+
+        if (rageMover != null && rageMover.enabled)
+            rageMover.FreezeAtCurrentPosition();
+
+        if (targetAnimator != null && !string.IsNullOrEmpty(destroyTriggerName))
+            targetAnimator.SetTrigger(destroyTriggerName);
 
         if (byPlayerKill)
             AddRageOneKill();
 
-        if (dieRoutine != null) StopCoroutine(dieRoutine);
-        dieRoutine = StartCoroutine(CoDespawnAfterDie());
+        if (destroyRoutine != null)
+            StopCoroutine(destroyRoutine);
+
+        destroyRoutine = StartCoroutine(CoDestroyAndReturn());
     }
 
-    private IEnumerator CoDespawnAfterDie()
+    private IEnumerator CoDestroyAndReturn()
     {
-        yield return new WaitForSeconds(Mathf.Max(0f, dieDespawnDelay));
-        dieRoutine = null;
-        Despawn();
-    }
+        float waitTime = GetDestroyAnimationDuration();
+        if (waitTime > 0f)
+            yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(waitTime);
 
-    private void Despawn()
-    {
-        if (usePool && ObjectPool.Instance != null && !string.IsNullOrEmpty(poolTag) && ObjectPool.Instance.HasPool(poolTag))
-            ObjectPool.Instance.ReturnToPool(poolTag, gameObject);
+        destroyRoutine = null;
+
+        if (IsPhaseOwnedMonster())
+            gameObject.SetActive(false);
         else
             Destroy(gameObject);
     }
 
+    private float GetDestroyAnimationDuration()
+    {
+        if (destroyAnimationClip != null)
+            return Mathf.Max(0f, destroyAnimationClip.length);
+
+        return Mathf.Max(0f, destroyAnimationDuration);
+    }
+
+    private bool IsPhaseOwnedMonster()
+    {
+        return GetComponentInParent<PhaseLayoutSnapshot>(true) != null;
+    }
+
     private void AddRageOneKill()
     {
-        if (rageCounted) return;
+        if (rageCounted)
+            return;
+
         rageCounted = true;
 
         if (rageUi == null)
@@ -147,60 +285,58 @@ public class Monster : MonoBehaviour, IReinitializable
 
     private bool ShouldDamageGate(Collider2D other)
     {
-        if (other.CompareTag(gateTag)) return true;
-        if (other.GetComponent<GateHealth>() != null) return true;
-        if (other.GetComponentInParent<GateHealth>() != null) return true;
+        if (other.CompareTag(gateTag))
+            return true;
+
+        if (other.GetComponent<GateHealth>() != null)
+            return true;
+
+        if (other.GetComponentInParent<GateHealth>() != null)
+            return true;
+
         return false;
     }
 
     private static bool IsPlayerAttackCollider(Collider2D other)
     {
-        if (other == null) return false;
+        if (other == null)
+            return false;
 
-        if (other.GetComponent<Hitbox>() != null) return true;
-        if (other.GetComponent<ProjectileBall>() != null) return true;
-        if (other.GetComponent<ZigzagLightning>() != null) return true;
+        if (other.GetComponent<Hitbox>() != null ||
+            other.GetComponent<ProjectileBall>() != null ||
+            other.GetComponent<ZigzagLightning>() != null ||
+            other.GetComponent<BombHitBox>() != null)
+            return true;
 
-        Transform p = other.transform.parent;
-        if (p != null)
+        Transform parent = other.transform.parent;
+        if (parent != null)
         {
-            if (p.GetComponent<Hitbox>() != null) return true;
-            if (p.GetComponent<ProjectileBall>() != null) return true;
-            if (p.GetComponent<ZigzagLightning>() != null) return true;
+            if (parent.GetComponent<Hitbox>() != null ||
+                parent.GetComponent<ProjectileBall>() != null ||
+                parent.GetComponent<ZigzagLightning>() != null ||
+                parent.GetComponent<BombHitBox>() != null)
+                return true;
         }
 
-        Transform r = other.transform.root;
-        if (r != null)
+        Transform root = other.transform.root;
+        if (root != null)
         {
-            if (r.GetComponent<Hitbox>() != null) return true;
-            if (r.GetComponent<ProjectileBall>() != null) return true;
-            if (r.GetComponent<ZigzagLightning>() != null) return true;
+            if (root.GetComponent<Hitbox>() != null ||
+                root.GetComponent<ProjectileBall>() != null ||
+                root.GetComponent<ZigzagLightning>() != null ||
+                root.GetComponent<BombHitBox>() != null)
+                return true;
         }
 
         return false;
     }
 
-    private void PlayWalk()
+    private void Reset()
     {
-        if (anim == null) return;
-        anim.ResetTrigger(dieTrigger);
-        anim.SetTrigger(walkTrigger);
-    }
-
-    private void PlayDie()
-    {
-        if (anim == null) return;
-        anim.ResetTrigger(walkTrigger);
-        anim.SetTrigger(dieTrigger);
-    }
-
-    private void SetAllColliders(bool enabled)
-    {
-        if (cachedColliders == null) return;
-        for (int i = 0; i < cachedColliders.Length; i++)
-        {
-            if (cachedColliders[i] != null)
-                cachedColliders[i].enabled = enabled;
-        }
+        hitCollider = GetComponent<Collider2D>();
+        spriteRenderer = GetComponent<SpriteRenderer>();
+        body2D = GetComponent<Rigidbody2D>();
+        rageMover = GetComponent<ObstacleRageMover>();
+        targetAnimator = GetComponent<Animator>() ?? GetComponentInChildren<Animator>(true);
     }
 }

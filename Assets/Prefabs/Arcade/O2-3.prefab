@@ -31,7 +31,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 1.49192, y: -1.03817, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 1.1, y: 1.1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -82,8 +82,8 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 5
-  m_Sprite: {fileID: 726308558590559361, guid: 967c22007b9f845948dfa99360e23ff6, type: 3}
+  m_SortingOrder: 0
+  m_Sprite: {fileID: 7458421504109450128, guid: fd2aaf4f16d0d4cddaae6f7c78358206, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -128,8 +128,8 @@ CircleCollider2D:
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: 0.005518794, y: 0.08662611}
-  m_Radius: 0.47738844
+  m_Offset: {x: 0.005518794, y: 0.013881759}
+  m_Radius: 0.4186868
 --- !u!114 &-2367756910911191133
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -144,12 +144,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::O2
   level: 3
   playerTag: Player
+  level1Sprite: {fileID: 7458421504109450128, guid: 0639429cd6e764db7b0927f692bfca2c, type: 3}
+  level2Sprite: {fileID: 7458421504109450128, guid: 0639429cd6e764db7b0927f692bfca2c, type: 3}
+  level3Sprite: {fileID: 7458421504109450128, guid: 0639429cd6e764db7b0927f692bfca2c, type: 3}
   targetAnimator: {fileID: 4901640071835188096}
   destroyTriggerName: Die
   destroyAnimationClip: {fileID: 7400000, guid: c49bc118e4edf4f68af6395a1622d402, type: 2}
   destroyAnimationDuration: 0.5
-  poolTag: O2
-  usePool: 1
 --- !u!95 &4901640071835188096
 Animator:
   serializedVersion: 7

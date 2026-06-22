@@ -28,6 +28,9 @@ public class BossRageMissile : MonoBehaviour
 
     private void Update()
     {
+        if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            return;
+
         if (dead) return;
 
         Vector3 dir = direction.sqrMagnitude <= 0.0001f ? Vector3.left : direction.normalized;

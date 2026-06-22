@@ -3,7 +3,7 @@ using System.Collections;
 
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(Collider2D))]
-public class Missile : MonoBehaviour
+public class Missile : MonoBehaviour, IRageTransformPauseHandler
 {
     [SerializeField] private float baseSpeed = 12.5f; 
     [SerializeField] private float life = 5f;
@@ -13,6 +13,7 @@ public class Missile : MonoBehaviour
 
     private Rigidbody2D rb;
     private float spawnTime;
+    private float pausedRemainingLife = -1f;
     private bool returned = false;
     private bool forceDisabledByPool = false;
 
@@ -55,11 +56,31 @@ public class Missile : MonoBehaviour
 
     void Update()
     {
+        if (RageTransformFreezeController.IsGameplayPauseActive)
+            return;
+
         // 🔥 life가 끝나면 자동 회수
         if (!returned && !forceDisabledByPool && Time.time - spawnTime >= life)
         {
             ReturnToPool();
         }
+    }
+
+    public void OnRageTransformPauseStarted()
+    {
+        if (!isActiveAndEnabled || returned || forceDisabledByPool)
+            return;
+
+        pausedRemainingLife = Mathf.Max(0f, life - (Time.time - spawnTime));
+    }
+
+    public void OnRageTransformPauseEnded()
+    {
+        if (!isActiveAndEnabled || returned || forceDisabledByPool || pausedRemainingLife < 0f)
+            return;
+
+        spawnTime = Time.time - (life - pausedRemainingLife);
+        pausedRemainingLife = -1f;
     }
 
     private void OnTriggerEnter2D(Collider2D other)

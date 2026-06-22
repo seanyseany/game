@@ -78,6 +78,12 @@ public class BossSlimeArm : MonoBehaviour, IReinitializable
         float t = 0f;
         while (t < duration)
         {
+            if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            {
+                yield return null;
+                continue;
+            }
+
             float k = t / duration;
             transform.position = Vector3.Lerp(start, end, k);
             t += Time.deltaTime;
@@ -86,13 +92,13 @@ public class BossSlimeArm : MonoBehaviour, IReinitializable
         transform.position = end;
 
         if (jellySpawnDelay > 0f)
-            yield return new WaitForSeconds(jellySpawnDelay);
+            yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(jellySpawnDelay);
 
         if (owner != null && owner.isActiveAndEnabled)
             SpawnTwoRandomJellies(owner.transform);
 
         if (stayAfterJellySpawn > 0f)
-            yield return new WaitForSeconds(stayAfterJellySpawn);
+            yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(stayAfterJellySpawn);
 
         transform.SetParent(null, true);
         if (ownerBoss != null)
@@ -192,7 +198,7 @@ public class BossSlimeArm : MonoBehaviour, IReinitializable
             CacheRendererColors();
 
         SetAllRenderersColor(color);
-        yield return new WaitForSeconds(Mathf.Max(0.01f, duration));
+        yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(Mathf.Max(0.01f, duration));
         RestoreRendererColors();
         flashRoutine = null;
     }

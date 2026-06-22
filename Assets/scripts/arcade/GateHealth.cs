@@ -14,9 +14,12 @@ public class GateHealth : MonoBehaviour
     [Header("Settings")]
     public int maxHits = 3; // 3회 맞으면 파괴
 
-    [Header("Smoke Spawn Positions")]
+    [Header("Gate Smoke Spawn Positions")]
+    [Tooltip("첫 번째 문 피격 때 GateSmoke가 생성될 로컬 오프셋")]
     public Vector3 smokeFrontLocalOffset = Vector3.zero;
+    [Tooltip("추가 연출용 보조 오프셋(현재 기본 스폰 로직에서는 미사용)")]
     public Vector3 smokeFrontLocalOffset2 = Vector3.zero;
+    [Tooltip("두 번째 문 피격 때 GateSmokeBack이 생성될 로컬 오프셋")]
     public Vector3 smokeBackLocalOffset  = Vector3.zero;
 
     [Header("Damage FX")]
@@ -105,7 +108,7 @@ public class GateHealth : MonoBehaviour
         animCo = StartCoroutine(OpenAnimation());
     }
 
-    public void CloseGateOnBloodHit()
+    public void CloseGate()
     {
         if (state == GateState.Broken) return;
         if (state == GateState.Closed || state == GateState.Closing) return;
@@ -114,13 +117,18 @@ public class GateHealth : MonoBehaviour
         animCo = StartCoroutine(CloseAnimation());
     }
 
+    public void CloseGateOnBloodHit()
+    {
+        CloseGate();
+    }
+
     private IEnumerator OpenAnimation()
     {
         state = GateState.Opening;
         SetVisualPhase(GateVisualPhase.Closed);
-        yield return new WaitForSeconds(0.1f);
+        yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(0.1f);
         SetVisualPhase(GateVisualPhase.HalfOpen);
-        yield return new WaitForSeconds(0.1f);
+        yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(0.1f);
         SetVisualPhase(GateVisualPhase.Open);
 
         state = GateState.Open;
@@ -131,9 +139,9 @@ public class GateHealth : MonoBehaviour
     {
         state = GateState.Closing;
         SetVisualPhase(GateVisualPhase.Open);
-        yield return new WaitForSeconds(0.1f);
+        yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(0.1f);
         SetVisualPhase(GateVisualPhase.HalfOpen);
-        yield return new WaitForSeconds(0.1f);
+        yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(0.1f);
         SetVisualPhase(GateVisualPhase.Closed);
 
         state = GateState.Closed;
@@ -222,11 +230,15 @@ public class GateHealth : MonoBehaviour
             return;
 
         var autoReturn = fx.GetComponent<AutoReturnToPool>();
-        if (autoReturn != null)
-        {
-            autoReturn.usePool = !string.IsNullOrEmpty(gateDamageFxPoolTag);
-            autoReturn.poolTag = gateDamageFxPoolTag;
-        }
+        if (autoReturn == null)
+            autoReturn = fx.AddComponent<AutoReturnToPool>();
+
+        bool hasPool = ObjectPool.Instance != null
+            && !string.IsNullOrEmpty(gateDamageFxPoolTag)
+            && ObjectPool.Instance.HasPool(gateDamageFxPoolTag);
+
+        autoReturn.usePool = hasPool;
+        autoReturn.poolTag = gateDamageFxPoolTag;
     }
 
     private void EnsureDamageFxPoolReady()

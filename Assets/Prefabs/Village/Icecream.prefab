@@ -303,6 +303,7 @@ GameObject:
   m_Component:
   - component: {fileID: 4575655320365712832}
   - component: {fileID: 4331365296109875828}
+  - component: {fileID: 8831728722809209692}
   m_Layer: 0
   m_Name: Bottom Worker
   m_TagString: Untagged
@@ -383,6 +384,27 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!114 &8831728722809209692
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1079289126591652412}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e1dd5acf423ee46d2aa744f20fa217d8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::OwnerBlood
+  moveSpeed: 2
+  itemPrefab: {fileID: 0}
+  energyUI: {fileID: 0}
+  handPoint: {fileID: 0}
+  itemPickupPause: 0.2
+  itemGivePause: 0.25
+  animator: {fileID: 0}
+  walkTrigger: Walk
+  liftTrigger: Lift
 --- !u!1 &1989789740698650262
 GameObject:
   m_ObjectHideFlags: 0
@@ -606,6 +628,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2758445761469616460}
+  - component: {fileID: 3323491027540906821}
   m_Layer: 0
   m_Name: Icecream
   m_TagString: Untagged
@@ -631,6 +654,58 @@ Transform:
   - {fileID: 384661644440019579}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &3323491027540906821
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4139520516219474875}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2950b66b300c940f78c6dfe1620c33cd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Building
+  slotId: 
+  buildingId: 
+  level: 1
+  isPlaced: 1
+  isWorking: 1
+  energyValue: 1
+  currentSalary: 0
+  maxSalary: 10
+  level1:
+    visualRoot: {fileID: 0}
+    oxygenPrice: 10
+    constructionTime: 3
+    totalSalaryCapacity: 10
+    salaryPrice30: 3
+    salaryPrice60: 6
+    salaryPrice100: 10
+  level2:
+    visualRoot: {fileID: 0}
+    oxygenPrice: 10
+    constructionTime: 3
+    totalSalaryCapacity: 10
+    salaryPrice30: 3
+    salaryPrice60: 6
+    salaryPrice100: 10
+  level1Sprite: {fileID: 0}
+  level2Sprite: {fileID: 0}
+  workingBloodSprite: {fileID: 0}
+  workTickSeconds: 5
+  disableWhenSalaryEmpty: []
+  exclamationPrefab: {fileID: 0}
+  itemPoint: {fileID: 0}
+  ownerPoint: {fileID: 0}
+  customerPoint: {fileID: 0}
+  line1Point: {fileID: 0}
+  line2Point: {fileID: 0}
+  customerPointRequiredTag: CustomerPoint
+  bottomLocalPosition: {x: 0, y: 0}
+  ownerPatrolMinLocalX: -1
+  ownerPatrolMaxLocalX: 1
+  ownerBlood: {fileID: 0}
 --- !u!1 &5523517178643126439
 GameObject:
   m_ObjectHideFlags: 0

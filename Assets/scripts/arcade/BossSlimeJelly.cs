@@ -74,6 +74,9 @@ public class BossSlimeJelly : MonoBehaviour, IReinitializable
 
     void Update()
     {
+        if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            return;
+
         if (dead) return;
 
         transform.Rotate(0f, 0f, rotateSpeed * Time.deltaTime, Space.Self);

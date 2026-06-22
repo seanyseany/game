@@ -25,6 +25,9 @@ public class BossMissile : MonoBehaviour
 
     private void Update()
     {
+        if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            return;
+
         if (!hasTarget) return;
 
         transform.position = Vector3.MoveTowards(transform.position, target, speed * Time.deltaTime);

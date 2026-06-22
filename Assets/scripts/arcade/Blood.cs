@@ -1,127 +1,359 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
-using System.Collections;
 
-[RequireComponent(typeof(Collider2D))]
 [RequireComponent(typeof(Rigidbody2D))]
+[RequireComponent(typeof(Collider2D))]
 public class Blood : MonoBehaviour
 {
-    [Header("Sprites (Blink)")]
-    public Sprite spriteA;
-    public Sprite spriteB;
+    [Header("Bounce Move")]
+    public float moveSpeed = 4f;
+    public float bounceForce = 5f;
+    public string floorTag = "floor";
 
-    [Header("Movement")]
-    public float speed = 4f;
+    [Header("Suction")]
+    public float suctionSpeed = 12f;
+    public float suctionArriveDistance = 0.12f;
 
-    [Header("Climb Excavator")]
-    public float climbYSpeed = 2f;   // 🔥 추가
-
-    [Header("Gate Line")]
-    public float openX = -2f;
-
-    private SpriteRenderer sr;
-    private bool openSent = false;
-    private Coroutine blinkRoutine;
     private Rigidbody2D rb;
+    private Collider2D bodyCollider;
+    private readonly List<Collider2D> ignoredPlayerColliders = new List<Collider2D>(8);
+    private bool isBeingSucked = false;
+    private bool gateShovelTouched = false;
+    private Transform suctionTarget;
+    private Collider2D ignoredSuctionCollider;
+    private Action<Blood> suctionComplete;
 
-    // 🔥 추가
-    private bool onExcavator = false;
-
-    void Awake()
+    private void Awake()
     {
-        sr = GetComponent<SpriteRenderer>();
         rb = GetComponent<Rigidbody2D>();
-
-        // 🔒 기존 세팅 유지
-        rb.bodyType = RigidbodyType2D.Kinematic;
-        rb.gravityScale = 0f;
-        rb.interpolation = RigidbodyInterpolation2D.Interpolate;
-        rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+        bodyCollider = GetComponent<Collider2D>();
     }
 
-    void OnEnable()
+    private void OnEnable()
     {
-        openSent = false;
-        UpdateVelocity();   // 🔥 변경
-        if (blinkRoutine != null) StopCoroutine(blinkRoutine);
-        blinkRoutine = StartCoroutine(Blink());
-    }
+        isBeingSucked = false;
+        gateShovelTouched = false;
+        suctionTarget = null;
+        ignoredSuctionCollider = null;
+        suctionComplete = null;
 
-    void OnDisable()
-    {
-        if (blinkRoutine != null)
+        if (bodyCollider != null)
+            bodyCollider.enabled = true;
+
+        RefreshIgnoredPlayerCollisions();
+
+        if (rb != null)
         {
-            StopCoroutine(blinkRoutine);
-            blinkRoutine = null;
+            float stageMult = GameData.Instance != null ? GameData.Instance.GetStageSpeedMult() : 1f;
+            rb.linearVelocity = new Vector2(-Mathf.Abs(moveSpeed) * stageMult, bounceForce);
+            rb.angularVelocity = 0f;
+        }
+    }
+
+    private void OnDisable()
+    {
+        isBeingSucked = false;
+        suctionTarget = null;
+        RestoreIgnoredSuctionCollision();
+        suctionComplete = null;
+
+        if (bodyCollider != null)
+            bodyCollider.enabled = true;
+
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector2.zero;
+            rb.angularVelocity = 0f;
+        }
+    }
+
+    private void FixedUpdate()
+    {
+        if (rb == null)
+            return;
+
+        if (isBeingSucked)
+        {
+            UpdateSuctionMovement();
+            return;
         }
 
+        float stageMult = GameData.Instance != null ? GameData.Instance.GetStageSpeedMult() : 1f;
+        Vector2 velocity = rb.linearVelocity;
+        velocity.x = -Mathf.Abs(moveSpeed) * stageMult;
+        rb.linearVelocity = velocity;
+    }
+
+    public void BeginShovelSuction(Transform target, Collider2D shovelCollider, Action<Blood> onComplete)
+    {
+        if (target == null || rb == null || bodyCollider == null)
+            return;
+
+        isBeingSucked = true;
+        suctionTarget = target;
+        SetIgnoredSuctionCollider(shovelCollider);
+        suctionComplete = onComplete;
         rb.linearVelocity = Vector2.zero;
-        rb.angularVelocity = 0f;
-        rb.Sleep();
+        bodyCollider.enabled = false;
     }
 
-    void FixedUpdate()
+    public bool TryMarkGateShovelTouch()
     {
-        // 🔥 이동 갱신
-        UpdateVelocity();
+        if (gateShovelTouched)
+            return false;
 
-        if (!openSent && transform.position.x <= openX)
-        {
-            openSent = true;
-            if (GateHealth.Instance)
-                GateHealth.Instance.OpenGate();
-        }
+        gateShovelTouched = true;
+        return true;
     }
 
-    // 🔥 추가 함수
-    void UpdateVelocity()
+    public void ResetGateShovelTouch()
     {
-        if (onExcavator)
-            rb.linearVelocity = new Vector2(-speed, climbYSpeed);
-        else
-            rb.linearVelocity = Vector2.left * speed;
+        gateShovelTouched = false;
     }
 
-    private IEnumerator Blink()
+    private void OnCollisionEnter2D(Collision2D collision)
     {
-        while (true)
-        {
-            sr.sprite = spriteA;
-            yield return new WaitForSeconds(0.18f);
-            sr.sprite = spriteB;
-            yield return new WaitForSeconds(0.18f);
-        }
+        if (TryHandleGateShovelContact(collision.collider))
+            return;
+
+        TryBounceFromFloor(collision);
+        IgnoreIfUnsupportedCollider(collision.collider);
+    }
+
+    private void OnCollisionStay2D(Collision2D collision)
+    {
+        if (TryHandleGateShovelContact(collision.collider))
+            return;
+
+        TryBounceFromFloor(collision);
+        IgnoreIfUnsupportedCollider(collision.collider);
+    }
+
+    private void OnCollisionExit2D(Collision2D collision)
+    {
+        TryHandleGateShovelExit(collision.collider);
     }
 
     private void OnTriggerEnter2D(Collider2D other)
     {
-        // 🔥 포크레인 접촉
-        if (other.CompareTag("Excavator"))
+        if (TryIgnorePlayerCollision(other))
+            return;
+
+        TryHandleGateShovelContact(other);
+    }
+
+    private void OnTriggerStay2D(Collider2D other)
+    {
+        if (TryIgnorePlayerCollision(other))
+            return;
+
+        TryHandleGateShovelContact(other);
+    }
+
+    private void OnTriggerExit2D(Collider2D other)
+    {
+        TryHandleGateShovelExit(other);
+    }
+
+    private void TryBounceFromFloor(Collision2D collision)
+    {
+        if (isBeingSucked || collision.collider == null)
+            return;
+
+        if (!collision.collider.CompareTag(floorTag))
+            return;
+
+        if (rb.linearVelocity.y > 0.05f)
+            return;
+
+        Vector2 velocity = rb.linearVelocity;
+        float stageMult = GameData.Instance != null ? GameData.Instance.GetStageSpeedMult() : 1f;
+        velocity.x = -Mathf.Abs(moveSpeed) * stageMult;
+        velocity.y = bounceForce;
+        rb.linearVelocity = velocity;
+    }
+
+    private void UpdateSuctionMovement()
+    {
+        if (suctionTarget == null)
         {
-            onExcavator = true;
+            ReturnSelf();
             return;
         }
 
-        // ✅ 기존 Gate 로직 유지
-        if (other.CompareTag("Gate"))
+        Vector2 current = rb.position;
+        Vector2 target = suctionTarget.position;
+        Vector2 toTarget = target - current;
+
+        if (toTarget.sqrMagnitude <= suctionArriveDistance * suctionArriveDistance)
         {
-            Debug.Log("✅ Blood hit Gate!");
+            Action<Blood> callback = suctionComplete;
+            isBeingSucked = false;
+            suctionTarget = null;
+            RestoreIgnoredSuctionCollision();
+            suctionComplete = null;
+            bodyCollider.enabled = true;
+            callback?.Invoke(this);
+            ReturnSelf();
+            return;
+        }
 
-            if (GateHealth.Instance)
-                GateHealth.Instance.CloseGateOnBloodHit();
+        float moveStep = suctionSpeed * Time.fixedDeltaTime;
+        if (toTarget.magnitude <= moveStep + suctionArriveDistance)
+        {
+            rb.position = target;
+            Action<Blood> callback = suctionComplete;
+            isBeingSucked = false;
+            suctionTarget = null;
+            RestoreIgnoredSuctionCollision();
+            suctionComplete = null;
+            bodyCollider.enabled = true;
+            callback?.Invoke(this);
+            ReturnSelf();
+            return;
+        }
 
-            if (GameData.Instance != null)
-                GameData.Instance.AddO2(10);
+        rb.MovePosition(Vector2.MoveTowards(current, target, moveStep));
+    }
 
-            ObjectPool.Instance.ReturnToPool("Blood", gameObject);
+    private void SetIgnoredSuctionCollider(Collider2D shovelCollider)
+    {
+        RestoreIgnoredSuctionCollision();
+
+        if (bodyCollider == null || shovelCollider == null)
+            return;
+
+        ignoredSuctionCollider = shovelCollider;
+        Physics2D.IgnoreCollision(bodyCollider, ignoredSuctionCollider, true);
+    }
+
+    private void RestoreIgnoredSuctionCollision()
+    {
+        if (bodyCollider == null || ignoredSuctionCollider == null)
+        {
+            ignoredSuctionCollider = null;
+            return;
+        }
+
+        Physics2D.IgnoreCollision(bodyCollider, ignoredSuctionCollider, false);
+        ignoredSuctionCollider = null;
+    }
+
+    private bool TryHandleGateShovelContact(Collider2D other)
+    {
+        GateShovel gateShovel = GetGateShovel(other);
+        if (gateShovel == null)
+            return false;
+
+        gateShovel.RegisterBloodInstance(this);
+        return true;
+    }
+
+    private void TryHandleGateShovelExit(Collider2D other)
+    {
+        GateShovel gateShovel = GetGateShovel(other);
+        if (gateShovel == null)
+            return;
+
+        gateShovel.UnregisterBloodInstance(this);
+    }
+
+    private GateShovel GetGateShovel(Collider2D other)
+    {
+        if (other == null)
+            return null;
+
+        GateShovel gateShovel = other.GetComponent<GateShovel>();
+        if (gateShovel != null)
+            return gateShovel;
+
+        return other.GetComponentInParent<GateShovel>();
+    }
+
+    private void RefreshIgnoredPlayerCollisions()
+    {
+        ignoredPlayerColliders.Clear();
+
+        if (bodyCollider == null)
+            return;
+
+        Player player = FindObjectOfType<Player>();
+        if (player == null)
+            return;
+
+        Collider2D[] playerColliders = player.GetComponentsInChildren<Collider2D>(true);
+        for (int i = 0; i < playerColliders.Length; i++)
+        {
+            Collider2D playerCollider = playerColliders[i];
+            if (playerCollider == null)
+                continue;
+
+            Physics2D.IgnoreCollision(bodyCollider, playerCollider, true);
+            AddIgnoredPlayerCollider(playerCollider);
         }
     }
 
-    // 🔥 추가
-    private void OnTriggerExit2D(Collider2D other)
+    private bool TryIgnorePlayerCollision(Collider2D other)
     {
-        if (other.CompareTag("Excavator"))
-        {
-            onExcavator = false;
-        }
+        if (bodyCollider == null || other == null)
+            return false;
+
+        if (!IsPlayerCollider(other))
+            return false;
+
+        Physics2D.IgnoreCollision(bodyCollider, other, true);
+        AddIgnoredPlayerCollider(other);
+        return true;
+    }
+
+    private void AddIgnoredPlayerCollider(Collider2D other)
+    {
+        if (other == null || ignoredPlayerColliders.Contains(other))
+            return;
+
+        ignoredPlayerColliders.Add(other);
+    }
+
+    private static bool IsPlayerCollider(Collider2D other)
+    {
+        if (other == null)
+            return false;
+
+        if (other.CompareTag("player"))
+            return true;
+
+        if (other.GetComponent<Player>() != null)
+            return true;
+
+        return other.GetComponentInParent<Player>() != null;
+    }
+
+    private void IgnoreIfUnsupportedCollider(Collider2D other)
+    {
+        if (bodyCollider == null || other == null)
+            return;
+
+        if (TryIgnorePlayerCollision(other))
+            return;
+
+        if (other.GetComponent<Blood>() != null)
+            return;
+
+        if (other.CompareTag(floorTag))
+            return;
+
+        if (GetGateShovel(other) != null)
+            return;
+
+        Physics2D.IgnoreCollision(bodyCollider, other, true);
+    }
+
+    private void ReturnSelf()
+    {
+        if (ObjectPool.Instance != null && ObjectPool.Instance.HasPool("Blood"))
+            ObjectPool.Instance.ReturnToPool("Blood", gameObject);
+        else
+            Destroy(gameObject);
     }
 }

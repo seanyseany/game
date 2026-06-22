@@ -15,36 +15,53 @@ public class Mana : MonoBehaviour, IReinitializable
     private SpriteRenderer sr;
     private Collider2D col;
     private bool collected = false;
+    private Coroutine collectRoutine;
+    private Vector3 initialLocalPosition;
+    private Quaternion initialLocalRotation;
+    private Vector3 initialLocalScale;
 
     void Awake()
     {
         sr = GetComponent<SpriteRenderer>();
         col = GetComponent<Collider2D>();
         col.isTrigger = true;
+        initialLocalPosition = transform.localPosition;
+        initialLocalRotation = transform.localRotation;
+        initialLocalScale = transform.localScale;
+    }
+
+    private void OnDisable()
+    {
+        if (collectRoutine != null)
+        {
+            StopCoroutine(collectRoutine);
+            collectRoutine = null;
+        }
     }
 
     public void Reinit()
     {
         collected = false;
 
+        if (collectRoutine != null)
+        {
+            StopCoroutine(collectRoutine);
+            collectRoutine = null;
+        }
+
         if (col != null) col.enabled = true;
 
         if (sr != null)
         {
             var c = sr.color;
+            sr.enabled = true;
             sr.color = new Color(c.r, c.g, c.b, 1f);
         }
 
-        if (GameData.Instance == null) return;
-
-        if (GameData.Instance.currentManaDisabled)
-        {
-            gameObject.SetActive(false);
-            return;
-        }
-
-        int target = GameData.Instance.currentManaNumber;
-        gameObject.SetActive(manaNumber == target);
+        transform.localPosition = initialLocalPosition;
+        transform.localRotation = initialLocalRotation;
+        transform.localScale = initialLocalScale;
+        gameObject.SetActive(true);
     }
 
     public void Collect()
@@ -53,7 +70,10 @@ public class Mana : MonoBehaviour, IReinitializable
         collected = true;
 
         col.enabled = false;
-        StartCoroutine(FadeAndFloatUp());
+        if (collectRoutine != null)
+            StopCoroutine(collectRoutine);
+
+        collectRoutine = StartCoroutine(FadeAndFloatUp());
     }
 
     private IEnumerator FadeAndFloatUp()
@@ -74,9 +94,20 @@ public class Mana : MonoBehaviour, IReinitializable
 
         sr.color = new Color(startColor.r, startColor.g, startColor.b, 0f);
 
-        if (ObjectPool.Instance != null)
+        collectRoutine = null;
+
+        if (IsPhaseOwnedMana())
+        {
+            gameObject.SetActive(false);
+        }
+        else if (ObjectPool.Instance != null)
             ObjectPool.Instance.ReturnToPool("Mana", gameObject);
         else
             Destroy(gameObject);
+    }
+
+    private bool IsPhaseOwnedMana()
+    {
+        return GetComponentInParent<PhaseLayoutSnapshot>(true) != null;
     }
 }

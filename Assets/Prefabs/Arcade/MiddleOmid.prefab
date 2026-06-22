@@ -16,6 +16,7 @@ GameObject:
   - component: {fileID: -483413509591151269}
   - component: {fileID: 1941545346803470722}
   - component: {fileID: -9166952080788225721}
+  - component: {fileID: 1633577281644773710}
   m_Layer: 3
   m_Name: MiddleOmid
   m_TagString: Obstacle
@@ -195,7 +196,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   anim: {fileID: 7822214582068275967}
-  poolTag: 
 --- !u!114 &1941545346803470722
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -223,3 +223,17 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ObstacleInfo
   type: 2
+--- !u!114 &1633577281644773710
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6934989992988261387}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce4c00462992547d0bfa5fbfdf523201, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ObstacleRageMover
+  moveDistance: 10
+  isTop: 1

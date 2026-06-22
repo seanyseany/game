@@ -30,7 +30,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 0.8, y: 0.8, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -82,7 +82,7 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_Sprite: {fileID: 387648589642541473, guid: f9c129853c10e4075bf86f00364072a3, type: 3}
+  m_Sprite: {fileID: -4545593364661741448, guid: 967c22007b9f845948dfa99360e23ff6, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -127,8 +127,8 @@ CapsuleCollider2D:
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: 0.03768444, y: -0.09}
-  m_Size: {x: 0.4941368, y: 0.67}
+  m_Offset: {x: -0.0055514574, y: 0.0015586019}
+  m_Size: {x: 1.3537691, y: 1.4046348}
   m_Direction: 0
 --- !u!114 &-498004176859368781
 MonoBehaviour:
@@ -156,3 +156,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f36da9b0167874fc3bb3e051d475cfcc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::holyMana
+  fadeDuration: 0.5
+  floatUpDistance: 0.5

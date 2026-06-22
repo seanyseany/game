@@ -4,7 +4,7 @@ using System.Collections.Generic;
 [RequireComponent(typeof(BoxCollider2D))]
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(SpriteRenderer))]
-public class ZigzagLightning : MonoBehaviour
+public class ZigzagLightning : MonoBehaviour, IRageTransformPauseHandler
 {
     private struct BossTargetRefs
     {
@@ -27,6 +27,8 @@ public class ZigzagLightning : MonoBehaviour
     private BoxCollider2D hitCollider;
     private int currentFrame = 0;
     private float timer = 0f;
+    private float despawnAtTime = -1f;
+    private float pausedRemainingLife = -1f;
     private readonly HashSet<GameObject> hitTargets = new HashSet<GameObject>();
     private static readonly Dictionary<int, BossTargetRefs> bossTargetCache = new Dictionary<int, BossTargetRefs>(64);
     private Coroutine lifeCo;
@@ -55,6 +57,8 @@ public class ZigzagLightning : MonoBehaviour
             sr.sprite = lightningFrames[0];
 
         if (lifeCo != null) StopCoroutine(lifeCo);
+        despawnAtTime = Time.time + Mathf.Max(0.01f, life);
+        pausedRemainingLife = -1f;
         lifeCo = StartCoroutine(CoLife());
     }
 
@@ -69,6 +73,9 @@ public class ZigzagLightning : MonoBehaviour
 
     private void Update()
     {
+        if (RageTransformFreezeController.IsGameplayPauseActive)
+            return;
+
         if (lightningFrames != null && lightningFrames.Length > 0)
         {
             timer += Time.deltaTime;
@@ -108,7 +115,34 @@ public class ZigzagLightning : MonoBehaviour
             return;
 
         if (lifeCo != null) StopCoroutine(lifeCo);
+        despawnAtTime = Time.time + life;
+        pausedRemainingLife = -1f;
         lifeCo = StartCoroutine(CoLife());
+    }
+
+    public void OnRageTransformPauseStarted()
+    {
+        if (!isActiveAndEnabled || despawnAtTime < 0f)
+            return;
+
+        pausedRemainingLife = Mathf.Max(0f, despawnAtTime - Time.time);
+        if (lifeCo != null)
+        {
+            StopCoroutine(lifeCo);
+            lifeCo = null;
+        }
+    }
+
+    public void OnRageTransformPauseEnded()
+    {
+        if (!isActiveAndEnabled || pausedRemainingLife < 0f)
+            return;
+
+        despawnAtTime = Time.time + pausedRemainingLife;
+        if (lifeCo != null)
+            StopCoroutine(lifeCo);
+        lifeCo = StartCoroutine(CoLife(Mathf.Max(0.01f, pausedRemainingLife)));
+        pausedRemainingLife = -1f;
     }
 
     private void OnTriggerEnter2D(Collider2D other)
@@ -155,6 +189,11 @@ public class ZigzagLightning : MonoBehaviour
         other.gameObject.SendMessage("Hit", finalDamageInt, SendMessageOptions.DontRequireReceiver);
     }
 
+    public static void ClearBossTargetCache()
+    {
+        bossTargetCache.Clear();
+    }
+
     private static void ResolveBossTargets(Collider2D other, out Boss boss, out BossSlime bossSlime)
     {
         boss = null;
@@ -189,18 +228,23 @@ public class ZigzagLightning : MonoBehaviour
         int t = (GameData.Instance != null) ? GameData.Instance.selectedPlayerType : 2;
         switch (t)
         {
-            case 1: return 2.9f;
+            case 1: return 4.3f;
             case 2: return 1.46f;
             case 3: return 1.46f;
             case 4: return 1.5f;
-            case 5: return 5.4f;
+            case 5: return 5.7f;
             default: return 1f;
         }
     }
 
     private System.Collections.IEnumerator CoLife()
     {
-        yield return new WaitForSeconds(life);
+        yield return CoLife(life);
+    }
+
+    private System.Collections.IEnumerator CoLife(float duration)
+    {
+        yield return new WaitForSeconds(duration);
         lifeCo = null;
         Despawn();
     }

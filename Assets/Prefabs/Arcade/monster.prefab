@@ -84,7 +84,7 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 2
-  m_Sprite: {fileID: -2055008003363216766, guid: 2e207cb6b886649f7b61a14316ac8b28, type: 3}
+  m_Sprite: {fileID: 2800495167406274686, guid: 03ab7a2d950b94233a1ff5cff501ba50, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -192,14 +192,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7a1e3935f6ae94d089cb3a1cc13fa569, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Monster
-  anim: {fileID: 0}
-  walkTrigger: walk
-  dieTrigger: die
-  dieDespawnDelay: 0.6
+  targetAnimator: {fileID: 0}
+  destroyTriggerName: die
+  destroyAnimationClip: {fileID: 0}
+  destroyAnimationDuration: 0.6
   gateTag: Gate
   damageGateOnContact: 1
-  usePool: 0
-  poolTag: 
 --- !u!114 &4575890466918380600
 MonoBehaviour:
   m_ObjectHideFlags: 0

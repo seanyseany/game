@@ -18,6 +18,7 @@ public class MechaLeg : MonoBehaviour
 
     private Animator anim;
     private float currentSpeed;
+    private float externalSpeedMultiplier = 1f;
 
     void Awake()
     {
@@ -37,7 +38,7 @@ public class MechaLeg : MonoBehaviour
         if (useAbsoluteMultiplier) mult = Mathf.Abs(mult);
 
         // 최종 애니메이션 속도
-        float target = baseAnimSpeed * mult;
+        float target = baseAnimSpeed * mult * Mathf.Max(0f, externalSpeedMultiplier);
 
         // 부드럽게 반영(선택)
         if (smooth > 0f)
@@ -46,5 +47,10 @@ public class MechaLeg : MonoBehaviour
             currentSpeed = target;
 
         anim.speed = currentSpeed;
+    }
+
+    public void SetExternalSpeedMultiplier(float multiplier)
+    {
+        externalSpeedMultiplier = Mathf.Max(0f, multiplier);
     }
 }

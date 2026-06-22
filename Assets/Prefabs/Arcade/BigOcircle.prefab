@@ -16,6 +16,7 @@ GameObject:
   - component: {fileID: 3535667098895049511}
   - component: {fileID: -1836532518476306499}
   - component: {fileID: 9135635114931620799}
+  - component: {fileID: 6053488587577537343}
   m_Layer: 3
   m_Name: BigOcircle
   m_TagString: Obstacle
@@ -194,7 +195,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   anim: {fileID: 0}
-  poolTag: 
 --- !u!114 &-1836532518476306499
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -222,3 +222,17 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ObstacleInfo
   type: 2
+--- !u!114 &6053488587577537343
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1583548122513747058}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce4c00462992547d0bfa5fbfdf523201, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ObstacleRageMover
+  moveDistance: 10
+  isTop: 1

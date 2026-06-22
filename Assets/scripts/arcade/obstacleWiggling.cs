@@ -9,7 +9,6 @@ public class obstacleWiggling : MonoBehaviour
     private ObstacleRageMover rageMover;
     private Transform obstacleTransform;
     private Collider2D triggerCollider;
-    private PhaseDetector[] phaseDetectors;
     private Coroutine moveCo;
     private bool triggered;
 
@@ -33,7 +32,7 @@ public class obstacleWiggling : MonoBehaviour
         }
     }
 
-    private void Update()
+    private void LateUpdate()
     {
         if (triggered || moveCo != null)
         {
@@ -50,22 +49,18 @@ public class obstacleWiggling : MonoBehaviour
             return;
         }
 
-        if (phaseDetectors == null || phaseDetectors.Length == 0)
-        {
-            phaseDetectors = FindObjectsOfType<PhaseDetector>();
-        }
-
         Bounds triggerBounds = triggerCollider.bounds;
-        for (int i = 0; i < phaseDetectors.Length; i++)
+        var detectors = PhaseDetector.ActiveDetectors;
+        for (int i = 0; i < detectors.Count; i++)
         {
-            PhaseDetector detector = phaseDetectors[i];
+            PhaseDetector detector = detectors[i];
             if (detector == null)
             {
                 continue;
             }
 
-            Collider2D detectorCollider = detector.GetComponent<Collider2D>();
-            if (detectorCollider != null && triggerBounds.Intersects(detectorCollider.bounds))
+            Collider2D detectorCollider = detector.CachedCollider;
+            if (detectorCollider != null && detectorCollider.enabled && triggerBounds.Intersects(detectorCollider.bounds))
             {
                 TriggerWiggle();
                 return;
@@ -116,7 +111,6 @@ public class obstacleWiggling : MonoBehaviour
 
         rageMover = GetComponentInParent<ObstacleRageMover>();
         obstacleTransform = rageMover != null ? rageMover.transform : transform.parent;
-        phaseDetectors = FindObjectsOfType<PhaseDetector>();
     }
 
     private void StartMoveTo(float targetY)

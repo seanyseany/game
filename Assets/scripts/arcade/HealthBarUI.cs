@@ -10,9 +10,14 @@ public class HealthBarUI : MonoBehaviour
     // 체력 하트 갱신
     public void SetHealth(int current)
     {
+        int visibleCount = Mathf.Clamp(current, 0, hearts.Length);
+
         for (int i = 0; i < hearts.Length; i++)
         {
-            if (i < current)
+            if (hearts[hearts.Length - 1 - i] == null)
+                continue;
+
+            if (i < visibleCount)
                 hearts[hearts.Length - 1 - i].enabled = true;
             else
                 hearts[hearts.Length - 1 - i].enabled = false;

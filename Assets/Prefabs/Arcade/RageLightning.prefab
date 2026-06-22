@@ -47,15 +47,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d499df8f76bfe41b1bfda5fb7fdef6a9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  life: 0.4
+  life: 0.42
   damage: 999
   lightningFrames:
-  - {fileID: -385473681764075828, guid: b05904be006964f2cae65e78fad33eed, type: 3}
-  - {fileID: -385473681764075828, guid: b05904be006964f2cae65e78fad33eed, type: 3}
-  - {fileID: -4484382918225399563, guid: b05904be006964f2cae65e78fad33eed, type: 3}
-  - {fileID: -3836852328965615382, guid: b05904be006964f2cae65e78fad33eed, type: 3}
-  - {fileID: 3123134069174239843, guid: b05904be006964f2cae65e78fad33eed, type: 3}
-  frameRate: 0.1
+  - {fileID: -765505915393418316, guid: 30ac9d5c89ce84b39ad3039125553681, type: 3}
+  - {fileID: 6821317146343354075, guid: be5f10fa105aa4575932246cb5d33b17, type: 3}
+  - {fileID: -8683286035884786263, guid: 1037701f9927541ffb28ad1993fdca90, type: 3}
+  - {fileID: 3099113527179823052, guid: 17e8ef1581aa6475885bd193ab93f083, type: 3}
+  - {fileID: 2621321484421499544, guid: 02262e1677ed2430180a2b665c919405, type: 3}
+  - {fileID: 2356806035654995735, guid: 38a6bac0a1845479c961ea9cc421ef7e, type: 3}
+  - {fileID: 3292038625947617261, guid: 8b6aea6bcc674465382be6639f994379, type: 3}
+  frameRate: 0.06
+  colliderEnabledOnSpawn: 1
   usePool: 1
   poolTag: RageLightening
 --- !u!61 &8981302590899611703
@@ -95,9 +98,9 @@ BoxCollider2D:
   m_Offset: {x: 0.08886814, y: 0.07387459}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
-    pivot: {x: -1.0624651, y: 0.49999827}
-    oldSize: {x: 0.8428571, y: 2.0285714}
-    newSize: {x: 18.36, y: 0.79}
+    pivot: {x: 0.004, y: 0.53}
+    oldSize: {x: 24.571428, y: 10}
+    newSize: {x: 24.571428, y: 10}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
     adaptiveTiling: 0
@@ -178,12 +181,12 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_Sprite: {fileID: 3123134069174239843, guid: b05904be006964f2cae65e78fad33eed, type: 3}
+  m_Sprite: {fileID: -8683286035884786263, guid: 1037701f9927541ffb28ad1993fdca90, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 18.36, y: 0.79}
+  m_Size: {x: 24.571428, y: 10}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1

@@ -7,6 +7,8 @@ public class PhaseLayoutSnapshot : MonoBehaviour
     public struct Entry
     {
         public Transform t;
+        public Transform parent;
+        public int siblingIndex;
         public Vector3 localPos;
         public Quaternion localRot;
         public Vector3 localScale;
@@ -29,6 +31,8 @@ public class PhaseLayoutSnapshot : MonoBehaviour
             entries.Add(new Entry
             {
                 t = t,
+                parent = t.parent,
+                siblingIndex = t.GetSiblingIndex(),
                 localPos = t.localPosition,
                 localRot = t.localRotation,
                 localScale = t.localScale,
@@ -38,7 +42,7 @@ public class PhaseLayoutSnapshot : MonoBehaviour
     }
 
     // ⚠️ 성능 위해: 스폰 시점이 아니라 '반환 시점'에서만 호출
-    public void Restore()
+    public void Restore(bool restoreRootActiveState = true)
     {
         if (entries == null) return;
 
@@ -47,7 +51,19 @@ public class PhaseLayoutSnapshot : MonoBehaviour
             var e = entries[i];
             if (!e.t) continue;
 
-            if (e.t.gameObject.activeSelf != e.activeSelf)
+            if (e.t.parent != e.parent)
+                e.t.SetParent(e.parent, false);
+
+            if (e.parent != null)
+            {
+                int siblingCount = e.parent.childCount;
+                int targetIndex = Mathf.Clamp(e.siblingIndex, 0, siblingCount > 0 ? siblingCount - 1 : 0);
+                if (e.t.GetSiblingIndex() != targetIndex)
+                    e.t.SetSiblingIndex(targetIndex);
+            }
+
+            bool shouldRestoreActive = restoreRootActiveState || e.t != transform;
+            if (shouldRestoreActive && e.t.gameObject.activeSelf != e.activeSelf)
                 e.t.gameObject.SetActive(e.activeSelf);
 
             e.t.localPosition = e.localPos;

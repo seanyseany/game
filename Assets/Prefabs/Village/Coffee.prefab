@@ -337,6 +337,7 @@ GameObject:
   m_Component:
   - component: {fileID: 5799212166689333306}
   - component: {fileID: 2784412443667151784}
+  - component: {fileID: 2099715612116791476}
   m_Layer: 0
   m_Name: Blood
   m_TagString: Untagged
@@ -405,7 +406,7 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 30
+  m_SortingOrder: 40
   m_Sprite: {fileID: 4703112791406151611, guid: c195635939a814a17a22f3a33de3250d, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -417,6 +418,27 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!114 &2099715612116791476
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5274696168061156533}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e1dd5acf423ee46d2aa744f20fa217d8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::OwnerBlood
+  moveSpeed: 2
+  itemPrefab: {fileID: 0}
+  energyUI: {fileID: 0}
+  handPoint: {fileID: 0}
+  itemPickupPause: 0.2
+  itemGivePause: 0.25
+  animator: {fileID: 0}
+  walkTrigger: Walk
+  liftTrigger: Lift
 --- !u!1 &5892963584577876695
 GameObject:
   m_ObjectHideFlags: 0
@@ -550,6 +572,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6904745788464642067}
+  - component: {fileID: 1724990465804394592}
   m_Layer: 0
   m_Name: Coffee
   m_TagString: Untagged
@@ -575,6 +598,58 @@ Transform:
   - {fileID: 4452175561622498160}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1724990465804394592
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7507811570974956554}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2950b66b300c940f78c6dfe1620c33cd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Building
+  slotId: 
+  buildingId: 
+  level: 1
+  isPlaced: 1
+  isWorking: 1
+  energyValue: 1
+  currentSalary: 0
+  maxSalary: 10
+  level1:
+    visualRoot: {fileID: 0}
+    oxygenPrice: 10
+    constructionTime: 3
+    totalSalaryCapacity: 10
+    salaryPrice30: 3
+    salaryPrice60: 6
+    salaryPrice100: 10
+  level2:
+    visualRoot: {fileID: 0}
+    oxygenPrice: 10
+    constructionTime: 3
+    totalSalaryCapacity: 10
+    salaryPrice30: 3
+    salaryPrice60: 6
+    salaryPrice100: 10
+  level1Sprite: {fileID: 0}
+  level2Sprite: {fileID: 0}
+  workingBloodSprite: {fileID: 0}
+  workTickSeconds: 5
+  disableWhenSalaryEmpty: []
+  exclamationPrefab: {fileID: 0}
+  itemPoint: {fileID: 0}
+  ownerPoint: {fileID: 0}
+  customerPoint: {fileID: 0}
+  line1Point: {fileID: 0}
+  line2Point: {fileID: 0}
+  customerPointRequiredTag: CustomerPoint
+  bottomLocalPosition: {x: 0, y: 0}
+  ownerPatrolMinLocalX: -1
+  ownerPatrolMaxLocalX: 1
+  ownerBlood: {fileID: 0}
 --- !u!1 &7717834358983120506
 GameObject:
   m_ObjectHideFlags: 0

@@ -56,6 +56,9 @@ public class speedEffect : MonoBehaviour, IReinitializable
 
     private void Update()
     {
+        if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            return;
+
         float mult = GameData.Instance != null ? GameData.Instance.GetStageSpeedMult() : 1f;
         Vector3 pos = transform.position;
         pos.x -= speed * mult * Time.deltaTime;

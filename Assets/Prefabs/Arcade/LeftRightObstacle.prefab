@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 3403497609122057388}
   - component: {fileID: 8891122351093546173}
   - component: {fileID: 7730339862482452446}
+  - component: {fileID: 2050938473400731999}
   m_Layer: 3
   m_Name: LeftRightObstacle
   m_TagString: Untagged
@@ -120,6 +121,20 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ObstacleInfo
   type: 2
+--- !u!114 &2050938473400731999
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3890828476635231631}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce4c00462992547d0bfa5fbfdf523201, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ObstacleRageMover
+  moveDistance: 10
+  isTop: 1
 --- !u!1 &6541444828570110707
 GameObject:
   m_ObjectHideFlags: 0
@@ -329,7 +344,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   anim: {fileID: 5033434218878281554}
-  poolTag: 
 --- !u!114 &916724819959135083
 MonoBehaviour:
   m_ObjectHideFlags: 0

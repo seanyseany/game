@@ -30,6 +30,9 @@ public class ObjectPool : MonoBehaviour
         public Rigidbody2D rb;
         public Collider2D[] colliders;
         public Renderer[] renderers;
+        public SpriteRenderer[] spriteRenderers;
+        public Sprite[] initialSprites;
+        public Color[] initialColors;
         public Animator[] animators;
         public IReinitializable[] reinitializables;
         public Missile missile;
@@ -86,6 +89,19 @@ public class ObjectPool : MonoBehaviour
     {
         EnsureInitialized();
         return poolDictionary.ContainsKey(tag);
+    }
+
+    public GameObject GetRegisteredPrefab(string tag)
+    {
+        EnsureInitialized();
+
+        if (string.IsNullOrEmpty(tag))
+            return null;
+
+        if (prefabByTag != null && prefabByTag.TryGetValue(tag, out var prefab))
+            return prefab;
+
+        return null;
     }
 
     public void RegisterPool(string tag, GameObject prefab, int size)
@@ -166,10 +182,28 @@ public class ObjectPool : MonoBehaviour
             rb = obj.GetComponent<Rigidbody2D>(),
             colliders = obj.GetComponentsInChildren<Collider2D>(true),
             renderers = obj.GetComponentsInChildren<Renderer>(true),
+            spriteRenderers = obj.GetComponentsInChildren<SpriteRenderer>(true),
             animators = obj.GetComponentsInChildren<Animator>(true),
             reinitializables = obj.GetComponentsInChildren<IReinitializable>(true),
             missile = obj.GetComponent<Missile>()
         };
+
+        if (refs.spriteRenderers != null)
+        {
+            int count = refs.spriteRenderers.Length;
+            refs.initialSprites = new Sprite[count];
+            refs.initialColors = new Color[count];
+            for (int i = 0; i < count; i++)
+            {
+                SpriteRenderer sr = refs.spriteRenderers[i];
+                if (sr == null)
+                    continue;
+
+                refs.initialSprites[i] = sr.sprite;
+                refs.initialColors[i] = sr.color;
+            }
+        }
+
         cacheByObject[obj] = refs;
         return refs;
     }
@@ -214,6 +248,24 @@ public class ObjectPool : MonoBehaviour
             {
                 var r = refs.renderers[i];
                 if (r != null) r.enabled = true;
+            }
+        }
+
+        if (refs != null && refs.spriteRenderers != null)
+        {
+            for (int i = 0; i < refs.spriteRenderers.Length; i++)
+            {
+                SpriteRenderer sr = refs.spriteRenderers[i];
+                if (sr == null)
+                    continue;
+
+                sr.enabled = true;
+
+                if (refs.initialSprites != null && i < refs.initialSprites.Length && refs.initialSprites[i] != null)
+                    sr.sprite = refs.initialSprites[i];
+
+                if (refs.initialColors != null && i < refs.initialColors.Length)
+                    sr.color = refs.initialColors[i];
             }
         }
 
@@ -280,11 +332,26 @@ public class ObjectPool : MonoBehaviour
         EnsureInitialized();
         if (obj == null) return;
 
+        bool isPhaseOwned = obj.GetComponentInParent<PhaseLayoutSnapshot>(true) != null;
+
         if (!poolDictionary.ContainsKey(tag))
         {
             // 태그 불일치여도 현재 active 집합에서 찾아 복귀를 시도한다.
             if (TryReturnActive(obj))
                 return;
+            obj.SetActive(false);
+            return;
+        }
+
+        bool wasTrackedActive = activeByTag.TryGetValue(tag, out var activeSet) && activeSet.Contains(obj);
+        if (!wasTrackedActive && !obj.activeSelf)
+            return;
+
+        if (isPhaseOwned)
+        {
+            if (activeSet != null)
+                activeSet.Remove(obj);
+
             obj.SetActive(false);
             return;
         }
@@ -312,12 +379,13 @@ public class ObjectPool : MonoBehaviour
             }
         }
 
+        obj.transform.SetParent(null, false);
         obj.SetActive(false);
         obj.transform.position = Vector3.zero;
         obj.transform.rotation = Quaternion.identity;
 
-        if (activeByTag.TryGetValue(tag, out var set))
-            set.Remove(obj);
+        if (activeSet != null)
+            activeSet.Remove(obj);
 
         poolDictionary[tag].Enqueue(obj);
     }

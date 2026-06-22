@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: 8599772720091407713}
   - component: {fileID: 8126306747462182503}
   - component: {fileID: 1771551434070029807}
+  - component: {fileID: -1281447513592281542}
   m_Layer: 0
   m_Name: Obstacle_B (4)
   m_TagString: Obstacle
@@ -185,7 +186,7 @@ BoxCollider2D:
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: 0.03376007, y: -0.090031475}
+  m_Offset: {x: -0.06491661, y: -0.090031505}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
@@ -195,7 +196,7 @@ BoxCollider2D:
     drawMode: 0
     adaptiveTiling: 0
   m_AutoTiling: 0
-  m_Size: {x: 17.487164, y: 1.3841507}
+  m_Size: {x: 17.09341, y: 1.3841507}
   m_EdgeRadius: 0
 --- !u!114 &1771551434070029807
 MonoBehaviour:
@@ -210,6 +211,23 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ObstacleInfo
   type: 3
+--- !u!114 &-1281447513592281542
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3906491748173185802}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5b5c095c583a7490498ed9e1c4f8e8b3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::tangling
+  stretchAmountX: 0.013
+  stretchAmountY: 0.035
+  stretchSpeed: 4
+  stretchDuration: 1
+  useTriggerContact: 1
 --- !u!1 &9024199755537167441
 GameObject:
   m_ObjectHideFlags: 0

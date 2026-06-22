@@ -5,45 +5,6 @@ public class GameData : MonoBehaviour
 {
     public static GameData Instance;
 
-    [Header("Mana Random Spawn")]
-    public bool manaRandomEnabled = true;
-    [Range(0f, 1f)] public float manaOffChanceStage1 = 0.10f;
-    [Range(0f, 1f)] public float manaOffChanceStage2 = 0.30f;
-    [Range(0f, 1f)] public float manaOffChanceStage3 = 0.50f;
-    [Range(0f, 1f)] public float manaOffChanceStage4 = 0.80f;
-
-    [Header("Holy Mode")]
-    public bool holyMode = true;
-
-    [Tooltip("holyMana 활성 여부")]
-    public bool holyRandomEnabled = true;
-
-    [Range(0f, 1f)] public float holyOffChanceStage1 = 0.20f;
-    [Range(0f, 1f)] public float holyOffChanceStage2 = 0.40f;
-    [Range(0f, 1f)] public float holyOffChanceStage3 = 0.60f;
-    [Range(0f, 1f)] public float holyOffChanceStage4 = 0.80f;
-
-    [Header("Holy Prefabs")]
-    public GameObject mosesPrefab;
-    public GameObject holyLightPrefab;
-
-    [Header("Holy Positions")]
-    public Vector3 mosesStartPos = new Vector3(-6f, 1.4f, 0f);
-    public Vector3 mosesTargetPos = new Vector3(-3f, 1.4f, 0f);
-    public float mosesMoveTime = 1f;
-
-    [Header("Holy Duration")]
-    public float holyLightDuration = 10f;
-
-    public bool holyActive = false;
-    private Coroutine holyRoutine;
-
-    public int currentHolyManaNumber = 1;
-    public bool currentHolyManaDisabled = false;
-
-    private MosesController activeMoses;
-    private GameObject activeHolyLight;
-
     [Header("References")]
     public Player playerRef;
 
@@ -63,6 +24,7 @@ public class GameData : MonoBehaviour
     public bool rageMode = false;
     public float rageDuration = 15f;
     public bool debugForceRage = false;
+    public bool debugForceMachineGunTrigger = false;
     public bool rageReady = false;
     private float rageEndTime = -1f;
     public float rageStartTime = -1f;
@@ -75,14 +37,16 @@ public class GameData : MonoBehaviour
 
     public static System.Action OnRageStart;
     public static System.Action OnRageEnd;
+    public static System.Action OnMachineGunTrigger;
+    public static System.Action OnMachineGunSequenceStart;
+    public static System.Action OnMachineGunObstacleSpawnStop;
+    public static System.Action OnMachineGunSequenceEnd;
     public static System.Action OnGameOver;
 
     public bool gameOver = false;
     private Coroutine restartRoutine;
     private Coroutine speedTween;
     private float lastObstacleTouchTime = -999f;
-    public static System.Action OnHolyStart;
-    public static System.Action OnHolyEnd;
 
     private const string POOL_MISSILE = "missile";
     private const string POOL_WARNING = "Warning";
@@ -90,7 +54,6 @@ public class GameData : MonoBehaviour
     private const string POOL_GATE_SMOKE = "GateSmoke";
     private const string POOL_GATE_SMOKE_BACK = "GateSmokeBack";
     private const string POOL_SPEED_EFFECT = "SpeedEffect";
-    public Vector3 holyLightPos = new Vector3(-4.729428f, 2.01729f, 0f);
 
     [Header("Obstacle Contact Tunables")]
     public float decelerateTime = 0.5f;
@@ -113,12 +76,18 @@ public class GameData : MonoBehaviour
     private bool forceStopStage = false;
     private Coroutine gameOverSpeedRoutine;
     private Coroutine gameOverUiRoutine;
+    private bool arcadeRewardsGranted;
+    private bool machineGunTriggerPending;
+    private bool machineGunSequenceActive;
+    private BombLauncher bombLauncherRef;
+    private Train trainRef;
+    private RageUIController rageUiRef;
+    private GateHealth gateHealthRef;
+    private ScoreUI scoreUiRef;
+    private GameOverUI gameOverUiRef;
 
     [Header("Game Over")]
     public float gameOverUiDelay = 1.5f;
-
-    public int currentManaNumber = 1;
-    public bool currentManaDisabled = false;
 
     // ===================== BOSS TRIGGER =====================
     [Header("Boss Trigger (Debug)")]
@@ -150,6 +119,12 @@ public class GameData : MonoBehaviour
             ActivateRageMode(rageDuration);
         }
 
+        if (debugForceMachineGunTrigger)
+        {
+            debugForceMachineGunTrigger = false;
+            TriggerMachineGun();
+        }
+
         // ✅ 디버그 보스 트리거
         if (debugForceBossStage3)
         {
@@ -177,22 +152,21 @@ public class GameData : MonoBehaviour
         }
     }
 
-    // ✅ StageManager가 SpawnPhase 직전에 호출하는 훅
+    // ✅ StageManager가 마지막 페이즈를 스폰한 직후 호출하는 훅
     public void CheckBossTriggerBeforeSpeedUp(StageManager sm, int currentPhaseSpawnCount)
     {
         if (gameOver) return;
         if (sm == null) return;
 
-        // “speedUp3/4 시작 직전” = (speedUp3-1), (speedUp4-1)
-        // StageManager.phaseSpawnCount는 SpawnPhase() 끝에서 증가하므로,
-        // 여기서는 "현재 값" 기준으로 비교하면 된다.
-        if (!bossStage3Triggered && currentPhaseSpawnCount == sm.speedUp3 - 1)
+        // 지정된 누적 스폰 수에 도달한 "마지막 페이즈"가 지나간 뒤 보스가 나와야 하므로
+        // 마지막 페이즈를 스폰한 직후 예약을 걸고, 실제 시작은 해당 페이즈의 PhaseEndTrigger에서 한다.
+        if (!bossStage3Triggered && currentPhaseSpawnCount == sm.speedUp3)
         {
             bossStage3Triggered = true;
             sm.TriggerBossEncounter(3);
         }
 
-        if (!bossStage4Triggered && currentPhaseSpawnCount == sm.speedUp4 - 1)
+        if (!bossStage4Triggered && currentPhaseSpawnCount == sm.speedUp4)
         {
             bossStage4Triggered = true;
             sm.TriggerBossEncounter(4);
@@ -223,13 +197,66 @@ public class GameData : MonoBehaviour
 
         stageSpeedMult = defaultStageSpeedMult * rageSpeedFactor;
 
-        var player = playerRef != null ? playerRef : Object.FindFirstObjectByType<Player>();
+        var player = ResolvePlayer();
         if (player != null) player.ActivateRageMode(seconds);
 
         OnRageStart?.Invoke();
     }
 
     public float GetRageTimeLeft() => rageMode ? Mathf.Max(0f, rageEndTime - Time.time) : 0f;
+
+    public bool IsMachineGunSequenceActive()
+    {
+        return machineGunTriggerPending || machineGunSequenceActive;
+    }
+
+    public bool TriggerMachineGun()
+    {
+        if (gameOver || rageMode || machineGunTriggerPending || machineGunSequenceActive)
+            return false;
+
+        if (OnMachineGunTrigger == null)
+            return false;
+
+        machineGunTriggerPending = true;
+        OnMachineGunTrigger?.Invoke();
+        return true;
+    }
+
+    public void NotifyMachineGunSequenceStarted()
+    {
+        machineGunTriggerPending = false;
+
+        if (machineGunSequenceActive)
+            return;
+
+        machineGunSequenceActive = true;
+        OnMachineGunSequenceStart?.Invoke();
+    }
+
+    public void NotifyMachineGunObstacleSpawnStop()
+    {
+        if (!machineGunSequenceActive)
+            return;
+
+        OnMachineGunObstacleSpawnStop?.Invoke();
+    }
+
+    public void NotifyMachineGunSequenceEnded()
+    {
+        bool wasActive = machineGunTriggerPending || machineGunSequenceActive;
+        machineGunTriggerPending = false;
+        machineGunSequenceActive = false;
+
+        if (wasActive)
+            OnMachineGunSequenceEnd?.Invoke();
+    }
+
+    private void ForceStopMachineGunSequence()
+    {
+        NotifyMachineGunSequenceEnded();
+    }
+
     public float GetStageSpeedMult() => stageSpeedMult;
     public float GetStageSpeedMultIgnoringObstacleSlowdown()
     {
@@ -243,101 +270,6 @@ public class GameData : MonoBehaviour
         }
 
         return stageSpeedMult;
-    }
-
-    // ===================== HOLY API =====================
-    public void CollectHolyMana()
-    {
-        if (!holyMode) return;
-        if (holyActive) return;
-        if (gameOver) return;
-        if (rageMode) return;
-
-        if (holyRoutine != null) StopCoroutine(holyRoutine);
-        holyRoutine = StartCoroutine(HolySequenceCoroutine());
-    }
-
-    private IEnumerator HolySequenceCoroutine()
-    {
-        holyActive = true;
-
-        if (mosesPrefab != null)
-        {
-            var go = Instantiate(mosesPrefab, mosesStartPos, Quaternion.identity);
-            activeMoses = go.GetComponent<MosesController>();
-
-            if (activeMoses != null)
-            {
-                activeMoses.SnapTo(mosesStartPos);
-                activeMoses.SetOrigin(mosesStartPos);
-
-                activeMoses.MoveTo(mosesTargetPos, mosesMoveTime, () =>
-                {
-                    activeMoses.PlayAppear();
-                });
-            }
-        }
-        yield return new WaitForSeconds(2f);
-
-        OnHolyStart?.Invoke();
-        yield return new WaitForSeconds(mosesMoveTime);
-
-        if (holyLightPrefab != null)
-            activeHolyLight = Instantiate(holyLightPrefab, holyLightPos, Quaternion.identity);
-
-        yield return new WaitForSeconds(holyLightDuration);
-
-        if (activeHolyLight != null)
-        {
-            Destroy(activeHolyLight);
-            activeHolyLight = null;
-        }
-
-        holyActive = false;
-        OnHolyEnd?.Invoke();
-
-        if (activeMoses != null)
-        {
-            bool done = false;
-
-            activeMoses.ReturnToOrigin(mosesMoveTime, () => { done = true; });
-            yield return new WaitUntil(() => done);
-
-            activeMoses.PlayVanish();
-            Destroy(activeMoses.gameObject, 0.3f);
-            activeMoses = null;
-        }
-
-        holyRoutine = null;
-    }
-
-    public void RollHolyManaForThisPhase(int speedStage)
-    {
-        if (!holyMode)
-        {
-            currentHolyManaDisabled = true;
-            currentHolyManaNumber = 1;
-            return;
-        }
-
-        if (!holyRandomEnabled)
-        {
-            currentHolyManaDisabled = false;
-            currentHolyManaNumber = 1;
-            return;
-        }
-
-        float offChance = 0f;
-        switch (speedStage)
-        {
-            case 4: offChance = holyOffChanceStage4; break;
-            case 3: offChance = holyOffChanceStage3; break;
-            case 2: offChance = holyOffChanceStage2; break;
-            default: offChance = holyOffChanceStage1; break;
-        }
-
-        currentHolyManaDisabled = Random.value < offChance;
-        currentHolyManaNumber = 1;
     }
 
     // ===== Obstacle contact control =====
@@ -412,7 +344,11 @@ public class GameData : MonoBehaviour
     // ------------------ RESET ------------------
     public void ResetGame()
     {
+        Debug.Log("[GameData] ResetGame called");
+        arcadeRewardsGranted = false;
         ForceStopRage();
+        Hitbox.ClearBossTargetCache();
+        ZigzagLightning.ClearBossTargetCache();
 
         if (StageManager.Instance != null)
             StageManager.Instance.ForceClearBossNow();
@@ -424,24 +360,6 @@ public class GameData : MonoBehaviour
         bossStage4Triggered = false;
         debugForceBossStage3 = false;
         debugForceBossStage4 = false;
-
-        if (holyRoutine != null)
-        {
-            StopCoroutine(holyRoutine);
-            holyRoutine = null;
-        }
-        holyActive = false;
-
-        if (activeHolyLight != null)
-        {
-            Destroy(activeHolyLight);
-            activeHolyLight = null;
-        }
-        if (activeMoses != null)
-        {
-            Destroy(activeMoses.gameObject);
-            activeMoses = null;
-        }
 
         if (obstacleRoutine != null)
         {
@@ -463,11 +381,15 @@ public class GameData : MonoBehaviour
             gameOverUiRoutine = null;
         }
 
-        var launcher = Object.FindFirstObjectByType<BombLauncher>();
+        var launcher = ResolveBombLauncher();
         if (launcher != null)
         {
             launcher.ResetLauncherState();
         }
+
+        var train = ResolveTrain();
+        if (train != null)
+            train.Reinit();
 
         stageSpeedMult = defaultStageSpeedMult;
 
@@ -476,6 +398,8 @@ public class GameData : MonoBehaviour
         rageEndTime = -1f;
         rageReady = false;
         debugForceRage = false;
+        debugForceMachineGunTrigger = false;
+        ForceStopMachineGunSequence();
 
         if (speedTween != null) { StopCoroutine(speedTween); speedTween = null; }
         preRageSpeedMult = defaultStageSpeedMult;
@@ -493,7 +417,7 @@ public class GameData : MonoBehaviour
 
         ResetUIAndObjects();
 
-        var player = playerRef != null ? playerRef : Object.FindFirstObjectByType<Player>();
+        var player = ResolvePlayer();
         if (player != null)
         {
             player.OnRageModeChanged(false);
@@ -530,9 +454,9 @@ public class GameData : MonoBehaviour
 
     private void ResetUIAndObjects()
     {
-        var rageUI = Object.FindFirstObjectByType<RageUIController>();
-        var gate = Object.FindFirstObjectByType<GateHealth>();
-        var scoreUI = Object.FindFirstObjectByType<ScoreUI>();
+        var rageUI = ResolveRageUi();
+        var gate = ResolveGateHealth();
+        var scoreUI = ResolveScoreUi();
 
         gate?.ResetGate();
         rageUI?.ResetRageUI();
@@ -549,11 +473,21 @@ public class GameData : MonoBehaviour
             );
         }
 
-        foreach (var s in Object.FindObjectsOfType<MissileSpawner>())
-            if (s && s.gameObject.scene.IsValid()) s.ResetSpawner();
+        var missileSpawners = Object.FindObjectsByType<MissileSpawner>(FindObjectsSortMode.None);
+        for (int i = 0; i < missileSpawners.Length; i++)
+        {
+            var s = missileSpawners[i];
+            if (s && s.gameObject.scene.IsValid())
+                s.ResetSpawner();
+        }
 
-        foreach (var s in Object.FindObjectsOfType<stage2prefabSpawner>())
-            if (s && s.gameObject.scene.IsValid()) s.ResetSpawner();
+        var stage2Spawners = Object.FindObjectsByType<stage2prefabSpawner>(FindObjectsSortMode.None);
+        for (int i = 0; i < stage2Spawners.Length; i++)
+        {
+            var s = stage2Spawners[i];
+            if (s && s.gameObject.scene.IsValid())
+                s.ResetSpawner();
+        }
 
         ReturnAllSceneObjectsOfType<Monster>();
         ReturnAllSceneObjectsOfType<speedEffect>();
@@ -580,7 +514,8 @@ public class GameData : MonoBehaviour
                 "BossSlimeDamaging",
                 "BombHead",
                 "Bomb",
-                "BombHitBox"
+                "BombHitBox",
+                "MachineGunBullet"
             );
         }
 
@@ -592,6 +527,7 @@ public class GameData : MonoBehaviour
         ReturnAllSceneObjectsOfType<BossSlimeCanonBall>();
         ReturnAllSceneObjectsOfType<Bomb>();
         ReturnAllSceneObjectsOfType<BombHitBox>();
+        ReturnAllSceneObjectsOfType<MachineGunBullet>();
     }
 
     private void ReturnAllSceneObjectsOfType<T>() where T : Component
@@ -603,6 +539,11 @@ public class GameData : MonoBehaviour
             if (item == null || !item.gameObject.scene.IsValid())
                 continue;
 
+            // Phase 내부 자식은 StageManager의 스냅샷/페이즈 풀로 복구해야 한다.
+            // 여기서 Destroy해 버리면 pooled phase clone에서 해당 오브젝트가 영구 소실될 수 있다.
+            if (item.GetComponentInParent<PhaseLayoutSnapshot>(true) != null)
+                continue;
+
             if (ObjectPool.Instance != null && ObjectPool.Instance.TryReturnActive(item.gameObject))
                 continue;
 
@@ -612,7 +553,7 @@ public class GameData : MonoBehaviour
 
     private void DestroyAllSceneObjectsOfType<T>() where T : Component
     {
-        var all = Resources.FindObjectsOfTypeAll<T>();
+        var all = Object.FindObjectsByType<T>(FindObjectsSortMode.None);
         foreach (var c in all)
         {
             if (c && c.gameObject.scene.IsValid())
@@ -636,25 +577,8 @@ public class GameData : MonoBehaviour
     {
         if (gameOver) return;
         gameOver = true;
+        AwardVillageArcadeRewardsOnce();
         OnGameOver?.Invoke();
-
-        if (holyRoutine != null)
-        {
-            StopCoroutine(holyRoutine);
-            holyRoutine = null;
-        }
-        holyActive = false;
-
-        if (activeHolyLight != null)
-        {
-            Destroy(activeHolyLight);
-            activeHolyLight = null;
-        }
-        if (activeMoses != null)
-        {
-            Destroy(activeMoses.gameObject);
-            activeMoses = null;
-        }
 
         if (obstacleRoutine != null)
         {
@@ -681,6 +605,20 @@ public class GameData : MonoBehaviour
         gameOverUiRoutine = StartCoroutine(CoShowGameOverUIAfterDelay());
     }
 
+    private void AwardVillageArcadeRewardsOnce()
+    {
+        if (arcadeRewardsGranted)
+            return;
+
+        arcadeRewardsGranted = true;
+
+        VillageManagement villageManagement = VillageManagement.EnsureInstance();
+        if (villageManagement == null)
+            return;
+
+        villageManagement.ApplyArcadeResults(GetO2Score(), GetCleanScore());
+    }
+
     private IEnumerator GameOverSlowStop()
     {
         float start = stageSpeedMult;
@@ -703,7 +641,7 @@ public class GameData : MonoBehaviour
         if (delay > 0f)
             yield return new WaitForSecondsRealtime(delay);
 
-        var ui = Object.FindFirstObjectByType<GameOverUI>();
+        var ui = ResolveGameOverUi();
         if (ui != null && gameOver)
             ui.Show();
 
@@ -761,34 +699,15 @@ public class GameData : MonoBehaviour
         stageSpeedMult = to;
     }
 
-    public void RollManaForThisPhase(int speedStage)
-    {
-        if (!manaRandomEnabled)
-        {
-            currentManaDisabled = false;
-            currentManaNumber = 1;
-            return;
-        }
-
-        float offChance = 0f;
-        switch (speedStage)
-        {
-            case 4: offChance = manaOffChanceStage4; break;
-            case 3: offChance = manaOffChanceStage3; break;
-            case 2: offChance = manaOffChanceStage2; break;
-            default: offChance = manaOffChanceStage1; break;
-        }
-
-        currentManaDisabled = Random.value < offChance;
-        currentManaNumber = (Random.value < 0.5f) ? 1 : 2;
-    }
-
     private void ForceStopRage()
     {
+        Debug.Log($"[GameData] ForceStopRage called rageMode={rageMode}");
         rageMode = false;
         rageEndTime = -1f;
         rageReady = false;
         debugForceRage = false;
+        debugForceMachineGunTrigger = false;
+        ForceStopMachineGunSequence();
 
         if (speedTween != null)
         {
@@ -805,5 +724,61 @@ public class GameData : MonoBehaviour
         }
 
         OnRageEnd?.Invoke();
+    }
+
+    private Player ResolvePlayer()
+    {
+        if (playerRef == null)
+            playerRef = Object.FindFirstObjectByType<Player>();
+
+        return playerRef;
+    }
+
+    private BombLauncher ResolveBombLauncher()
+    {
+        if (bombLauncherRef == null)
+            bombLauncherRef = Object.FindFirstObjectByType<BombLauncher>();
+
+        return bombLauncherRef;
+    }
+
+    private Train ResolveTrain()
+    {
+        if (trainRef == null)
+            trainRef = Object.FindFirstObjectByType<Train>();
+
+        return trainRef;
+    }
+
+    private RageUIController ResolveRageUi()
+    {
+        if (rageUiRef == null)
+            rageUiRef = Object.FindFirstObjectByType<RageUIController>();
+
+        return rageUiRef;
+    }
+
+    private GateHealth ResolveGateHealth()
+    {
+        if (gateHealthRef == null)
+            gateHealthRef = Object.FindFirstObjectByType<GateHealth>();
+
+        return gateHealthRef;
+    }
+
+    private ScoreUI ResolveScoreUi()
+    {
+        if (scoreUiRef == null)
+            scoreUiRef = Object.FindFirstObjectByType<ScoreUI>();
+
+        return scoreUiRef;
+    }
+
+    private GameOverUI ResolveGameOverUi()
+    {
+        if (gameOverUiRef == null)
+            gameOverUiRef = Object.FindFirstObjectByType<GameOverUI>();
+
+        return gameOverUiRef;
     }
 }

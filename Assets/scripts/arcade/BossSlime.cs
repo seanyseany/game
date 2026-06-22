@@ -61,8 +61,6 @@ public class BossSlime : MonoBehaviour, IReinitializable
 
     [Header("Monster Spawn")]
     public GameObject monsterPrefab;
-    public string monsterPoolTag = "BossSlimeMonster";
-    public int monsterPoolSize = 16;
     public Vector3 monsterSpawnWorldPos = new Vector3(16f, -3f, 0f);
     public int monsterSpawnCount = 13;
     public float monsterSpawnInterval = 0.3f;
@@ -175,9 +173,11 @@ public class BossSlime : MonoBehaviour, IReinitializable
 
     public void Begin()
     {
+        if (state != State.Inactive || mainRoutine != null)
+            return;
+
         EnsureBossPoolsReady();
         hasBegunEncounter = true;
-        ResetBossRuntime();
         spawnTime = Time.time;
         SetBossUIVisible(true);
         UpdateBossUI();
@@ -267,6 +267,9 @@ public class BossSlime : MonoBehaviour, IReinitializable
 
     void Update()
     {
+        if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            return;
+
         if (state != State.Active) return;
 
         UpdateBossUI();
@@ -290,15 +293,15 @@ public class BossSlime : MonoBehaviour, IReinitializable
         SetBossUIVisible(false);
 
         if (entranceStartDelay > 0f)
-            yield return new WaitForSeconds(entranceStartDelay);
+            yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(entranceStartDelay);
 
         GameObject entryFx = Spawn(entryFxPoolTag, entryFxPrefab, entryFxWorldPos, Quaternion.identity);
         if (entryFxDuration > 0f)
-            yield return new WaitForSeconds(entryFxDuration);
+            yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(entryFxDuration);
         SafeReturnOrDestroy(entryFx, entryFxPoolTag);
 
         if (bossAppearDelayAfterEntrance > 0f)
-            yield return new WaitForSeconds(bossAppearDelayAfterEntrance);
+            yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(bossAppearDelayAfterEntrance);
 
         // 기본은 씬 배치 위치에서 시작하고, 필요할 때만 강제 시작 위치 사용
         if (forceEnterFromWorldPos)
@@ -320,7 +323,7 @@ public class BossSlime : MonoBehaviour, IReinitializable
         roamRoutine = StartCoroutine(CoRoamLoop());
 
         // 첫 등장 직후에만 Arm 공격 시작을 1초 지연
-        yield return new WaitForSeconds(1f);
+        yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(1f);
 
         while (state == State.Active)
         {
@@ -334,7 +337,7 @@ public class BossSlime : MonoBehaviour, IReinitializable
             if (state != State.Active) break;
 
             if (loopDelayAfterEnemy > 0f)
-                yield return new WaitForSeconds(loopDelayAfterEnemy);
+                yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(loopDelayAfterEnemy);
         }
     }
 
@@ -342,6 +345,12 @@ public class BossSlime : MonoBehaviour, IReinitializable
     {
         while (state == State.Active)
         {
+            if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            {
+                yield return null;
+                continue;
+            }
+
             if (Time.time >= nextRoamPickTime)
             {
                 PickNewRoamTarget();
@@ -430,7 +439,7 @@ public class BossSlime : MonoBehaviour, IReinitializable
 
             float cycleWait = armCycleDuration + Mathf.Max(0f, armRepeatGap);
             if (cycleWait > 0f)
-                yield return new WaitForSeconds(cycleWait);
+                yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(cycleWait);
         }
     }
 
@@ -469,7 +478,7 @@ public class BossSlime : MonoBehaviour, IReinitializable
                 canon.SpawnCanonBall(aimAngle, angleIndex);
 
                 if (shot < shotCount - 1 && state == State.Active)
-                    yield return new WaitForSeconds(shotInterval);
+                    yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(shotInterval);
             }
         }
 
@@ -494,6 +503,12 @@ public class BossSlime : MonoBehaviour, IReinitializable
 
         while (elapsed < d && state == State.Active)
         {
+            if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            {
+                yield return null;
+                continue;
+            }
+
             float t = elapsed / d;
             float z = Mathf.LerpAngle(startZ, targetZ, t);
             canon.SetZRotation(z);
@@ -520,10 +535,8 @@ public class BossSlime : MonoBehaviour, IReinitializable
 
         for (int i = 0; i < count && state == State.Active; i++)
         {
-            GameObject monsterObj = SpawnMonster(monsterSpawnWorldPos, Quaternion.identity);
-            if (monsterObj != null)
-                ConfigureSpawnedMonster(monsterObj);
-            yield return new WaitForSeconds(interval);
+            SpawnMonster(monsterSpawnWorldPos, Quaternion.identity);
+            yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(interval);
         }
     }
 
@@ -541,7 +554,6 @@ public class BossSlime : MonoBehaviour, IReinitializable
         EnsurePool(pool, canonPoolTag, canonPrefab, 4);
         EnsurePool(pool, slimeDestroyPoolTag, slimeDestroyPrefab, 1);
         EnsurePool(pool, slimeDamagingPoolTag, slimeDamagingPrefab, 3);
-        EnsurePool(pool, monsterPoolTag, monsterPrefab, Mathf.Max(monsterPoolSize, monsterSpawnCount));
 
         var arm = armPrefab != null ? armPrefab.GetComponent<BossSlimeArm>() : null;
         if (arm != null)
@@ -572,25 +584,10 @@ public class BossSlime : MonoBehaviour, IReinitializable
 
     private GameObject SpawnMonster(Vector3 pos, Quaternion rot)
     {
-        if (usePool && ObjectPool.Instance != null && !string.IsNullOrEmpty(monsterPoolTag) && ObjectPool.Instance.HasPool(monsterPoolTag))
-            return ObjectPool.Instance.SpawnFromPool(monsterPoolTag, pos, rot);
-
         if (monsterPrefab != null)
             return Instantiate(monsterPrefab, pos, rot);
 
         return null;
-    }
-
-    private void ConfigureSpawnedMonster(GameObject monsterObj)
-    {
-        if (monsterObj == null)
-            return;
-
-        var monster = monsterObj.GetComponent<Monster>();
-        if (monster == null)
-            return;
-
-        monster.ConfigurePooling(usePool, monsterPoolTag);
     }
 
     private void EnsureCanon()
@@ -772,6 +769,12 @@ public class BossSlime : MonoBehaviour, IReinitializable
         float t = 0f;
         while (t < duration)
         {
+            if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            {
+                yield return null;
+                continue;
+            }
+
             float phase = (t / cycle) * Mathf.PI * 2f;
             float s = Mathf.Sin(phase);
             float xOffset = (s >= 0f) ? (s * shakeRight) : (s * shakeLeft);
@@ -833,6 +836,12 @@ public class BossSlime : MonoBehaviour, IReinitializable
         float elapsed = 0f;
         while (elapsed < moveDuration)
         {
+            if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            {
+                yield return null;
+                continue;
+            }
+
             float t = moveDuration <= 0.0001f ? 1f : (elapsed / moveDuration);
             UpdateTimeoutExtraCanonPositions(t);
             elapsed += Time.deltaTime;
@@ -842,7 +851,7 @@ public class BossSlime : MonoBehaviour, IReinitializable
 
         float fireDelay = Mathf.Max(0f, timeoutCanonFireDelay);
         if (fireDelay > 0f)
-            yield return new WaitForSeconds(fireDelay);
+            yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(fireDelay);
     }
 
     private IEnumerator CoFireTimeoutCanonVolley()
@@ -886,7 +895,7 @@ public class BossSlime : MonoBehaviour, IReinitializable
         int burstCount = 5;
         for (int shot = 1; shot < burstCount && state == State.TimeoutAttacking && !IsGateBroken(); shot++)
         {
-            yield return new WaitForSeconds(interval);
+            yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(interval);
 
             for (int i = 0; i < fireCount; i++)
             {
@@ -902,7 +911,7 @@ public class BossSlime : MonoBehaviour, IReinitializable
         if (state == State.TimeoutAttacking && !IsGateBroken())
         {
             float reAimDelay = Mathf.Max(0.01f, canonReAimDelay);
-            yield return new WaitForSeconds(reAimDelay);
+            yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(reAimDelay);
         }
     }
 
@@ -936,6 +945,12 @@ public class BossSlime : MonoBehaviour, IReinitializable
 
         while (elapsed < d)
         {
+            if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            {
+                yield return null;
+                continue;
+            }
+
             float t = elapsed / d;
             float z = Mathf.LerpAngle(startZ, targetZ, t);
             canon.SetZRotation(z);
@@ -1256,7 +1271,14 @@ public class BossSlime : MonoBehaviour, IReinitializable
 
         SetAllRenderersColor(hitColor);
         while (Time.time < flashUntilTime)
+        {
+            if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            {
+                yield return null;
+                continue;
+            }
             yield return null;
+        }
 
         RestoreRendererColors();
         flashRoutine = null;
@@ -1274,13 +1296,13 @@ public class BossSlime : MonoBehaviour, IReinitializable
         float t2 = total - t0 - t1;
 
         visualRoot.localPosition = baseLocal + Vector3.left * shakeLeft;
-        yield return new WaitForSeconds(t0);
+        yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(t0);
 
         visualRoot.localPosition = baseLocal + Vector3.right * shakeRight;
-        yield return new WaitForSeconds(t1);
+        yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(t1);
 
         visualRoot.localPosition = baseLocal;
-        if (t2 > 0f) yield return new WaitForSeconds(t2);
+        if (t2 > 0f) yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(t2);
     }
 
     private void StartOrExtendFlash()

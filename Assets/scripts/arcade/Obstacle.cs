@@ -1,13 +1,18 @@
 using UnityEngine;
+using System.Collections;
 
-public class Obstacle : MonoBehaviour
+public class Obstacle : MonoBehaviour, IReinitializable
 {
     public Animator anim;   // Animator (Idle/Move + Die 포함)
+    private const float DestroyAnimationDuration = 0.5f;
+
     private bool destroyed = false;
     private static Player cachedPlayer;
 
     private Collider2D col;
     private Rigidbody2D rb;
+    private ObstacleMover obstacleMover;
+    private Coroutine destroyRoutine;
     private Transform[] cachedTransforms;
     private Vector3[] cachedLocalPositions;
     private Quaternion[] cachedLocalRotations;
@@ -24,6 +29,7 @@ public class Obstacle : MonoBehaviour
         if (!anim) anim = GetComponent<Animator>();
         col = GetComponent<Collider2D>();
         rb = GetComponent<Rigidbody2D>();
+        obstacleMover = GetComponent<ObstacleMover>();
         initialParent = transform.parent;
         runtimeSpawned = false;
         CacheLocalPose();
@@ -41,6 +47,17 @@ public class Obstacle : MonoBehaviour
         if (!runtimeSpawned && initialParent != null && transform.parent != initialParent)
             transform.SetParent(initialParent, false);
 
+        Reinit();
+    }
+
+    public void Reinit()
+    {
+        if (destroyRoutine != null)
+        {
+            StopCoroutine(destroyRoutine);
+            destroyRoutine = null;
+        }
+
         ResetRuntimePose();
         destroyed = false;
 
@@ -54,13 +71,26 @@ public class Obstacle : MonoBehaviour
             ResetRigidbody(rb, true);
         }
 
+        if (obstacleMover == null)
+            obstacleMover = GetComponent<ObstacleMover>();
+
+        if (obstacleMover != null)
+            obstacleMover.Reinit();
+
         if (anim != null)
         {
-            // 애니메이터를 재설정하여 Idle 상태로 되돌림
             anim.ResetTrigger("Die");
-            // Play를 통해 상태를 초기 프레임으로 리셋
-            var state = anim.GetCurrentAnimatorStateInfo(0);
-            anim.Play(state.fullPathHash, -1, 0f);
+            anim.Rebind();
+            anim.Update(0f);
+        }
+    }
+
+    private void OnDisable()
+    {
+        if (destroyRoutine != null)
+        {
+            StopCoroutine(destroyRoutine);
+            destroyRoutine = null;
         }
     }
 
@@ -122,10 +152,21 @@ public class Obstacle : MonoBehaviour
         }
     }
 
+    public void Hit(int damage)
+    {
+        Die();
+    }
+
     private void Die()
     {
         if (destroyed) return;
         destroyed = true;
+
+        if (obstacleMover == null)
+            obstacleMover = GetComponent<ObstacleMover>();
+
+        if (obstacleMover != null)
+            obstacleMover.NotifyDeathStarted();
 
         if (col != null) col.enabled = false;
 
@@ -137,16 +178,27 @@ public class Obstacle : MonoBehaviour
         if (anim != null)
         {
             anim.SetTrigger("Die");
-            Invoke(nameof(DeactivateAfterDeath), 0.5f);
+            if (destroyRoutine != null)
+                StopCoroutine(destroyRoutine);
+
+            destroyRoutine = StartCoroutine(CoDeactivateAfterDeath());
         }
         else
         {
-            DeactivateAfterDeath();
+            FinishDeath();
         }
     }
 
+    private IEnumerator CoDeactivateAfterDeath()
+    {
+        if (DestroyAnimationDuration > 0f)
+            yield return new WaitForSeconds(DestroyAnimationDuration);
 
-    private void DeactivateAfterDeath()
+        destroyRoutine = null;
+        FinishDeath();
+    }
+
+    private void FinishDeath()
     {
         // Rigidbody 초기화
         if (rb != null)
@@ -162,11 +214,15 @@ public class Obstacle : MonoBehaviour
         if (anim != null)
             anim.ResetTrigger("Die");
 
-        var movingObstacle = GetComponent<ObstacleMover>();
-        if (movingObstacle != null && movingObstacle.TryReturnToObjectPool())
+        if (IsPhaseOwnedObstacle())
+        {
+            gameObject.SetActive(false);
+            return;
+        }
+
+        if (obstacleMover != null && obstacleMover.TryReturnToObjectPool())
             return;
 
-        // Obstacle은 StageManager의 페이즈 풀에서 재사용하므로 개별 글로벌 풀 반환 없이 비활성화만 한다.
         gameObject.SetActive(false);
     }
 
@@ -182,6 +238,11 @@ public class Obstacle : MonoBehaviour
     {
         if (!runtimeSpawned && initialParent != null && transform.parent != initialParent)
             transform.SetParent(initialParent, false);
+    }
+
+    private bool IsPhaseOwnedObstacle()
+    {
+        return GetComponentInParent<PhaseLayoutSnapshot>(true) != null;
     }
 
     private void CacheLocalPose()

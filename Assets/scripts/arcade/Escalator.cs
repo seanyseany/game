@@ -16,26 +16,57 @@ public class Escalator : MonoBehaviour, IReinitializable
     private Rigidbody2D rb;
     private bool isBreaking = false;
     private Sprite intactSprite;
+    private Coroutine breakRoutine;
+    private Vector3 initialLocalPosition;
+    private Quaternion initialLocalRotation;
+    private Vector3 initialLocalScale;
+    private Color initialColor;
 
     void Awake()
     {
         sr = GetComponent<SpriteRenderer>();
         col = GetComponent<Collider2D>();
         rb = GetComponent<Rigidbody2D>();
-        if (sr != null) intactSprite = sr.sprite;
+        initialLocalPosition = transform.localPosition;
+        initialLocalRotation = transform.localRotation;
+        initialLocalScale = transform.localScale;
+        if (sr != null)
+        {
+            intactSprite = sr.sprite;
+            initialColor = sr.color;
+        }
     }
 
     private void OnEnable()
     {
+        GameData.OnRageStart += HandleRageStart;
+        GameData.OnMachineGunTrigger += HandleMachineGunTrigger;
         Reinit();
+    }
+
+    private void OnDisable()
+    {
+        GameData.OnRageStart -= HandleRageStart;
+        GameData.OnMachineGunTrigger -= HandleMachineGunTrigger;
+
+        if (breakRoutine != null)
+        {
+            StopCoroutine(breakRoutine);
+            breakRoutine = null;
+        }
     }
 
     public void Reinit()
     {
         isBreaking = false;
 
-        if (sr != null && intactSprite != null)
-            sr.sprite = intactSprite;
+        if (sr != null)
+        {
+            sr.enabled = true;
+            if (intactSprite != null)
+                sr.sprite = intactSprite;
+            sr.color = initialColor;
+        }
 
         if (col != null)
             col.enabled = true;
@@ -49,19 +80,40 @@ public class Escalator : MonoBehaviour, IReinitializable
             }
             rb.simulated = true;
         }
+
+        transform.localPosition = initialLocalPosition;
+        transform.localRotation = initialLocalRotation;
+        transform.localScale = initialLocalScale;
+        breakRoutine = null;
     }
 
     private void OnTriggerEnter2D(Collider2D other)
     {
         if (!isBreaking && CanBreakBy(other))
-            StartCoroutine(BreakAndDestroy());
+            breakRoutine = StartCoroutine(BreakAndDestroy());
     }
 
     private void OnCollisionEnter2D(Collision2D collision)
     {
         if (collision == null) return;
         if (!isBreaking && CanBreakBy(collision.collider))
-            StartCoroutine(BreakAndDestroy());
+            breakRoutine = StartCoroutine(BreakAndDestroy());
+    }
+
+    private void HandleRageStart()
+    {
+        if (!isActiveAndEnabled || isBreaking)
+            return;
+
+        breakRoutine = StartCoroutine(BreakAndDestroy());
+    }
+
+    private void HandleMachineGunTrigger()
+    {
+        if (!isActiveAndEnabled || isBreaking)
+            return;
+
+        breakRoutine = StartCoroutine(BreakAndDestroy());
     }
 
     private bool CanBreakBy(Collider2D other)
@@ -99,14 +151,26 @@ public class Escalator : MonoBehaviour, IReinitializable
         }
 
         // 최종 제거(풀 반환 또는 비활성화 재사용)
+        breakRoutine = null;
         ReturnSelf();
     }
 
     private void ReturnSelf()
     {
+        if (IsPhaseOwnedEscalator())
+        {
+            gameObject.SetActive(false);
+            return;
+        }
+
         if (usePool && ObjectPool.Instance != null && !string.IsNullOrEmpty(poolTag) && ObjectPool.Instance.HasPool(poolTag))
             ObjectPool.Instance.ReturnToPool(poolTag, gameObject);
         else
             gameObject.SetActive(false);
+    }
+
+    private bool IsPhaseOwnedEscalator()
+    {
+        return GetComponentInParent<PhaseLayoutSnapshot>(true) != null;
     }
 }
