@@ -20,7 +20,12 @@ public class Obstacle : MonoBehaviour, IReinitializable
     private bool[] cachedActiveStates;
     private Collider2D[] cachedColliders;
     private SpriteRenderer[] cachedRenderers;
+    private Sprite[] cachedSprites;
+    private Color[] cachedRendererColors;
     private Rigidbody2D[] cachedRigidbodies;
+    private Animator[] cachedAnimators;
+    private bool[] cachedAnimatorEnabledStates;
+    private float[] cachedAnimatorSpeeds;
     private Transform initialParent;
     private bool runtimeSpawned;
 
@@ -36,6 +41,8 @@ public class Obstacle : MonoBehaviour, IReinitializable
         cachedColliders = GetComponentsInChildren<Collider2D>(true);
         cachedRenderers = GetComponentsInChildren<SpriteRenderer>(true);
         cachedRigidbodies = GetComponentsInChildren<Rigidbody2D>(true);
+        CacheRendererStates();
+        CacheAnimatorStates();
     }
 
     // 풀에서 꺼낼 때마다 상태 초기화 (이게 가장 중요)
@@ -270,6 +277,7 @@ public class Obstacle : MonoBehaviour, IReinitializable
             CacheLocalPose();
 
         Transform root = transform;
+        bool phaseOwned = IsPhaseOwnedObstacle();
         int n = cachedTransforms != null ? cachedTransforms.Length : 0;
         for (int i = 0; i < n; i++)
         {
@@ -277,7 +285,16 @@ public class Obstacle : MonoBehaviour, IReinitializable
             if (t == null) continue;
             if (cachedActiveStates != null && i < cachedActiveStates.Length)
                 t.gameObject.SetActive(cachedActiveStates[i]);
-            if (t == root) continue;
+            if (t == root)
+            {
+                if (phaseOwned)
+                {
+                    t.localPosition = cachedLocalPositions[i];
+                    t.localRotation = cachedLocalRotations[i];
+                    t.localScale = cachedLocalScales[i];
+                }
+                continue;
+            }
             t.localPosition = cachedLocalPositions[i];
             t.localRotation = cachedLocalRotations[i];
             t.localScale = cachedLocalScales[i];
@@ -299,9 +316,33 @@ public class Obstacle : MonoBehaviour, IReinitializable
                 var r = cachedRenderers[i];
                 if (r == null) continue;
                 r.enabled = true;
-                var c = r.color;
-                c.a = 1f;
-                r.color = c;
+                if (cachedSprites != null && i < cachedSprites.Length)
+                    r.sprite = cachedSprites[i];
+
+                if (cachedRendererColors != null && i < cachedRendererColors.Length)
+                    r.color = cachedRendererColors[i];
+                else
+                {
+                    var c = r.color;
+                    c.a = 1f;
+                    r.color = c;
+                }
+            }
+        }
+
+        if (cachedAnimators != null)
+        {
+            for (int i = 0; i < cachedAnimators.Length; i++)
+            {
+                var cachedAnimator = cachedAnimators[i];
+                if (cachedAnimator == null)
+                    continue;
+
+                if (cachedAnimatorEnabledStates != null && i < cachedAnimatorEnabledStates.Length)
+                    cachedAnimator.enabled = cachedAnimatorEnabledStates[i];
+
+                if (cachedAnimatorSpeeds != null && i < cachedAnimatorSpeeds.Length)
+                    cachedAnimator.speed = cachedAnimatorSpeeds[i];
             }
         }
 
@@ -339,5 +380,43 @@ public class Obstacle : MonoBehaviour, IReinitializable
             cachedPlayer = Object.FindFirstObjectByType<Player>();
 
         return cachedPlayer;
+    }
+
+    private void CacheRendererStates()
+    {
+        if (cachedRenderers == null)
+            cachedRenderers = GetComponentsInChildren<SpriteRenderer>(true);
+
+        int count = cachedRenderers != null ? cachedRenderers.Length : 0;
+        cachedSprites = new Sprite[count];
+        cachedRendererColors = new Color[count];
+
+        for (int i = 0; i < count; i++)
+        {
+            SpriteRenderer renderer = cachedRenderers[i];
+            if (renderer == null)
+                continue;
+
+            cachedSprites[i] = renderer.sprite;
+            cachedRendererColors[i] = renderer.color;
+        }
+    }
+
+    private void CacheAnimatorStates()
+    {
+        cachedAnimators = GetComponentsInChildren<Animator>(true);
+        int count = cachedAnimators != null ? cachedAnimators.Length : 0;
+        cachedAnimatorEnabledStates = new bool[count];
+        cachedAnimatorSpeeds = new float[count];
+
+        for (int i = 0; i < count; i++)
+        {
+            Animator cachedAnimator = cachedAnimators[i];
+            if (cachedAnimator == null)
+                continue;
+
+            cachedAnimatorEnabledStates[i] = cachedAnimator.enabled;
+            cachedAnimatorSpeeds[i] = cachedAnimator.speed;
+        }
     }
 }

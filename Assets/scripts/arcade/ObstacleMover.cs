@@ -32,6 +32,8 @@ public class ObstacleMover : MonoBehaviour, IReinitializable
     private Vector3 initialLocalPosition;
     private Quaternion initialLocalRotation;
     private SpriteRenderer[] cachedSpriteRenderers;
+    private Animator[] cachedAnimators;
+    private Sprite[] initialSprites;
     private Color[] initialSpriteColors;
     private Coroutine stretchRoutine;
     private bool deathSequenceActive;
@@ -297,7 +299,9 @@ public class ObstacleMover : MonoBehaviour, IReinitializable
     private void CacheSpriteRenderers()
     {
         cachedSpriteRenderers = GetComponentsInChildren<SpriteRenderer>(true);
+        cachedAnimators = GetComponentsInChildren<Animator>(true);
         int count = cachedSpriteRenderers != null ? cachedSpriteRenderers.Length : 0;
+        initialSprites = new Sprite[count];
         initialSpriteColors = new Color[count];
 
         for (int i = 0; i < count; i++)
@@ -306,6 +310,7 @@ public class ObstacleMover : MonoBehaviour, IReinitializable
             if (sr == null)
                 continue;
 
+            initialSprites[i] = sr.sprite;
             initialSpriteColors[i] = sr.color;
         }
     }
@@ -315,6 +320,19 @@ public class ObstacleMover : MonoBehaviour, IReinitializable
         if (cachedSpriteRenderers == null || initialSpriteColors == null)
             CacheSpriteRenderers();
 
+        if (cachedAnimators != null)
+        {
+            for (int i = 0; i < cachedAnimators.Length; i++)
+            {
+                Animator animator = cachedAnimators[i];
+                if (animator == null)
+                    continue;
+
+                animator.Rebind();
+                animator.Update(0f);
+            }
+        }
+
         int count = cachedSpriteRenderers != null ? cachedSpriteRenderers.Length : 0;
         for (int i = 0; i < count; i++)
         {
@@ -323,6 +341,9 @@ public class ObstacleMover : MonoBehaviour, IReinitializable
                 continue;
 
             sr.enabled = true;
+
+            if (initialSprites != null && i < initialSprites.Length && initialSprites[i] != null)
+                sr.sprite = initialSprites[i];
 
             Color color = i < initialSpriteColors.Length ? initialSpriteColors[i] : sr.color;
             color.a = 1f;

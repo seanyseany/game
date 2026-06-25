@@ -2,6 +2,7 @@ using UnityEngine;
 
 public class PhaseCache : MonoBehaviour
 {
+    public Mover[] movers;
     public Rigidbody2D[] rbs;
     public Renderer[] renderers;
     public SpriteRenderer[] spriteRenderers;
@@ -19,6 +20,7 @@ public class PhaseCache : MonoBehaviour
 
     public void RefreshCache()
     {
+        movers = GetComponentsInChildren<Mover>(true);
         rbs = GetComponentsInChildren<Rigidbody2D>(true);
         renderers = GetComponentsInChildren<Renderer>(true);
         spriteRenderers = GetComponentsInChildren<SpriteRenderer>(true);
@@ -41,7 +43,6 @@ public class PhaseCache : MonoBehaviour
         }
 
         hasChildMovers = false;
-        var movers = GetComponentsInChildren<Mover>(true);
         for (int i = 0; i < movers.Length; i++)
         {
             var m = movers[i];
@@ -55,6 +56,21 @@ public class PhaseCache : MonoBehaviour
 
     public void ResetCached()
     {
+        if (movers != null)
+        {
+            for (int i = 0; i < movers.Length; i++)
+            {
+                Mover cachedMover = movers[i];
+                if (cachedMover == null)
+                    continue;
+
+                if (Mathf.Approximately(cachedMover.defaultBaseSpeed, 0f) && !Mathf.Approximately(cachedMover.baseSpeed, 0f))
+                    cachedMover.defaultBaseSpeed = cachedMover.baseSpeed;
+
+                cachedMover.baseSpeed = cachedMover.defaultBaseSpeed;
+            }
+        }
+
         if (renderers != null)
         {
             for (int i = 0; i < renderers.Length; i++)

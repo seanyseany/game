@@ -13,6 +13,7 @@ public class DownUpObstacle : MonoBehaviour
     private Vector3 startLocalPos;
     private float moveTime;
     private float delayTimer;
+    private ObstacleRageMover rageMover;
 
     private void OnEnable()
     {
@@ -24,6 +25,7 @@ public class DownUpObstacle : MonoBehaviour
             return;
         }
 
+        rageMover = verticalObstacle.GetComponent<ObstacleRageMover>();
         startLocalPos = verticalObstacle.localPosition;
     }
 
@@ -44,6 +46,11 @@ public class DownUpObstacle : MonoBehaviour
 
         // 시작할 때 반대 방향에서 움직이도록 offset에 -1 곱하기
         float offset = -(Mathf.PingPong(moveTime, moveDistance * 2f) - moveDistance);
-        verticalObstacle.localPosition = startLocalPos + new Vector3(0, offset, 0);
+        Vector3 localOffset = new Vector3(0f, offset, 0f);
+
+        if (rageMover != null)
+            rageMover.SetExternalLocalOffset(localOffset);
+        else
+            verticalObstacle.localPosition = startLocalPos + localOffset;
     }
 }

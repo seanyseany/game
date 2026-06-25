@@ -198,6 +198,7 @@ public class Player : MonoBehaviour
     private Coroutine rangedFlyattackLatchRoutine;
     private Coroutine rageRangedGroundAttackRoutine;
     private Coroutine activeGroundAttackRoutine;
+    private const float rangedFlyattackDuration = 0.5f;
     private Coroutine activeLandingRoutine;
     private const float rageRangedAttackAnimDuration = 0.5f;
 
@@ -448,8 +449,8 @@ public class Player : MonoBehaviour
             return;
         if (isDead && triggerName != "Die") return;
 
-        if (isInHurtWindow && currentAnim == "Hurt" && triggerName != "Die")
-    return;
+        if (isInHurtWindow && currentAnim == "Hurt" && !CanInterruptHurtWindow(triggerName))
+            return;
 
         ReleaseRangedFlyattackState(triggerName);
 
@@ -480,6 +481,14 @@ public class Player : MonoBehaviour
         }
 
         UpdateJumpParticleEmission(triggerName);
+    }
+
+    private bool CanInterruptHurtWindow(string triggerName)
+    {
+        return triggerName == "Die" ||
+               triggerName == "Jump" ||
+               triggerName == "Attack" ||
+               triggerName == "Flyattack";
     }
 
     private bool IsAnimatorInLogicalState(string logicalName)
@@ -837,6 +846,15 @@ public class Player : MonoBehaviour
         return isRageMode && IsRangedPlayerType();
     }
 
+    private bool IsRageTimedAttackPlayerType()
+    {
+        if (!isRageMode || GameData.Instance == null)
+            return false;
+
+        int t = GameData.Instance.selectedPlayerType;
+        return t == T2 || t == T3 || t == T4;
+    }
+
     private bool IsGroundedForRangedAttackNow()
     {
         bool risingFromJump = rb != null &&
@@ -903,7 +921,7 @@ public class Player : MonoBehaviour
         yield return new WaitForSeconds(rageRangedAttackAnimDuration);
         rageRangedGroundAttackRoutine = null;
 
-        if (isDead || !IsRageRangedPlayerType())
+        if (isDead || !IsRageTimedAttackPlayerType())
             yield break;
 
         isAttacking = false;
@@ -982,8 +1000,21 @@ public class Player : MonoBehaviour
 
     private IEnumerator HoldRangedFlyattack()
     {
+        float airborneFlyattackStartTime = Time.time;
+
         while (!isDead && isAttacking && !isGrounded && currentAnim == "Flyattack" && IsRangedPlayerType())
+        {
+            if (Time.time - airborneFlyattackStartTime >= rangedFlyattackDuration)
+            {
+                isAttacking = false;
+                attackStateStartTime = -999f;
+                ChangeAnimation(GetAirborneAnimationTrigger());
+                rangedFlyattackLatchRoutine = null;
+                yield break;
+            }
+
             yield return null;
+        }
 
         rangedFlyattackLatchRoutine = null;
 
@@ -1081,7 +1112,10 @@ public class Player : MonoBehaviour
         {
             if (!isGrounded)
             {
-                ForceAnimationState("Base Jump", "Jump");
+                if (currentAnim == "Flyattack" || IsAnimatorShowingLogicalState("Flyattack"))
+                    ForceAnimationState("Base Flyattack", "Flyattack");
+                else
+                    ForceAnimationState("Base Jump", "Jump");
                 return;
             }
 
@@ -1198,7 +1232,14 @@ public class Player : MonoBehaviour
                 if (t != T2 && t != T4 && !(isRageMode && t == T3))
                     return;
             }
-            if (!isTransformLock && currentAnim != "Jump")
+
+            bool preserveAirAttackAnimation =
+                !isGrounded &&
+                isAttacking &&
+                (t == T2 || t == T4 || (isRageMode && t == T3)) &&
+                (currentAnim == "Flyattack" || IsAnimatorShowingLogicalState("Flyattack"));
+
+            if (!isTransformLock && currentAnim != "Jump" && !preserveAirAttackAnimation)
                 ChangeAnimation("Jump");
 
             rb.gravityScale = 0.5f;
@@ -3142,6 +3183,10 @@ public class Player : MonoBehaviour
         yield return new WaitForSeconds(0.5f);
         isInHurtWindow = false;
         StartCoroutine(InvincibleAlphaAfterHurt(2.5f));
+
+        if (currentAnim != "Hurt" && !IsAnimatorShowingLogicalState("Hurt"))
+            yield break;
+
         // 4) 이후에 Walk/Jump로 정상 전환
         if (isGrounded)
         {

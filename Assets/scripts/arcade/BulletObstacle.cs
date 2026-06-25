@@ -53,6 +53,9 @@ public class BulletObstacle : MonoBehaviour, IReinitializable
                 targetAnimator.ResetTrigger(DieTriggerName);
             if (HasTriggerParameter(targetAnimator, LowerDieTriggerName))
                 targetAnimator.ResetTrigger(LowerDieTriggerName);
+
+            targetAnimator.Rebind();
+            targetAnimator.Update(0f);
         }
     }
 

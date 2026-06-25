@@ -10,19 +10,32 @@ public class RightLeftObstacle : MonoBehaviour
     public Transform verticalObstacle;  // VerticalObstacle 연결
 
     private Vector3 startLocalPos;
+    private float moveTime;
+    private ObstacleRageMover rageMover;
 
-    void Start()
+    private void OnEnable()
     {
-        if (verticalObstacle != null)
-            startLocalPos = verticalObstacle.localPosition;
+        moveTime = 0f;
+
+        if (verticalObstacle == null)
+            return;
+
+        rageMover = verticalObstacle.GetComponent<ObstacleRageMover>();
+        startLocalPos = verticalObstacle.localPosition;
     }
 
-    void Update()
+    private void Update()
     {
         if (verticalObstacle == null) return;
 
         // 시작할 때 반대 방향에서 움직이도록 offset에 -1 곱하기
-        float offset = -(Mathf.PingPong(Time.time * moveSpeed, moveDistance * 2) - moveDistance);
-        verticalObstacle.localPosition = startLocalPos + new Vector3(offset, 0, 0);
+        moveTime += Time.deltaTime * Mathf.Max(0f, moveSpeed);
+        float offset = -(Mathf.PingPong(moveTime, moveDistance * 2f) - moveDistance);
+        Vector3 localOffset = new Vector3(offset, 0f, 0f);
+
+        if (rageMover != null)
+            rageMover.SetExternalLocalOffset(localOffset);
+        else
+            verticalObstacle.localPosition = startLocalPos + localOffset;
     }
 }

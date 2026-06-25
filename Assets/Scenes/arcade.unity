@@ -3110,12 +3110,36 @@ PrefabInstance:
       value: -3
       objectReference: {fileID: 0}
     - target: {fileID: 4882647518002013785, guid: 5a6a6aaa0a428432b85d0b24b0a2d3ec, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 25.709942
+      objectReference: {fileID: 0}
+    - target: {fileID: 4882647518002013785, guid: 5a6a6aaa0a428432b85d0b24b0a2d3ec, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 14.245831
+      objectReference: {fileID: 0}
+    - target: {fileID: 4882647518002013785, guid: 5a6a6aaa0a428432b85d0b24b0a2d3ec, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 1.4127
+      objectReference: {fileID: 0}
+    - target: {fileID: 4882647518002013785, guid: 5a6a6aaa0a428432b85d0b24b0a2d3ec, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -3.42
+      value: -2.8638
+      objectReference: {fileID: 0}
+    - target: {fileID: 5268465994891050730, guid: 5a6a6aaa0a428432b85d0b24b0a2d3ec, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 52.95719
+      objectReference: {fileID: 0}
+    - target: {fileID: 5268465994891050730, guid: 5a6a6aaa0a428432b85d0b24b0a2d3ec, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 7.5362196
+      objectReference: {fileID: 0}
+    - target: {fileID: 5268465994891050730, guid: 5a6a6aaa0a428432b85d0b24b0a2d3ec, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 7.9307
       objectReference: {fileID: 0}
     - target: {fileID: 5268465994891050730, guid: 5a6a6aaa0a428432b85d0b24b0a2d3ec, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -0.84
+      value: -1.7
       objectReference: {fileID: 0}
     - target: {fileID: 5284075503564783190, guid: 5a6a6aaa0a428432b85d0b24b0a2d3ec, type: 3}
       propertyPath: baseScrollSpeed
@@ -3286,13 +3310,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1223396562}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.0402, y: 1.43, z: -2}
+  m_LocalRotation: {x: 0, y: 0, z: 1, w: 0}
+  m_LocalPosition: {x: -0.0402, y: -1.58, z: -3}
   m_LocalScale: {x: 28.766645, y: 11.00884, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 180}
 --- !u!1001 &1247111784
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -3443,7 +3467,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2006843320572366924, guid: fae4c319019f9402eaeee6e7645d9498, type: 3}
       propertyPath: selectedPlayerType
-      value: 4
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2006843320572366924, guid: fae4c319019f9402eaeee6e7645d9498, type: 3}
       propertyPath: holyLightSpawnPos.x
@@ -5532,13 +5556,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1581939371}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.0388, y: -1.32, z: -3}
+  m_LocalRotation: {x: 0, y: 0, z: 1, w: 0}
+  m_LocalPosition: {x: -0.0388, y: 1.25, z: -2}
   m_LocalScale: {x: 28.778482, y: 11.306296, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 180}
 --- !u!1 &1596383736
 GameObject:
   m_ObjectHideFlags: 0
@@ -5643,7 +5667,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ac861eb8557084223a6741d05133becf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  testPhasePrefabs: []
+  testPhasePrefabs:
+  - {fileID: 2659614723417223950, guid: 58777d01689f3477298f63679fc680b1, type: 3}
   stage1PhasePrefabs:
   - {fileID: 2659614723417223950, guid: a72c1401e0d3543ceb8319395edbfd50, type: 3}
   - {fileID: 2659614723417223950, guid: f2580553c03134ef08bffc7fa9000e68, type: 3}
@@ -7491,7 +7516,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1375860378352231304, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
       propertyPath: rageAttachedSmokeLocalPosPrimary.y
-      value: 0
+      value: 0.27
       objectReference: {fileID: 0}
     - target: {fileID: 1375860378352231304, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
       propertyPath: rageAttachedSmokeLocalPosSecondary.x

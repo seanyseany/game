@@ -205,8 +205,8 @@ public class Hitbox : MonoBehaviour
         {
             case 1: return 4.3f;
             case 2: return 1.46f;
-            case 3: return 1.46f;
-            case 4: return 1.5f;
+            case 3: return 1.52f;
+            case 4: return 1.58f;
             case 5: return 5.7f;
             default: return 1f;
         }

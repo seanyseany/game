@@ -1,7 +1,7 @@
 using UnityEngine;
 using System.Collections;
 
-public class ObstacleRageMover : MonoBehaviour
+public class ObstacleRageMover : MonoBehaviour, IReinitializable
 {
     [Header("Move Settings")]
     public float moveDistance = 10f;
@@ -10,39 +10,31 @@ public class ObstacleRageMover : MonoBehaviour
     private float moveDuration = 2f;
     private float returnMoveDuration = 4f;
 
-    private float originalY;
+    private Vector3 initialLocalPosition;
+    private Vector3 externalLocalOffset;
+    private float rageOffsetY;
     private Coroutine moveCo;
-    private bool originalYSet = false;
+    private bool initialLocalPositionSet = false;
     private bool movementFrozen = false;
     public bool IsMovementFrozen => movementFrozen;
 
-    private float TargetY => originalY + (isTop ? moveDistance : -moveDistance);
+    private float TargetRageOffsetY => isTop ? moveDistance : -moveDistance;
+
+    private void Awake()
+    {
+        CacheInitialLocalPosition();
+    }
 
     void OnEnable()
     {
-        movementFrozen = false;
-
-        if (!originalYSet)
-        {
-            originalY = transform.position.y;
-            originalYSet = true;
-        }
-        else
-        {
-            // 풀/재스폰 시 원위치 정렬
-            transform.position = new Vector3(transform.position.x, originalY, transform.position.z);
-        }
-        // ✅ Rage 이벤트도 같이 구독해야 Rage 때 움직임
+        Reinit();
         GameData.OnRageStart += HandleExpandStart;
         GameData.OnRageEnd   += HandleExpandEnd;
         GameData.OnMachineGunSequenceStart += HandleExpandStart;
         GameData.OnMachineGunSequenceEnd += HandleExpandEnd;
 
-        // ✅ 이미 Rage/머신건 진행 중이면 즉시 벌림
         if (ShouldStayExpanded())
-        {
-            StartMoveTo(TargetY, 0f);
-        }
+            StartMoveTo(TargetRageOffsetY, 0f);
     }
 
     void OnDisable()
@@ -58,12 +50,24 @@ public class ObstacleRageMover : MonoBehaviour
             moveCo = null;
         }
 
-        // GameObject가 실제로 비활성화될 때만 원위치로 복구한다.
         if (!gameObject.activeSelf)
+            RestoreInitialLocalPosition();
+    }
+
+    public void Reinit()
+    {
+        movementFrozen = false;
+
+        if (moveCo != null)
         {
-            var pos = transform.position;
-            transform.position = new Vector3(pos.x, originalY, pos.z);
+            StopCoroutine(moveCo);
+            moveCo = null;
         }
+
+        CacheInitialLocalPosition();
+        externalLocalOffset = Vector3.zero;
+        rageOffsetY = 0f;
+        ApplyCurrentLocalPosition();
     }
 
     private void HandleExpandStart()
@@ -71,7 +75,7 @@ public class ObstacleRageMover : MonoBehaviour
         if (movementFrozen)
             return;
 
-        StartMoveTo(TargetY, moveDuration);
+        StartMoveTo(TargetRageOffsetY, moveDuration);
     }
 
     private void HandleExpandEnd()
@@ -82,7 +86,7 @@ public class ObstacleRageMover : MonoBehaviour
         if (ShouldStayExpanded())
             return;
 
-        StartMoveTo(originalY, returnMoveDuration);
+        StartMoveTo(0f, returnMoveDuration);
     }
 
     private bool ShouldStayExpanded()
@@ -93,13 +97,13 @@ public class ObstacleRageMover : MonoBehaviour
         return GameData.Instance.rageMode || GameData.Instance.IsMachineGunSequenceActive();
     }
 
-    private void StartMoveTo(float targetY, float duration)
+    private void StartMoveTo(float targetRageOffsetY, float duration)
     {
         if (movementFrozen)
             return;
 
         if (moveCo != null) StopCoroutine(moveCo);
-        moveCo = StartCoroutine(MoveYTo(targetY, duration));
+        moveCo = StartCoroutine(MoveYTo(targetRageOffsetY, duration));
     }
 
     public void FreezeAtCurrentPosition()
@@ -122,29 +126,59 @@ public class ObstacleRageMover : MonoBehaviour
     {
         movementFrozen = false;
 
-        if (GameData.Instance != null && GameData.Instance.rageMode)
-            StartMoveTo(TargetY, moveDuration);
+        if (ShouldStayExpanded())
+            StartMoveTo(TargetRageOffsetY, moveDuration);
         else
-            StartMoveTo(originalY, returnMoveDuration);
+            StartMoveTo(0f, returnMoveDuration);
     }
 
-    private IEnumerator MoveYTo(float targetY, float duration)
+    public void SetExternalLocalOffset(Vector3 offset)
     {
-        float startY = transform.position.y;
+        externalLocalOffset = offset;
+        ApplyCurrentLocalPosition();
+    }
+
+    private IEnumerator MoveYTo(float targetRageOffsetY, float duration)
+    {
+        float startOffsetY = rageOffsetY;
         float t = 0f;
         duration = Mathf.Max(0.0001f, duration);
 
         while (t < duration)
         {
             t += Time.deltaTime;
-            float newY = Mathf.Lerp(startY, targetY, t / duration);
-            Vector3 p = transform.position;
-            transform.position = new Vector3(p.x, newY, p.z);
+            rageOffsetY = Mathf.Lerp(startOffsetY, targetRageOffsetY, t / duration);
+            ApplyCurrentLocalPosition();
             yield return null;
         }
 
-        Vector3 fp = transform.position;
-        transform.position = new Vector3(fp.x, targetY, fp.z);
+        rageOffsetY = targetRageOffsetY;
+        ApplyCurrentLocalPosition();
         moveCo = null;
+    }
+
+    private void CacheInitialLocalPosition()
+    {
+        if (initialLocalPositionSet)
+            return;
+
+        initialLocalPosition = transform.localPosition;
+        initialLocalPositionSet = true;
+    }
+
+    private void RestoreInitialLocalPosition()
+    {
+        if (!initialLocalPositionSet)
+            return;
+
+        transform.localPosition = initialLocalPosition;
+    }
+
+    private void ApplyCurrentLocalPosition()
+    {
+        if (!initialLocalPositionSet)
+            return;
+
+        transform.localPosition = initialLocalPosition + externalLocalOffset + new Vector3(0f, rageOffsetY, 0f);
     }
 }
