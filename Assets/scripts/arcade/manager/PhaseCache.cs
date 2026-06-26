@@ -67,6 +67,7 @@ public class PhaseCache : MonoBehaviour
                 if (Mathf.Approximately(cachedMover.defaultBaseSpeed, 0f) && !Mathf.Approximately(cachedMover.baseSpeed, 0f))
                     cachedMover.defaultBaseSpeed = cachedMover.baseSpeed;
 
+                cachedMover.applyStageSpeedMultiplier = true;
                 cachedMover.baseSpeed = cachedMover.defaultBaseSpeed;
             }
         }

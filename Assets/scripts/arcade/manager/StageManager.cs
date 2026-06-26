@@ -353,7 +353,10 @@ public class StageManager : MonoBehaviour
             float finalSpeed = (frozen || gameplayPauseByTransform) ? 0f : phaseBaseSpeed * stageFactor * currentMult;
 
             if (p.cache != null && p.cache.mover != null)
+            {
+                p.cache.mover.applyStageSpeedMultiplier = false;
                 p.cache.mover.baseSpeed = finalSpeed;
+            }
             else
                 p.obj.transform.position += Vector3.left * finalSpeed * Time.fixedDeltaTime;
         }
@@ -565,11 +568,10 @@ public class StageManager : MonoBehaviour
 
     private float GetStageSpeedFactor()
     {
-        if (phaseSpawnCount >= speedUp4) return speedMult4;
-        if (phaseSpawnCount >= speedUp3) return speedMult3;
-        if (phaseSpawnCount >= speedUp2) return speedMult2;
-        if (phaseSpawnCount >= speedUp1) return speedMult1;
-        return 1f;
+        if (phaseSpawnCount < speedUp1) return speedMult1;
+        if (phaseSpawnCount < speedUp2) return speedMult2;
+        if (phaseSpawnCount < speedUp3) return speedMult3;
+        return speedMult4;
     }
 
     private IEnumerator DelayCooldownTimer()
@@ -1669,7 +1671,10 @@ public class StageManager : MonoBehaviour
 
         var cache = go.GetComponent<PhaseCache>();
         if (cache != null && cache.mover != null)
+        {
+            cache.mover.applyStageSpeedMultiplier = false;
             cache.mover.baseSpeed = phaseBaseSpeed;
+        }
 
         activePhases.Add(new PhaseInfo
         {

@@ -12,6 +12,7 @@ public class ObstacleRageMover : MonoBehaviour, IReinitializable
 
     private Vector3 initialLocalPosition;
     private Vector3 externalLocalOffset;
+    private Vector3 appliedLocalOffset;
     private float rageOffsetY;
     private Coroutine moveCo;
     private bool initialLocalPositionSet = false;
@@ -51,7 +52,7 @@ public class ObstacleRageMover : MonoBehaviour, IReinitializable
         }
 
         if (!gameObject.activeSelf)
-            RestoreInitialLocalPosition();
+            RestoreInitialTransformState();
     }
 
     public void Reinit()
@@ -64,10 +65,10 @@ public class ObstacleRageMover : MonoBehaviour, IReinitializable
             moveCo = null;
         }
 
-        CacheInitialLocalPosition();
+        CacheInitialLocalPosition(forceRefresh: true);
         externalLocalOffset = Vector3.zero;
+        appliedLocalOffset = Vector3.zero;
         rageOffsetY = 0f;
-        ApplyCurrentLocalPosition();
     }
 
     private void HandleExpandStart()
@@ -157,9 +158,9 @@ public class ObstacleRageMover : MonoBehaviour, IReinitializable
         moveCo = null;
     }
 
-    private void CacheInitialLocalPosition()
+    private void CacheInitialLocalPosition(bool forceRefresh = false)
     {
-        if (initialLocalPositionSet)
+        if (initialLocalPositionSet && !forceRefresh)
             return;
 
         initialLocalPosition = transform.localPosition;
@@ -176,9 +177,21 @@ public class ObstacleRageMover : MonoBehaviour, IReinitializable
 
     private void ApplyCurrentLocalPosition()
     {
-        if (!initialLocalPositionSet)
-            return;
+        Vector3 nextOffset = externalLocalOffset + new Vector3(0f, rageOffsetY, 0f);
+        Vector3 basePosition = transform.localPosition - appliedLocalOffset;
+        transform.localPosition = basePosition + nextOffset;
+        appliedLocalOffset = nextOffset;
+    }
 
-        transform.localPosition = initialLocalPosition + externalLocalOffset + new Vector3(0f, rageOffsetY, 0f);
+    private void RestoreInitialTransformState()
+    {
+        if (appliedLocalOffset != Vector3.zero)
+            transform.localPosition -= appliedLocalOffset;
+
+        appliedLocalOffset = Vector3.zero;
+        externalLocalOffset = Vector3.zero;
+        rageOffsetY = 0f;
+
+        RestoreInitialLocalPosition();
     }
 }

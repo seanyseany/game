@@ -1213,64 +1213,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 403041178}
   m_CullTransparentMesh: 1
---- !u!1001 &407118865
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 0}
-    m_Modifications:
-    - target: {fileID: 3890828476635231631, guid: de5170c49afd2489896660955b9d02d9, type: 3}
-      propertyPath: m_Name
-      value: LeftRightBigObstacle
-      objectReference: {fileID: 0}
-    - target: {fileID: 4722024360024738916, guid: de5170c49afd2489896660955b9d02d9, type: 3}
-      propertyPath: m_LocalPosition.x
-      value: -0.26666158
-      objectReference: {fileID: 0}
-    - target: {fileID: 4722024360024738916, guid: de5170c49afd2489896660955b9d02d9, type: 3}
-      propertyPath: m_LocalPosition.y
-      value: -0.475361
-      objectReference: {fileID: 0}
-    - target: {fileID: 4722024360024738916, guid: de5170c49afd2489896660955b9d02d9, type: 3}
-      propertyPath: m_LocalPosition.z
-      value: 2
-      objectReference: {fileID: 0}
-    - target: {fileID: 4722024360024738916, guid: de5170c49afd2489896660955b9d02d9, type: 3}
-      propertyPath: m_LocalRotation.w
-      value: 0.7071068
-      objectReference: {fileID: 0}
-    - target: {fileID: 4722024360024738916, guid: de5170c49afd2489896660955b9d02d9, type: 3}
-      propertyPath: m_LocalRotation.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 4722024360024738916, guid: de5170c49afd2489896660955b9d02d9, type: 3}
-      propertyPath: m_LocalRotation.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 4722024360024738916, guid: de5170c49afd2489896660955b9d02d9, type: 3}
-      propertyPath: m_LocalRotation.z
-      value: 0.7071068
-      objectReference: {fileID: 0}
-    - target: {fileID: 4722024360024738916, guid: de5170c49afd2489896660955b9d02d9, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 4722024360024738916, guid: de5170c49afd2489896660955b9d02d9, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 4722024360024738916, guid: de5170c49afd2489896660955b9d02d9, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 90
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects:
-    - {fileID: 3559202558196531873, guid: de5170c49afd2489896660955b9d02d9, type: 3}
-    m_AddedGameObjects: []
-    m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100100000, guid: de5170c49afd2489896660955b9d02d9, type: 3}
 --- !u!1 &481371542
 GameObject:
   m_ObjectHideFlags: 0
@@ -3467,7 +3409,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2006843320572366924, guid: fae4c319019f9402eaeee6e7645d9498, type: 3}
       propertyPath: selectedPlayerType
-      value: 1
+      value: 5
       objectReference: {fileID: 0}
     - target: {fileID: 2006843320572366924, guid: fae4c319019f9402eaeee6e7645d9498, type: 3}
       propertyPath: holyLightSpawnPos.x
@@ -4209,7 +4151,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 07d4348a8fbf143cb82d2dbcdb6e9cc3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  baseScrollSpeed: 0.32
+  baseScrollSpeed: 0.285
 --- !u!23 &1309666216
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -5667,8 +5609,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ac861eb8557084223a6741d05133becf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  testPhasePrefabs:
-  - {fileID: 2659614723417223950, guid: 58777d01689f3477298f63679fc680b1, type: 3}
+  testPhasePrefabs: []
   stage1PhasePrefabs:
   - {fileID: 2659614723417223950, guid: a72c1401e0d3543ceb8319395edbfd50, type: 3}
   - {fileID: 2659614723417223950, guid: f2580553c03134ef08bffc7fa9000e68, type: 3}
@@ -5815,10 +5756,10 @@ MonoBehaviour:
   speedUp2: 15
   speedUp3: 30
   speedUp4: 55
-  speedMult1: 1.1
-  speedMult2: 1.1
-  speedMult3: 1.1
-  speedMult4: 1.1
+  speedMult1: 0.7
+  speedMult2: 0.75
+  speedMult3: 0.9
+  speedMult4: 1
   poolSizePerPrefab: 30
   initialPoolSizePerPrefab: 1
   machineGunSpawnWorldPositions:
@@ -7647,5 +7588,4 @@ SceneRoots:
   - {fileID: 1413973358}
   - {fileID: 190357563}
   - {fileID: 2144732664}
-  - {fileID: 407118865}
   - {fileID: 1778094741}
