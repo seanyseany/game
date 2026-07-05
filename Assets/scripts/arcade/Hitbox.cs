@@ -203,9 +203,9 @@ public class Hitbox : MonoBehaviour
         int t = (GameData.Instance != null) ? GameData.Instance.selectedPlayerType : 2;
         switch (t)
         {
-            case 1: return 4.3f;
-            case 2: return 1.46f;
-            case 3: return 1.52f;
+            case 1: return 3.9f;
+            case 2: return 1.47f;
+            case 3: return 1.53f;
             case 4: return 1.58f;
             case 5: return 5.7f;
             default: return 1f;

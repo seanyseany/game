@@ -4,22 +4,12 @@ using UnityEngine.EventSystems;
 
 public class Oxygen : MonoBehaviour
 {
-    [System.Serializable]
-    public class LevelData
-    {
-        public Sprite sprite;
-        public int oxygenPrice = 10;
-        public int energyUsage = 1;
-        public int oxygenProduction = 10;
-        public Oxygen upgradePrefab;
-    }
-
     [SerializeField] private string oxygenId;
     [SerializeField] private string slotId;
+    [SerializeField] private int oxygenPrice = 10;
+    [SerializeField] private int energyUsage = 1;
+    [SerializeField] private int oxygenProduction = 10;
     [SerializeField] private int level = 1;
-    [SerializeField] private LevelData level1 = new LevelData();
-    [SerializeField] private LevelData level2 = new LevelData();
-    [SerializeField] private LevelData level3 = new LevelData();
     [SerializeField] private GameObject exclamationPrefab;
     [SerializeField] private Animator animator;
     [SerializeField] private float productionInterval = 10f;
@@ -32,16 +22,26 @@ public class Oxygen : MonoBehaviour
     public string OxygenId => oxygenId;
     public string SlotId => slotId;
     public int Level => level;
+    public int CurrentOxygenPrice => oxygenPrice;
+    public int CurrentEnergyUsage => energyUsage;
+    public int OxygenProduction => oxygenProduction;
     public Vector2 BottomLocalPosition => bottomLocalPosition;
-    public Sprite CurrentSprite => GetLevelData(level).sprite;
-    public int CurrentOxygenPrice => GetLevelData(level).oxygenPrice;
-    public int CurrentEnergyUsage => GetLevelData(level).energyUsage;
-    public Oxygen UpgradePrefab => GetLevelData(level).upgradePrefab;
+
+    private void Awake()
+    {
+        level = Mathf.Clamp(level, 1, 3);
+    }
 
     private void Start()
     {
         RestartProduction();
+        UpdateProductionAnimation();
         PushState();
+    }
+
+    private void Update()
+    {
+        UpdateProductionAnimation();
     }
 
     private void OnDisable()
@@ -51,6 +51,9 @@ public class Oxygen : MonoBehaviour
             StopCoroutine(productionRoutine);
             productionRoutine = null;
         }
+
+        if (animator != null)
+            animator.enabled = false;
     }
 
     private void OnMouseUpAsButton()
@@ -71,6 +74,7 @@ public class Oxygen : MonoBehaviour
     {
         level = Mathf.Clamp(nextLevel, 1, 3);
         RestartProduction();
+        UpdateProductionAnimation();
         PushState();
     }
 
@@ -100,7 +104,7 @@ public class Oxygen : MonoBehaviour
             oxygenId = oxygenId,
             level = level,
             isPlaced = true,
-            isProducing = VillageManagement.Instance != null && VillageManagement.Instance.CurrentEnergy >= GetLevelData(level).energyUsage,
+            isProducing = CanProduce(villageManagement),
             storedOxygen = storedOxygen
         });
     }
@@ -123,22 +127,32 @@ public class Oxygen : MonoBehaviour
             if (villageManagement == null)
                 continue;
 
-            LevelData data = GetLevelData(level);
-            if (villageManagement.CurrentEnergy < data.energyUsage)
+            UpdateProductionAnimation();
+            if (!CanProduce(villageManagement))
             {
-                if (animator != null)
-                    animator.enabled = false;
+                PushState();
                 continue;
             }
 
-            if (animator != null)
-                animator.enabled = true;
-
-            villageManagement.TrySpendEnergy(data.energyUsage);
-            storedOxygen += data.oxygenProduction;
+            villageManagement.TrySpendEnergy(energyUsage);
+            storedOxygen += oxygenProduction;
             UpdateExclamation();
             PushState();
         }
+    }
+
+    private bool CanProduce(VillageManagement villageManagement)
+    {
+        return villageManagement != null && villageManagement.CurrentEnergy >= energyUsage;
+    }
+
+    private void UpdateProductionAnimation()
+    {
+        if (animator == null)
+            return;
+
+        VillageManagement villageManagement = VillageManagement.Instance;
+        animator.enabled = CanProduce(villageManagement);
     }
 
     private void UpdateExclamation()
@@ -154,18 +168,5 @@ public class Oxygen : MonoBehaviour
             Destroy(exclamationInstance);
             exclamationInstance = null;
         }
-    }
-
-    private LevelData GetLevelData(int targetLevel)
-    {
-        if (targetLevel >= 3)
-            return level3.upgradePrefab == null && level3.oxygenPrice == 0 && level3.energyUsage == 0 && level3.oxygenProduction == 0 && level3.sprite == null
-                ? level2
-                : level3;
-        if (targetLevel == 2)
-            return level2.upgradePrefab == null && level2.oxygenPrice == 0 && level2.energyUsage == 0 && level2.oxygenProduction == 0 && level2.sprite == null
-                ? level1
-                : level2;
-        return level1;
     }
 }

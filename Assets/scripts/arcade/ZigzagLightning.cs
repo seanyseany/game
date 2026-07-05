@@ -16,17 +16,12 @@ public class ZigzagLightning : MonoBehaviour, IRageTransformPauseHandler
     public float life = 0.5f;
     [HideInInspector] public int damage;
 
-    [Header("Animation")]
-    public Sprite[] lightningFrames;
-    public float frameRate = 0.15f;
     [SerializeField] private bool colliderEnabledOnSpawn = true;
     [SerializeField] private bool usePool = true;
     [SerializeField] private string poolTag = "";
 
-    private SpriteRenderer sr;
+    private Animator animator;
     private BoxCollider2D hitCollider;
-    private int currentFrame = 0;
-    private float timer = 0f;
     private float despawnAtTime = -1f;
     private float pausedRemainingLife = -1f;
     private readonly HashSet<GameObject> hitTargets = new HashSet<GameObject>();
@@ -35,7 +30,7 @@ public class ZigzagLightning : MonoBehaviour, IRageTransformPauseHandler
 
     private void Awake()
     {
-        sr = GetComponent<SpriteRenderer>();
+        animator = GetComponent<Animator>();
 
         var rb = GetComponent<Rigidbody2D>();
         rb.bodyType = RigidbodyType2D.Kinematic;
@@ -48,13 +43,16 @@ public class ZigzagLightning : MonoBehaviour, IRageTransformPauseHandler
 
     private void OnEnable()
     {
-        timer = 0f;
-        currentFrame = 0;
         hitTargets.Clear();
         if (hitCollider != null)
             hitCollider.enabled = colliderEnabledOnSpawn;
-        if (sr != null && lightningFrames != null && lightningFrames.Length > 0)
-            sr.sprite = lightningFrames[0];
+        if (animator != null && animator.runtimeAnimatorController != null)
+        {
+            animator.Rebind();
+            animator.Update(0f);
+            animator.Play(0, 0, 0f);
+            animator.Update(0f);
+        }
 
         if (lifeCo != null) StopCoroutine(lifeCo);
         despawnAtTime = Time.time + Mathf.Max(0.01f, life);
@@ -68,23 +66,6 @@ public class ZigzagLightning : MonoBehaviour, IRageTransformPauseHandler
         {
             StopCoroutine(lifeCo);
             lifeCo = null;
-        }
-    }
-
-    private void Update()
-    {
-        if (RageTransformFreezeController.IsGameplayPauseActive)
-            return;
-
-        if (lightningFrames != null && lightningFrames.Length > 0)
-        {
-            timer += Time.deltaTime;
-            if (timer >= frameRate)
-            {
-                timer = 0f;
-                currentFrame = (currentFrame + 1) % lightningFrames.Length;
-                sr.sprite = lightningFrames[currentFrame];
-            }
         }
     }
 
@@ -229,8 +210,8 @@ public class ZigzagLightning : MonoBehaviour, IRageTransformPauseHandler
         switch (t)
         {
             case 1: return 4.3f;
-            case 2: return 1.46f;
-            case 3: return 1.52f;
+            case 2: return 1.47f;
+            case 3: return 1.53f;
             case 4: return 1.58f;
             case 5: return 5.7f;
             default: return 1f;

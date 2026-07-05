@@ -4,28 +4,10 @@ using UnityEngine.EventSystems;
 [RequireComponent(typeof(Collider2D))]
 public class Path : MonoBehaviour
 {
-    [System.Serializable]
-    public class BoundsRect
-    {
-        public Vector2 minLocal = new Vector2(-1f, -1f);
-        public Vector2 maxLocal = new Vector2(1f, 1f);
-
-        public bool Contains(Vector2 localPoint)
-        {
-            return localPoint.x >= Mathf.Min(minLocal.x, maxLocal.x) &&
-                   localPoint.x <= Mathf.Max(minLocal.x, maxLocal.x) &&
-                   localPoint.y >= Mathf.Min(minLocal.y, maxLocal.y) &&
-                   localPoint.y <= Mathf.Max(minLocal.y, maxLocal.y);
-        }
-    }
-
     [SerializeField] private string pathId;
     [SerializeField] private Building buildingInstance;
     [SerializeField] private Transform[] roamPoints;
-    [SerializeField] private BoundsRect buildingArea = new BoundsRect();
-    [SerializeField] private Vector2 buildLocalPosition;
     [SerializeField] private Construction constructionPrefab;
-    [SerializeField] private EnergyUI energyUI;
     [SerializeField] private BuildingListUI buildingListUI;
     [SerializeField] private BuildingUI buildingUI;
 
@@ -71,11 +53,6 @@ public class Path : MonoBehaviour
             return;
 
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
-            return;
-
-        Vector3 worldPoint = GetPointerWorldPosition();
-        Vector2 localPoint = transform.InverseTransformPoint(worldPoint);
-        if (!buildingArea.Contains(localPoint))
             return;
 
         if (buildingInstance == null)
@@ -195,7 +172,7 @@ public class Path : MonoBehaviour
             Destroy(activeConstruction.gameObject);
 
         activeConstruction = Instantiate(constructionPrefab, transform);
-        activeConstruction.transform.localPosition = buildLocalPosition;
+        activeConstruction.transform.localPosition = Vector3.zero;
         activeConstruction.Begin(duration, targetLevel, () =>
         {
             activeConstruction = null;
@@ -224,8 +201,8 @@ public class Path : MonoBehaviour
         buildingInstance = Instantiate(buildingPrefab, transform);
         buildingInstance.AssignSlot(pathId);
         buildingInstance.transform.localPosition = new Vector3(
-            buildLocalPosition.x - buildingInstance.BottomLocalPosition.x,
-            buildLocalPosition.y - buildingInstance.BottomLocalPosition.y,
+            -buildingInstance.BottomLocalPosition.x,
+            -buildingInstance.BottomLocalPosition.y,
             0f);
         buildingInstance.SetLevel(level);
         buildingInstance.MarkPlaced(true);
@@ -238,16 +215,5 @@ public class Path : MonoBehaviour
         }
 
         buildingInstance.PushStateToVillageManagement();
-    }
-
-    private Vector3 GetPointerWorldPosition()
-    {
-        Camera cameraRef = Camera.main;
-        Vector3 screen = Input.mousePosition;
-        if (cameraRef == null)
-            return screen;
-
-        screen.z = Mathf.Abs(cameraRef.transform.position.z - transform.position.z);
-        return cameraRef.ScreenToWorldPoint(screen);
     }
 }

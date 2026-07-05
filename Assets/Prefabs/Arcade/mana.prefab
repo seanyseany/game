@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 738945227876729466}
   - component: {fileID: 2894969223336373126}
   - component: {fileID: 1970522978176345038}
-  - component: {fileID: -498004176859368781}
+  - component: {fileID: 554332159156866840}
   m_Layer: 0
   m_Name: mana
   m_TagString: Mana
@@ -145,7 +145,7 @@ MonoBehaviour:
   manaNumber: 1
   fadeDuration: 0.5
   floatUpDistance: 0.5
---- !u!114 &-498004176859368781
+--- !u!114 &554332159156866840
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -154,8 +154,8 @@ MonoBehaviour:
   m_GameObject: {fileID: 8409253835373296357}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 88dfcaede4c9340e8a74567b94c88fdd, type: 3}
+  m_Script: {fileID: 11500000, guid: ce4c00462992547d0bfa5fbfdf523201, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: 
-  baseSpeed: 6
-  defaultBaseSpeed: 0
+  m_EditorClassIdentifier: Assembly-CSharp::ObstacleRageMover
+  moveDistance: 10
+  isTop: 1

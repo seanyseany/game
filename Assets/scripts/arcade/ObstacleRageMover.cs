@@ -31,8 +31,6 @@ public class ObstacleRageMover : MonoBehaviour, IReinitializable
         Reinit();
         GameData.OnRageStart += HandleExpandStart;
         GameData.OnRageEnd   += HandleExpandEnd;
-        GameData.OnMachineGunSequenceStart += HandleExpandStart;
-        GameData.OnMachineGunSequenceEnd += HandleExpandEnd;
 
         if (ShouldStayExpanded())
             StartMoveTo(TargetRageOffsetY, 0f);
@@ -42,8 +40,6 @@ public class ObstacleRageMover : MonoBehaviour, IReinitializable
     {
         GameData.OnRageStart -= HandleExpandStart;
         GameData.OnRageEnd   -= HandleExpandEnd;
-        GameData.OnMachineGunSequenceStart -= HandleExpandStart;
-        GameData.OnMachineGunSequenceEnd -= HandleExpandEnd;
 
         if (moveCo != null)
         {
@@ -65,10 +61,8 @@ public class ObstacleRageMover : MonoBehaviour, IReinitializable
             moveCo = null;
         }
 
-        CacheInitialLocalPosition(forceRefresh: true);
-        externalLocalOffset = Vector3.zero;
-        appliedLocalOffset = Vector3.zero;
-        rageOffsetY = 0f;
+        CacheInitialLocalPosition();
+        RestoreInitialTransformState();
     }
 
     private void HandleExpandStart()
@@ -95,7 +89,7 @@ public class ObstacleRageMover : MonoBehaviour, IReinitializable
         if (GameData.Instance == null)
             return false;
 
-        return GameData.Instance.rageMode || GameData.Instance.IsMachineGunSequenceActive();
+        return GameData.Instance.rageMode;
     }
 
     private void StartMoveTo(float targetRageOffsetY, float duration)
@@ -185,9 +179,6 @@ public class ObstacleRageMover : MonoBehaviour, IReinitializable
 
     private void RestoreInitialTransformState()
     {
-        if (appliedLocalOffset != Vector3.zero)
-            transform.localPosition -= appliedLocalOffset;
-
         appliedLocalOffset = Vector3.zero;
         externalLocalOffset = Vector3.zero;
         rageOffsetY = 0f;

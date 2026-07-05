@@ -40,14 +40,12 @@ public class Escalator : MonoBehaviour, IReinitializable
     private void OnEnable()
     {
         GameData.OnRageStart += HandleRageStart;
-        GameData.OnMachineGunTrigger += HandleMachineGunTrigger;
         Reinit();
     }
 
     private void OnDisable()
     {
         GameData.OnRageStart -= HandleRageStart;
-        GameData.OnMachineGunTrigger -= HandleMachineGunTrigger;
 
         if (breakRoutine != null)
         {
@@ -101,14 +99,6 @@ public class Escalator : MonoBehaviour, IReinitializable
     }
 
     private void HandleRageStart()
-    {
-        if (!isActiveAndEnabled || isBreaking)
-            return;
-
-        breakRoutine = StartCoroutine(BreakAndDestroy());
-    }
-
-    private void HandleMachineGunTrigger()
     {
         if (!isActiveAndEnabled || isBreaking)
             return;

@@ -1,15 +1,16 @@
 using UnityEngine;
 using System.Collections;
+using UnityEngine.Serialization;
 
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(Collider2D))]
 public class ObstacleMover : MonoBehaviour, IReinitializable
 {
     [Header("Movement Settings")]
-    public float speedX = -3.5f; // ✅ 오른쪽→왼쪽 속도
-    public float angleRange = 35f;
+    [FormerlySerializedAs("speedX")]
+    public float horizontalSpeed = -3.5f;
+    public float verticalSpeed = 0f;
     public float bounceFactor = 1f;
-    public float maxVerticalSpeed = 3f;
     public float rotationSpeed = 90f;
 
     [Header("Bullet Reaction")]
@@ -64,10 +65,11 @@ public class ObstacleMover : MonoBehaviour, IReinitializable
         deathSequenceActive = false;
         ResetMoveDirection();
 
+        transform.localRotation = initialLocalRotation;
+
         if (IsPhaseOwnedObstacle())
         {
             transform.localPosition = initialLocalPosition;
-            transform.localRotation = initialLocalRotation;
         }
 
         transform.localScale = initialLocalScale;
@@ -83,19 +85,8 @@ public class ObstacleMover : MonoBehaviour, IReinitializable
 
     private void ResetMoveDirection()
     {
-        // speedX 크기를 기준으로 이동 각도를 랜덤화한다.
-        float clampedAngleRange = Mathf.Clamp(angleRange, 0f, 89f);
-        float angleDeg = Random.Range(-clampedAngleRange, clampedAngleRange);
-        float angleRad = angleDeg * Mathf.Deg2Rad;
-
-        float totalSpeed = Mathf.Abs(speedX);
-        moveDir = new Vector2(-totalSpeed * Mathf.Cos(angleRad),
-                            totalSpeed * Mathf.Sin(angleRad));
-
-        // 세로 속도 상한 적용
-        moveDir.y = Mathf.Clamp(moveDir.y, -maxVerticalSpeed, maxVerticalSpeed);
+        moveDir = new Vector2(horizontalSpeed, verticalSpeed);
     }
-
 
     void Update()
     {
@@ -104,9 +95,6 @@ public class ObstacleMover : MonoBehaviour, IReinitializable
 
         MoveWithCollision(moveDir * Time.deltaTime);
         transform.Rotate(0f, 0f, rotationSpeed * Time.deltaTime);
-
-        // Y속도 제한
-        moveDir.y = Mathf.Clamp(moveDir.y, -maxVerticalSpeed, maxVerticalSpeed);
 
         if (ShouldReturnToPool())
             TryReturnToObjectPool();
@@ -227,7 +215,7 @@ public class ObstacleMover : MonoBehaviour, IReinitializable
     {
         if (cachedCollider == null)
         {
-            transform.Translate(delta);
+            transform.Translate(delta, Space.World);
             return;
         }
 
@@ -262,12 +250,12 @@ public class ObstacleMover : MonoBehaviour, IReinitializable
 
         if (!foundBlockingHit)
         {
-            transform.Translate(delta);
+            transform.Translate(delta, Space.World);
             return;
         }
 
         float moveDistance = Mathf.Max(0f, nearestHit.distance - Mathf.Max(0f, collisionSkin));
-        transform.Translate(delta.normalized * moveDistance);
+        transform.Translate(delta.normalized * moveDistance, Space.World);
         HandleBounceCollision(nearestHit.collider);
     }
 
@@ -281,7 +269,7 @@ public class ObstacleMover : MonoBehaviour, IReinitializable
 
         float newYDir = (myY > otherY) ? 1f : -1f;
         moveDir.y = newYDir * Mathf.Max(0.01f, Mathf.Abs(moveDir.y)) * bounceFactor;
-        moveDir.x = speedX;
+        moveDir.x = horizontalSpeed;
 
         if (other.CompareTag("player") && !ignoringPlayer)
             StartCoroutine(TemporarilyIgnorePlayer(other));

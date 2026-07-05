@@ -105,10 +105,13 @@ public class Train : MonoBehaviour, IReinitializable
         EnsureMachineGunInstance();
         EnsureMachineGunExtraBodyInstance();
         CacheMechaLegsIfNeeded();
+        MachineGunObstacle activeMachineGunObstacle = MachineGunObstacle.CurrentSource;
         BeginMachineGunSequence();
 
         yield return MoveTrainBodyX(0f, bodyShiftX, bodyShiftDuration, 1.5f);
         yield return MoveLocal(startLocalPos, endLocalPos, moveDuration);
+
+        activeMachineGunObstacle?.BeginMachineGunSpawn();
 
         if (machineGunInstance != null)
         {
@@ -117,19 +120,19 @@ public class Train : MonoBehaviour, IReinitializable
         }
 
         float firingDuration = Mathf.Max(0f, endDuration);
-        float stopLeadTime = StageManager.Instance != null
-            ? Mathf.Max(0f, StageManager.Instance.machineGunSpawnEndLeadTime)
-            : 3.8f;
+        float stopLeadTime = MachineGunObstacle.GetCurrentSpawnEndLeadTime(3.8f);
         float obstacleStopDelay = Mathf.Max(0f, firingDuration - stopLeadTime);
 
         if (obstacleStopDelay > 0f)
         {
             yield return new WaitForSeconds(obstacleStopDelay);
+            activeMachineGunObstacle?.StopMachineGunSpawn();
             GameData.Instance?.NotifyMachineGunObstacleSpawnStop();
             yield return new WaitForSeconds(firingDuration - obstacleStopDelay);
         }
         else
         {
+            activeMachineGunObstacle?.StopMachineGunSpawn();
             GameData.Instance?.NotifyMachineGunObstacleSpawnStop();
             yield return new WaitForSeconds(firingDuration);
         }
@@ -139,6 +142,8 @@ public class Train : MonoBehaviour, IReinitializable
 
         yield return MoveTrainBodyX(bodyShiftX, 0f, bodyShiftDuration, 1f);
         yield return MoveLocal(endLocalPos, startLocalPos, moveDuration);
+        activeMachineGunObstacle?.StopMachineGunSpawn();
+        MachineGunObstacle.SetCurrentSource(null);
         EndMachineGunSequenceIfNeeded();
         routine = null;
     }
@@ -157,6 +162,8 @@ public class Train : MonoBehaviour, IReinitializable
         if (!machineGunSequenceNotified)
             return;
 
+        MachineGunObstacle.StopActiveMachineGunSpawn();
+        MachineGunObstacle.SetCurrentSource(null);
         machineGunSequenceNotified = false;
         GameData.Instance?.NotifyMachineGunSequenceEnded();
     }

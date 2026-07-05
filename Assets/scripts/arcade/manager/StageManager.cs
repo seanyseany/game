@@ -40,6 +40,7 @@ public class StageManager : MonoBehaviour
     public float phaseBaseSpeed = 3f;
     public float spawnX = 50f;
     public float ragePhaseSpawnX = 50f;
+    public float recoverX = -12f;
     public float despawnX = -20f;
     private float startSpawnDelay = 2f;
 
@@ -72,6 +73,7 @@ public class StageManager : MonoBehaviour
         public bool isRageSpawn;
         public float freezeUntil;
         public bool suppressNextPhasePass;
+        public bool recovered;
     }
 
     private readonly List<PhaseInfo> activePhases = new List<PhaseInfo>(256);
@@ -79,31 +81,10 @@ public class StageManager : MonoBehaviour
     private readonly Dictionary<GameObject, GameObject> pooledInstanceToPrefab = new Dictionary<GameObject, GameObject>(256);
     private readonly HashSet<GameObject> activePhaseObjects = new HashSet<GameObject>();
 
-    // ============================ RAGE OBSTACLE ============================
-    [Header("MachineGun Obstacle Settings")]
-    [Tooltip("machineGun 장애물이 생성될 월드 좌표 목록. 인스펙터에서 이 배열만 수정하면 됨")]
-    [FormerlySerializedAs("rageSpawnWorldPositions")]
-    public Vector3[] machineGunSpawnWorldPositions;
-    public float machineGunSpawnStartDelay = 2f;
-    [FormerlySerializedAs("rageSpawnInterval")]
-    public float machineGunSpawnInterval = 0.77f;
-    public float machineGunSpawnEndLeadTime = 1.5f;
-    [FormerlySerializedAs("rageResumeDelay")]
-    public float machineGunResumeDelay = 3f;
-    [FormerlySerializedAs("rageObstaclesPerPoint")]
-    public int machineGunObstaclesPerPoint = 1;
-    [FormerlySerializedAs("machineGunObstaclePoolTags")]
-    [FormerlySerializedAs("rageObstaclePoolTags")]
-    [Tooltip("66% 확률 그룹에서 랜덤 선택할 장애물 풀 태그 목록")]
-    public string[] machineGunObstaclePoolTags66;
-    [Tooltip("33% 확률 그룹에서 랜덤 선택할 장애물 풀 태그 목록")]
-    public string[] machineGunObstaclePoolTags33;
-
     [Header("Rage Phase Settings")]
     public float ragePhaseDuration = 12f;
     public float ragePhaseResumeDelay = 3f;
 
-    private Coroutine rageSpawnRoutine;
     private Coroutine ragePhaseRoutine;
     private readonly Dictionary<int, List<GameObject>> phaseShuffleByStage = new Dictionary<int, List<GameObject>>(MaxPhaseStage);
     private bool testPhaseSequenceCompleted;
@@ -189,7 +170,6 @@ public class StageManager : MonoBehaviour
         GameData.OnRageStart += HandleRageStart;
         GameData.OnRageEnd += HandleRageEnd;
         GameData.OnMachineGunSequenceStart += HandleMachineGunSequenceStart;
-        GameData.OnMachineGunObstacleSpawnStop += HandleMachineGunObstacleSpawnStop;
         GameData.OnMachineGunSequenceEnd += HandleMachineGunSequenceEnd;
     }
 
@@ -198,7 +178,6 @@ public class StageManager : MonoBehaviour
         GameData.OnRageStart -= HandleRageStart;
         GameData.OnRageEnd -= HandleRageEnd;
         GameData.OnMachineGunSequenceStart -= HandleMachineGunSequenceStart;
-        GameData.OnMachineGunObstacleSpawnStop -= HandleMachineGunObstacleSpawnStop;
         GameData.OnMachineGunSequenceEnd -= HandleMachineGunSequenceEnd;
     }
 
@@ -321,6 +300,9 @@ public class StageManager : MonoBehaviour
                 float despawnCheckX = p.obj.transform.position.x;
                 if (p.cache != null && p.cache.phaseEndTrigger != null)
                     despawnCheckX = p.cache.phaseEndTrigger.transform.position.x;
+
+                if (!p.recovered && despawnCheckX < recoverX)
+                    RecoverPhase(p);
 
                 if (despawnCheckX < despawnX)
                 {
@@ -589,13 +571,52 @@ public class StageManager : MonoBehaviour
         var cache = phase.GetComponent<PhaseCache>();
         if (cache != null)
         {
+            cache.RefreshCache();
+            cache.SetActiveChildren(true);
             cache.ResetCached();
         }
 
-        // 스폰 프레임에는 활성 오브젝트만 재초기화한다.
-        // 비활성 자식까지 강제 Reinit하면 activeSelf/pose가 꼬일 수 있다.
-        foreach (var r in phase.GetComponentsInChildren<IReinitializable>(false))
+        // 첫 스폰도 복구 경로와 동일하게 비활성 자식까지 되살린 뒤 재초기화한다.
+        foreach (var r in phase.GetComponentsInChildren<IReinitializable>(true))
             r.Reinit();
+    }
+
+    private void RecoverPhase(PhaseInfo phaseInfo)
+    {
+        if (phaseInfo == null || phaseInfo.obj == null || phaseInfo.recovered)
+            return;
+
+        GameObject phase = phaseInfo.obj;
+        PhaseCache cache = phaseInfo.cache != null ? phaseInfo.cache : phase.GetComponent<PhaseCache>();
+
+        foreach (var mb in phase.GetComponentsInChildren<MonoBehaviour>(true))
+        {
+            mb.StopAllCoroutines();
+            mb.CancelInvoke();
+        }
+
+        Vector3 worldPosition = phase.transform.position;
+        Quaternion worldRotation = phase.transform.rotation;
+
+        var snap = phase.GetComponent<PhaseLayoutSnapshot>();
+        snap?.Restore(false);
+
+        phase.transform.SetPositionAndRotation(worldPosition, worldRotation);
+
+        if (cache != null)
+        {
+            cache.RefreshCache();
+            cache.SetActiveChildren(true);
+            cache.ResetCached();
+        }
+
+        foreach (var r in phase.GetComponentsInChildren<IReinitializable>(true))
+        {
+            if (r != null)
+                r.Reinit();
+        }
+
+        phaseInfo.recovered = true;
     }
 
     public void SetSpawnPaused(bool paused) => spawnPaused = paused;
@@ -1059,23 +1080,6 @@ public class StageManager : MonoBehaviour
         if (go.activeSelf) go.SetActive(false);
     }
 
-    // ============================ RAGE 장애물 스폰 ============================
-    private void StartRageObstacleSpawn()
-    {
-        Debug.Log("🔥 Rage Obstacle Spawn Started");
-        if (rageSpawnRoutine != null) StopCoroutine(rageSpawnRoutine);
-        rageSpawnRoutine = StartCoroutine(RageObstacleSpawnCoroutine());
-    }
-
-    public void StopRageObstacleSpawn()
-    {
-        if (rageSpawnRoutine != null)
-        {
-            StopCoroutine(rageSpawnRoutine);
-            rageSpawnRoutine = null;
-        }
-    }
-
     private void HandleRageStart()
     {
         Debug.Log($"[StageManager] HandleRageStart mode(before)={currentSpawnMode}");
@@ -1101,14 +1105,12 @@ public class StageManager : MonoBehaviour
         machineGunStagePrePauseActive = false;
         machineGunPhasePauseActive = true;
         spawnPaused = true;
-        StartRageObstacleSpawn();
     }
 
     private void HandleMachineGunSequenceEnd()
     {
         machineGunStagePrePauseActive = false;
         machineGunPhasePauseActive = false;
-        StopRageObstacleSpawn();
 
         if (bossRunning || (bossTriggered && !pendingBossExtraNormalPhase))
         {
@@ -1157,58 +1159,6 @@ public class StageManager : MonoBehaviour
             SpawnPhase();
 
         phasePassedDuringMachineGunPause = false;
-    }
-
-    private void HandleMachineGunObstacleSpawnStop()
-    {
-        StopRageObstacleSpawn();
-    }
-
-    public void ClearAllRageObstacles()
-    {
-        if (ObjectPool.Instance == null)
-            return;
-
-        string[] activeTags = GetAllMachineGunObstaclePoolTags();
-        if (activeTags.Length > 0)
-            ObjectPool.Instance.ReturnAllActive(activeTags);
-    }
-
-    private IEnumerator RageObstacleSpawnCoroutine()
-    {
-        Debug.Log("⚡ Rage Coroutine RUNNING!");
-
-        if (machineGunSpawnWorldPositions == null || machineGunSpawnWorldPositions.Length == 0)
-        {
-            Debug.LogWarning("[RageObstacle] machineGunSpawnWorldPositions is empty. Set world positions in StageManager inspector.");
-            rageSpawnRoutine = null;
-            yield break;
-        }
-
-        float startDelay = Mathf.Max(0f, machineGunSpawnStartDelay);
-        if (startDelay > 0f)
-            yield return WaitForSecondsRespectingGameplayPause(startDelay);
-
-        while (machineGunPhasePauseActive)
-        {
-            if (gameplayPauseByTransform)
-            {
-                yield return null;
-                continue;
-            }
-
-            for (int p = 0; p < machineGunSpawnWorldPositions.Length; p++)
-            {
-                Vector3 spawnPos = machineGunSpawnWorldPositions[p];
-                for (int i = 0; i < machineGunObstaclesPerPoint; i++)
-                    SpawnRageObstacle(spawnPos);
-            }
-
-            yield return WaitForSecondsRespectingGameplayPause(machineGunSpawnInterval);
-        }
-
-        rageSpawnRoutine = null;
-        Debug.Log("🔥 Rage Obstacle Spawn Ended");
     }
 
     private void StartRagePhaseSpawn()
@@ -1413,79 +1363,7 @@ public class StageManager : MonoBehaviour
         }
     }
 
-    private void SpawnRageObstacle(Vector3 spawnPos)
-    {
-        string tag = GetRandomMachineGunObstaclePoolTag();
-        if (string.IsNullOrWhiteSpace(tag))
-        {
-            Debug.LogWarning("⚠️ machineGun obstacle pool tag lists are empty.");
-            return;
-        }
-
-        GameObject go = ObjectPool.Instance.SpawnFromPool(tag, spawnPos, Quaternion.identity);
-        if (go == null)
-        {
-            Debug.LogWarning($"[RageObstacle] Pool '{tag}' is empty or not set.");
-            return;
-        }
-
-        var rb = go.GetComponent<Rigidbody2D>();
-        if (rb != null)
-        {
-            rb.linearVelocity = Vector2.zero;
-            rb.angularVelocity = 0f;
-            rb.WakeUp();
-        }
-
-        var mover = go.GetComponent<Mover>();
-        if (mover != null)
-            mover.baseSpeed = phaseBaseSpeed;
-        Debug.Log($"🧱 Rage Obstacle Spawned: {tag} at {spawnPos}");
-    }
-
-    private string GetRandomMachineGunObstaclePoolTag()
-    {
-        string[] primaryList = machineGunObstaclePoolTags66;
-        string[] secondaryList = machineGunObstaclePoolTags33;
-        bool usePrimaryList = Random.value < 0.66f;
-
-        string tag = GetRandomPoolTagFromList(usePrimaryList ? primaryList : secondaryList);
-        if (!string.IsNullOrWhiteSpace(tag))
-            return tag;
-
-        return GetRandomPoolTagFromList(usePrimaryList ? secondaryList : primaryList);
-    }
-
-    private static string GetRandomPoolTagFromList(string[] poolTags)
-    {
-        if (poolTags == null || poolTags.Length == 0)
-            return null;
-
-        return poolTags[Random.Range(0, poolTags.Length)];
-    }
-
-    private string[] GetAllMachineGunObstaclePoolTags()
-    {
-        HashSet<string> tags = new HashSet<string>();
-        AddPoolTags(tags, machineGunObstaclePoolTags66);
-        AddPoolTags(tags, machineGunObstaclePoolTags33);
-
-        string[] mergedTags = new string[tags.Count];
-        tags.CopyTo(mergedTags);
-        return mergedTags;
-    }
-
-    private static void AddPoolTags(HashSet<string> target, string[] source)
-    {
-        if (source == null)
-            return;
-
-        for (int i = 0; i < source.Length; i++)
-        {
-            if (!string.IsNullOrWhiteSpace(source[i]))
-                target.Add(source[i]);
-        }
-    }
+    public bool IsGameplayTransformPaused => gameplayPauseByTransform;
 
     private IEnumerator WaitForSecondsRespectingGameplayPause(float seconds)
     {
@@ -1705,8 +1583,9 @@ public class StageManager : MonoBehaviour
         if (!phaseObject.CompareTag(MachineGunStageTag))
             return;
 
-        machineGunStagePrePauseActive = false;
-        machineGunPhasePauseActive = true;
+        // Pause only the normal follow-up spawn until the machine gun trigger resolves.
+        machineGunStagePrePauseActive = true;
+        machineGunPhasePauseActive = false;
         phasePassedDuringMachineGunPause = false;
         spawnPaused = true;
     }

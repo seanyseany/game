@@ -409,11 +409,7 @@ public class GameData : MonoBehaviour
         survivalTime = 0f;
         totalKillCount = 0;
 
-        if (StageManager.Instance != null)
-        {
-            StageManager.Instance.StopRageObstacleSpawn();
-            StageManager.Instance.ClearAllRageObstacles();
-        }
+        MachineGunObstacle.ClearAllSpawnedObstacles();
 
         ResetUIAndObjects();
 
@@ -444,7 +440,7 @@ public class GameData : MonoBehaviour
             yield return new WaitUntil(() => StageManager.Instance.IsStageLoopStopped());
 
             StageManager.Instance.ClearAllPhases();
-            StageManager.Instance.ClearAllRageObstacles();
+            MachineGunObstacle.ClearAllSpawnedObstacles();
 
             yield return new WaitForSeconds(0.1f);
 
@@ -717,11 +713,7 @@ public class GameData : MonoBehaviour
 
         stageSpeedMult = defaultStageSpeedMult;
 
-        if (StageManager.Instance != null)
-        {
-            StageManager.Instance.StopRageObstacleSpawn();
-            StageManager.Instance.ClearAllRageObstacles();
-        }
+        MachineGunObstacle.ClearAllSpawnedObstacles();
 
         OnRageEnd?.Invoke();
     }

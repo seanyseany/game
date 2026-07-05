@@ -20,6 +20,7 @@ public class CustomerBlood : MonoBehaviour
     private Coroutine moveRoutine;
     private EntranceManagement ownerEntranceManagement;
     private Entrance sourceEntrance;
+    private Way currentWay;
     private Path currentPath;
     private Building targetBuilding;
     private Building.QueueSlot currentQueueSlot = Building.QueueSlot.None;
@@ -28,6 +29,7 @@ public class CustomerBlood : MonoBehaviour
     private bool waitingAtCounter;
     private bool purchaseFinished;
     private string spawnEntryId;
+    private int currentRouteNodeIndex = -1;
 
     public string SpawnEntryId => spawnEntryId;
 
@@ -42,6 +44,7 @@ public class CustomerBlood : MonoBehaviour
         string entryId,
         EntranceManagement entranceManagement,
         Entrance entrance,
+        Way way,
         Path path)
     {
         ResetState();
@@ -49,6 +52,7 @@ public class CustomerBlood : MonoBehaviour
         spawnEntryId = entryId;
         ownerEntranceManagement = entranceManagement;
         sourceEntrance = entrance;
+        currentWay = way;
         currentPath = path;
         targetBuilding = path != null ? path.Building : null;
 
@@ -123,11 +127,16 @@ public class CustomerBlood : MonoBehaviour
     {
         if (currentPath == null)
         {
-            yield return null;
-            yield break;
+            if (currentWay == null)
+            {
+                yield return null;
+                yield break;
+            }
         }
 
-        Vector3 waypointPosition = currentPath.GetRandomWorldPointOnPath();
+        Vector3 waypointPosition = currentWay != null
+            ? GetNextWayNodeWorldPosition()
+            : currentPath.GetRandomWorldPointOnPath();
         yield return MoveToRoutine(waypointPosition, false, null);
 
         if (Time.time < endTime)
@@ -192,15 +201,35 @@ public class CustomerBlood : MonoBehaviour
             targetBuilding.NotifyCustomerLeaving(this);
 
         targetBuilding = null;
+        currentWay = null;
         currentPath = null;
         sourceEntrance = null;
         ownerEntranceManagement = null;
         currentQueueSlot = Building.QueueSlot.None;
         waitingAtCounter = false;
         purchaseFinished = false;
+        currentRouteNodeIndex = -1;
         spawnEntryId = string.Empty;
         body.linearVelocity = Vector2.zero;
         PlayTrigger(walkTrigger);
+    }
+
+    private Vector3 GetNextWayNodeWorldPosition()
+    {
+        if (currentWay == null)
+            return transform.position;
+
+        int nextIndex = currentRouteNodeIndex < 0
+            ? currentWay.GetFirstRouteNodeIndex()
+            : currentWay.GetNextRouteNodeIndex(currentRouteNodeIndex);
+
+        if (nextIndex >= 0 && currentWay.TryGetRouteNode(nextIndex, out Vector3 worldPoint))
+        {
+            currentRouteNodeIndex = nextIndex;
+            return worldPoint;
+        }
+
+        return transform.position;
     }
 
     private void UpdateFacing(float deltaX)

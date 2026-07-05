@@ -4,33 +4,27 @@ using UnityEngine;
 
 public class EntranceManagement : MonoBehaviour
 {
-    [System.Serializable]
-    public class EntranceBinding
+    private class WayAllocation
     {
-        public Entrance entrance;
-        public List<Path> connectedPaths = new List<Path>();
-    }
-
-    private class EntranceAllocation
-    {
-        public EntranceBinding binding;
+        public Way way;
         public float score;
         public int remaining;
         public float exactShare;
+        public bool usesFallbackScore;
     }
 
     [Header("References")]
     [SerializeField] private CustomerBloodManagement customerBloodManagement;
-    [SerializeField] private List<EntranceBinding> entranceBindings = new List<EntranceBinding>();
+    [SerializeField] private List<Way> ways = new List<Way>();
 
     [Header("Spawn Timing")]
     [SerializeField] private float spawnInterval = 1f;
     [SerializeField] private bool useFallbackTrafficWhenScoreZero = true;
-    [SerializeField] private float fallbackScorePerEntrance = 0.1f;
+    [SerializeField] private float fallbackScorePerWay = 0.1f;
     [SerializeField] private float respawnCooldownMin = 3f;
     [SerializeField] private float respawnCooldownMax = 7f;
 
-    private readonly List<EntranceAllocation> activeAllocations = new List<EntranceAllocation>();
+    private readonly List<WayAllocation> activeAllocations = new List<WayAllocation>();
     private readonly List<CustomerBlood> activeCustomers = new List<CustomerBlood>();
     private Coroutine spawnRoutine;
     private int readySpawnTokens;
@@ -60,6 +54,11 @@ public class EntranceManagement : MonoBehaviour
         StartCoroutine(ReturnSpawnTokenAfterCooldown());
     }
 
+    public void NotifyBuildingTrafficChanged()
+    {
+        activeAllocations.Clear();
+    }
+
     private IEnumerator SpawnLoop()
     {
         while (true)
@@ -77,22 +76,23 @@ public class EntranceManagement : MonoBehaviour
             if (!HasRemainingAllocation())
                 RecalculateAllocations();
 
-            EntranceAllocation allocation = ChooseAllocationWithRemaining();
+            WayAllocation allocation = ChooseAllocationWithRemaining();
             if (allocation == null)
                 continue;
 
             if (!customerBloodManagement.TryGetSpawnPrefab(out CustomerBloodManagement.BloodEntry entry))
                 continue;
 
-            Path chosenPath = ChoosePathForEntrance(allocation.binding);
-            if (chosenPath == null || allocation.binding.entrance == null)
+            if (allocation.way == null ||
+                !allocation.way.TryGetSpawnEntrance(out Entrance chosenEntrance) ||
+                !TryChoosePath(allocation, out Path chosenPath))
             {
                 allocation.remaining = 0;
                 continue;
             }
 
             CustomerBlood customer = Instantiate(entry.prefab);
-            customer.InitializeSpawn(entry.id, this, allocation.binding.entrance, chosenPath);
+            customer.InitializeSpawn(entry.id, this, chosenEntrance, allocation.way, chosenPath);
 
             activeCustomers.Add(customer);
             customerBloodManagement.RegisterSpawn(entry.id);
@@ -110,16 +110,17 @@ public class EntranceManagement : MonoBehaviour
             return;
 
         float totalScore = 0f;
-        for (int i = 0; i < entranceBindings.Count; i++)
+        for (int i = 0; i < ways.Count; i++)
         {
-            EntranceBinding binding = entranceBindings[i];
-            if (binding == null || binding.entrance == null)
+            Way way = ways[i];
+            if (way == null)
                 continue;
 
-            EntranceAllocation allocation = new EntranceAllocation
+            WayAllocation allocation = new WayAllocation
             {
-                binding = binding,
-                score = CalculateEntranceScore(binding)
+                way = way,
+                score = Mathf.Max(0f, way.GetTrafficScore()),
+                usesFallbackScore = false
             };
 
             activeAllocations.Add(allocation);
@@ -137,16 +138,20 @@ public class EntranceManagement : MonoBehaviour
             totalScore = 0f;
             for (int i = 0; i < activeAllocations.Count; i++)
             {
-                activeAllocations[i].score = fallbackScorePerEntrance;
-                totalScore += fallbackScorePerEntrance;
+                activeAllocations[i].score = Mathf.Max(0f, fallbackScorePerWay);
+                activeAllocations[i].usesFallbackScore = true;
+                totalScore += activeAllocations[i].score;
             }
+
+            if (totalScore <= 0f)
+                return;
         }
 
         int assigned = 0;
-        List<EntranceAllocation> positiveScores = new List<EntranceAllocation>();
+        List<WayAllocation> positiveScores = new List<WayAllocation>();
         for (int i = 0; i < activeAllocations.Count; i++)
         {
-            EntranceAllocation allocation = activeAllocations[i];
+            WayAllocation allocation = activeAllocations[i];
             if (allocation.score <= 0f)
                 continue;
 
@@ -164,7 +169,7 @@ public class EntranceManagement : MonoBehaviour
         {
             for (int i = 0; i < positiveScores.Count && assigned < totalAvailable; i++)
             {
-                EntranceAllocation allocation = positiveScores[i];
+                WayAllocation allocation = positiveScores[i];
                 if (allocation.remaining == 0)
                 {
                     allocation.remaining = 1;
@@ -176,28 +181,10 @@ public class EntranceManagement : MonoBehaviour
         int remainder = Mathf.Max(0, totalAvailable - assigned);
         while (remainder > 0 && positiveScores.Count > 0)
         {
-            EntranceAllocation bonusAllocation = positiveScores[Random.Range(0, positiveScores.Count)];
+            WayAllocation bonusAllocation = positiveScores[Random.Range(0, positiveScores.Count)];
             bonusAllocation.remaining++;
             remainder--;
         }
-    }
-
-    private float CalculateEntranceScore(EntranceBinding binding)
-    {
-        if (binding == null || binding.connectedPaths == null)
-            return 0f;
-
-        float score = 0f;
-        for (int i = 0; i < binding.connectedPaths.Count; i++)
-        {
-            Path path = binding.connectedPaths[i];
-            if (path == null)
-                continue;
-
-            score += path.GetActivationScore();
-        }
-
-        return score;
     }
 
     private bool HasRemainingAllocation()
@@ -211,14 +198,14 @@ public class EntranceManagement : MonoBehaviour
         return false;
     }
 
-    private EntranceAllocation ChooseAllocationWithRemaining()
+    private WayAllocation ChooseAllocationWithRemaining()
     {
-        List<EntranceAllocation> choices = new List<EntranceAllocation>();
+        List<WayAllocation> choices = new List<WayAllocation>();
         int total = 0;
 
         for (int i = 0; i < activeAllocations.Count; i++)
         {
-            EntranceAllocation allocation = activeAllocations[i];
+            WayAllocation allocation = activeAllocations[i];
             if (allocation.remaining <= 0)
                 continue;
 
@@ -241,38 +228,6 @@ public class EntranceManagement : MonoBehaviour
         return choices[choices.Count - 1];
     }
 
-    private Path ChoosePathForEntrance(EntranceBinding binding)
-    {
-        if (binding == null || binding.connectedPaths == null || binding.connectedPaths.Count == 0)
-            return null;
-
-        List<Path> valid = new List<Path>();
-        float totalScore = 0f;
-        for (int i = 0; i < binding.connectedPaths.Count; i++)
-        {
-            Path path = binding.connectedPaths[i];
-            if (path != null)
-            {
-                valid.Add(path);
-                totalScore += Mathf.Max(0.1f, path.GetActivationScore());
-            }
-        }
-
-        if (valid.Count == 0)
-            return null;
-
-        float pick = Random.Range(0f, totalScore);
-        float cumulative = 0f;
-        for (int i = 0; i < valid.Count; i++)
-        {
-            cumulative += Mathf.Max(0.1f, valid[i].GetActivationScore());
-            if (pick <= cumulative)
-                return valid[i];
-        }
-
-        return valid[valid.Count - 1];
-    }
-
     private IEnumerator ReturnSpawnTokenAfterCooldown()
     {
         float cooldown = Random.Range(respawnCooldownMin, respawnCooldownMax);
@@ -292,5 +247,19 @@ public class EntranceManagement : MonoBehaviour
 
         int maxReady = Mathf.Max(0, maxActive - activeCustomers.Count - cooldownTokens);
         readySpawnTokens = Mathf.Clamp(readySpawnTokens, 0, maxReady);
+    }
+
+    private static bool TryChoosePath(WayAllocation allocation, out Path path)
+    {
+        if (allocation == null || allocation.way == null)
+        {
+            path = null;
+            return false;
+        }
+
+        if (allocation.usesFallbackScore)
+            return allocation.way.TryGetAnyPath(out path);
+
+        return allocation.way.TryGetActivePath(out path);
     }
 }

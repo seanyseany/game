@@ -9,6 +9,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6340716225815163468}
+  - component: {fileID: -4849166300210860158}
   m_Layer: 0
   m_Name: stage 2-10
   m_TagString: Untagged
@@ -41,6 +42,21 @@ Transform:
   - {fileID: 3292040424604615208}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &-4849166300210860158
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2659614723417223950}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 88dfcaede4c9340e8a74567b94c88fdd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Mover
+  baseSpeed: 6
+  applyStageSpeedMultiplier: 1
+  defaultBaseSpeed: 0
 --- !u!1001 &210976548434638017
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -59,7 +75,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1936750843989346625, guid: 54485d09a3f77410f9e8aec9d930ad44, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 5.02
+      value: 7.3
       objectReference: {fileID: 0}
     - target: {fileID: 1936750843989346625, guid: 54485d09a3f77410f9e8aec9d930ad44, type: 3}
       propertyPath: m_LocalPosition.z
@@ -98,8 +114,12 @@ PrefabInstance:
       value: Obstacle_D upMove (4)
       objectReference: {fileID: 0}
     - target: {fileID: 4380102930729139921, guid: 54485d09a3f77410f9e8aec9d930ad44, type: 3}
+      propertyPath: moveSpeed
+      value: 2.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 4380102930729139921, guid: 54485d09a3f77410f9e8aec9d930ad44, type: 3}
       propertyPath: moveYOffset
-      value: -3
+      value: -5
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -129,7 +149,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5953909692756639684, guid: 241a0565b83654ffda37428748ce0bf9, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -6.0599995
+      value: -5.89
       objectReference: {fileID: 0}
     - target: {fileID: 5953909692756639684, guid: 241a0565b83654ffda37428748ce0bf9, type: 3}
       propertyPath: m_LocalPosition.z
@@ -199,7 +219,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3650951727792218632, guid: de77b24b6f87441108acc9cdb4c76333, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.02
+      value: 0.25
       objectReference: {fileID: 0}
     - target: {fileID: 3650951727792218632, guid: de77b24b6f87441108acc9cdb4c76333, type: 3}
       propertyPath: m_LocalPosition.z
@@ -331,7 +351,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5953909692756639684, guid: 241a0565b83654ffda37428748ce0bf9, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -6.1
+      value: -5.9300003
       objectReference: {fileID: 0}
     - target: {fileID: 5953909692756639684, guid: 241a0565b83654ffda37428748ce0bf9, type: 3}
       propertyPath: m_LocalPosition.z
@@ -401,7 +421,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1936750843989346625, guid: 54485d09a3f77410f9e8aec9d930ad44, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 5.35
+      value: 7.63
       objectReference: {fileID: 0}
     - target: {fileID: 1936750843989346625, guid: 54485d09a3f77410f9e8aec9d930ad44, type: 3}
       propertyPath: m_LocalPosition.z
@@ -440,8 +460,12 @@ PrefabInstance:
       value: Obstacle_D upMove (3)
       objectReference: {fileID: 0}
     - target: {fileID: 4380102930729139921, guid: 54485d09a3f77410f9e8aec9d930ad44, type: 3}
+      propertyPath: moveSpeed
+      value: 2.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 4380102930729139921, guid: 54485d09a3f77410f9e8aec9d930ad44, type: 3}
       propertyPath: moveYOffset
-      value: -3
+      value: -5
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -471,7 +495,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3650951727792218632, guid: de77b24b6f87441108acc9cdb4c76333, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -0.05
+      value: 0.18
       objectReference: {fileID: 0}
     - target: {fileID: 3650951727792218632, guid: de77b24b6f87441108acc9cdb4c76333, type: 3}
       propertyPath: m_LocalPosition.z
@@ -541,7 +565,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3650951727792218632, guid: de77b24b6f87441108acc9cdb4c76333, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.58
+      value: 0.64
       objectReference: {fileID: 0}
     - target: {fileID: 3650951727792218632, guid: de77b24b6f87441108acc9cdb4c76333, type: 3}
       propertyPath: m_LocalPosition.z
@@ -611,7 +635,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5953909692756639684, guid: 241a0565b83654ffda37428748ce0bf9, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -6.12
+      value: -5.9500003
       objectReference: {fileID: 0}
     - target: {fileID: 5953909692756639684, guid: 241a0565b83654ffda37428748ce0bf9, type: 3}
       propertyPath: m_LocalPosition.z
@@ -681,7 +705,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1936750843989346625, guid: 54485d09a3f77410f9e8aec9d930ad44, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 6.23
+      value: 8.23
       objectReference: {fileID: 0}
     - target: {fileID: 1936750843989346625, guid: 54485d09a3f77410f9e8aec9d930ad44, type: 3}
       propertyPath: m_LocalPosition.z
@@ -720,8 +744,12 @@ PrefabInstance:
       value: Obstacle_D upMove
       objectReference: {fileID: 0}
     - target: {fileID: 4380102930729139921, guid: 54485d09a3f77410f9e8aec9d930ad44, type: 3}
+      propertyPath: moveSpeed
+      value: 2.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 4380102930729139921, guid: 54485d09a3f77410f9e8aec9d930ad44, type: 3}
       propertyPath: moveYOffset
-      value: -3
+      value: -5
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

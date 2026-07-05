@@ -47,7 +47,6 @@ public class Monster : MonoBehaviour, IReinitializable
     private void OnEnable()
     {
         GameData.OnRageStart += HandleRageStart;
-        GameData.OnMachineGunTrigger += HandleMachineGunTrigger;
 
         if (spriteRenderer == null)
             spriteRenderer = GetComponent<SpriteRenderer>();
@@ -67,7 +66,6 @@ public class Monster : MonoBehaviour, IReinitializable
     private void OnDisable()
     {
         GameData.OnRageStart -= HandleRageStart;
-        GameData.OnMachineGunTrigger -= HandleMachineGunTrigger;
 
         if (destroyRoutine != null)
         {
@@ -156,14 +154,6 @@ public class Monster : MonoBehaviour, IReinitializable
     }
 
     private void HandleRageStart()
-    {
-        if (!isActiveAndEnabled || dead)
-            return;
-
-        StartDie(byPlayerKill: false);
-    }
-
-    private void HandleMachineGunTrigger()
     {
         if (!isActiveAndEnabled || dead)
             return;

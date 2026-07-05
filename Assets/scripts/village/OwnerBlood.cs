@@ -63,8 +63,11 @@ public class OwnerBlood : MonoBehaviour
                 continue;
             }
 
-            float targetX = Random.Range(building.OwnerPatrolMinLocalX, building.OwnerPatrolMaxLocalX);
-            Vector3 targetPosition = building.transform.TransformPoint(new Vector3(targetX, transform.localPosition.y, 0f));
+            Vector2 patrolFrom = building.OwnerPatrolFromLocalPosition;
+            Vector2 patrolTo = building.OwnerPatrolToLocalPosition;
+            float targetLocalX = Random.Range(patrolFrom.x, patrolTo.x);
+            float fixedLocalY = building.OwnerLocalPosition.y;
+            Vector3 targetPosition = building.transform.TransformPoint(new Vector3(targetLocalX, fixedLocalY, 0f));
             yield return MoveTo(targetPosition);
             yield return new WaitForSeconds(Random.Range(0.5f, 1.5f));
         }

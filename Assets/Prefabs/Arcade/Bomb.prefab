@@ -10,8 +10,8 @@ GameObject:
   m_Component:
   - component: {fileID: 2087992168184587501}
   - component: {fileID: 8620099861072994846}
-  - component: {fileID: 5755142047488728553}
   - component: {fileID: 4849750825065701051}
+  - component: {fileID: 6209683657507366931}
   m_Layer: 0
   m_Name: Bomb
   m_TagString: Bomb
@@ -94,8 +94,33 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
---- !u!61 &5755142047488728553
-BoxCollider2D:
+--- !u!114 &4849750825065701051
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1977999703458828796}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: edb2819dcd50245ea8f1bea26b7f41c0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Bomb
+  speed: 20
+  accelerateDuringObstacleSlowdown: 1
+  slowdownSpeedBoostCap: 3
+  requiredSpeedSafetyMargin: 1.1
+  minimumRemainingLifetime: 0.05
+  rotationOffset: 0
+  rotateLerpSpeed: 20
+  maxTiltAngle: 30
+  autoExplodeTime: 1
+  poolTag: Bomb
+  hitboxTag: BombHitBox
+  hitboxFallbackPrefab: {fileID: 0}
+  smokeFallbackPrefab: {fileID: 0}
+--- !u!70 &6209683657507366931
+CapsuleCollider2D:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -128,41 +153,9 @@ BoxCollider2D:
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: -0.08510852, y: 0}
-  m_SpriteTilingProperty:
-    border: {x: 0, y: 0, z: 0, w: 0}
-    pivot: {x: 0.5, y: 0.5}
-    oldSize: {x: 1.18, y: 0.54}
-    newSize: {x: 1.18, y: 0.54}
-    adaptiveTilingThreshold: 0.5
-    drawMode: 0
-    adaptiveTiling: 0
-  m_AutoTiling: 0
-  m_Size: {x: 1.0097828, y: 0.54}
-  m_EdgeRadius: 0
---- !u!114 &4849750825065701051
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1977999703458828796}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: edb2819dcd50245ea8f1bea26b7f41c0, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Bomb
-  speed: 16
-  rotationOffset: 0
-  rotateLerpSpeed: 20
-  maxTiltAngle: 30
-  colliderEnableDelay: 0.5
-  colliderEnableDistance: 1.2
-  autoExplodeTime: 1
-  poolTag: Bomb
-  hitboxTag: BombHitBox
-  hitboxFallbackPrefab: {fileID: 0}
-  smokeFallbackPrefab: {fileID: 0}
+  m_Offset: {x: -0.067788385, y: -0.00000045385505}
+  m_Size: {x: 1.0444239, y: 0.4795222}
+  m_Direction: 1
 --- !u!1 &6730912450813396451
 GameObject:
   m_ObjectHideFlags: 0

@@ -9,6 +9,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6340716225815163468}
+  - component: {fileID: 2049940015636225904}
   m_Layer: 0
   m_Name: 1test
   m_TagString: Untagged
@@ -43,6 +44,21 @@ Transform:
   - {fileID: 8408477480359347815}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2049940015636225904
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2659614723417223950}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 88dfcaede4c9340e8a74567b94c88fdd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Mover
+  baseSpeed: 6
+  applyStageSpeedMultiplier: 1
+  defaultBaseSpeed: 0
 --- !u!1001 &1067851758232963542
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -53,7 +69,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -5302701732416831034, guid: e6e8e0f47b823467d85917a89f84c769, type: 3}
       propertyPath: moveDistance
-      value: -1
+      value: 10
       objectReference: {fileID: 0}
     - target: {fileID: 391652449128509859, guid: e6e8e0f47b823467d85917a89f84c769, type: 3}
       propertyPath: m_LocalPosition.x
@@ -163,7 +179,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6053488587577537343, guid: a7fb63eb5979149f7b5c004e7993bbd8, type: 3}
       propertyPath: moveDistance
-      value: -1
+      value: 10
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -185,7 +201,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -5302701732416831034, guid: e6e8e0f47b823467d85917a89f84c769, type: 3}
       propertyPath: moveDistance
-      value: -1
+      value: 10
       objectReference: {fileID: 0}
     - target: {fileID: 391652449128509859, guid: e6e8e0f47b823467d85917a89f84c769, type: 3}
       propertyPath: m_LocalPosition.x
@@ -251,7 +267,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -5302701732416831034, guid: e6e8e0f47b823467d85917a89f84c769, type: 3}
       propertyPath: moveDistance
-      value: -1
+      value: 10
       objectReference: {fileID: 0}
     - target: {fileID: 391652449128509859, guid: e6e8e0f47b823467d85917a89f84c769, type: 3}
       propertyPath: m_LocalPosition.x
@@ -379,7 +395,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -5302701732416831034, guid: e6e8e0f47b823467d85917a89f84c769, type: 3}
       propertyPath: moveDistance
-      value: -1
+      value: 10
       objectReference: {fileID: 0}
     - target: {fileID: 391652449128509859, guid: e6e8e0f47b823467d85917a89f84c769, type: 3}
       propertyPath: m_LocalPosition.x
@@ -445,7 +461,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -5302701732416831034, guid: e6e8e0f47b823467d85917a89f84c769, type: 3}
       propertyPath: moveDistance
-      value: -1
+      value: 10
       objectReference: {fileID: 0}
     - target: {fileID: 391652449128509859, guid: e6e8e0f47b823467d85917a89f84c769, type: 3}
       propertyPath: m_LocalPosition.x
@@ -555,7 +571,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6053488587577537343, guid: a7fb63eb5979149f7b5c004e7993bbd8, type: 3}
       propertyPath: moveDistance
-      value: -1
+      value: 10
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -577,7 +593,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -5302701732416831034, guid: e6e8e0f47b823467d85917a89f84c769, type: 3}
       propertyPath: moveDistance
-      value: -1
+      value: 10
       objectReference: {fileID: 0}
     - target: {fileID: 391652449128509859, guid: e6e8e0f47b823467d85917a89f84c769, type: 3}
       propertyPath: m_LocalPosition.x
@@ -687,7 +703,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6053488587577537343, guid: a7fb63eb5979149f7b5c004e7993bbd8, type: 3}
       propertyPath: moveDistance
-      value: -1
+      value: 10
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -709,7 +725,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -5302701732416831034, guid: e6e8e0f47b823467d85917a89f84c769, type: 3}
       propertyPath: moveDistance
-      value: -1
+      value: 10
       objectReference: {fileID: 0}
     - target: {fileID: 391652449128509859, guid: e6e8e0f47b823467d85917a89f84c769, type: 3}
       propertyPath: m_LocalPosition.x
@@ -775,7 +791,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -5302701732416831034, guid: e6e8e0f47b823467d85917a89f84c769, type: 3}
       propertyPath: moveDistance
-      value: -1
+      value: 10
       objectReference: {fileID: 0}
     - target: {fileID: 391652449128509859, guid: e6e8e0f47b823467d85917a89f84c769, type: 3}
       propertyPath: m_LocalPosition.x

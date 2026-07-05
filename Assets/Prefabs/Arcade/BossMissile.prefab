@@ -174,12 +174,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e294d8771990a48959749bbb101fc956, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BossMissile
-  speed: 5.5
+  moveSpeed: 12
+  rageMoveSpeed: 8.5
   targetPoints:
-  - {x: -7.17, y: -0.16, z: 0}
-  - {x: -7.17, y: -1.45, z: 0}
-  - {x: -7.17, y: -2.22, z: 0}
-  - {x: -7.17, y: -2.87, z: 0}
+  - {x: -7.17, y: 0.6, z: 0}
+  - {x: -7.17, y: -0.7, z: 0}
+  - {x: -7.17, y: -1.8, z: 0}
+  - {x: -7.17, y: -2.9, z: 0}
   playerTag: player
   gateTag: Gate
   destroyPoolTag: BossMissileDestroy

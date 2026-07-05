@@ -10,7 +10,6 @@ GameObject:
   m_Component:
   - component: {fileID: 3121815603219088968}
   - component: {fileID: 4804847087943915049}
-  - component: {fileID: 8483453408166512614}
   - component: {fileID: 8385894293681588682}
   m_Layer: 0
   m_Name: MissileSpanwer
@@ -50,21 +49,7 @@ MonoBehaviour:
   missilePrefab: {fileID: 518759552074264716, guid: 97250265d598c41468e12fc9a76bd466, type: 3}
   warningTime: 1.5
   fireX: 10
-  missileSpeed: 10
---- !u!114 &8483453408166512614
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4586693337377101707}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 88dfcaede4c9340e8a74567b94c88fdd, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  baseSpeed: 6
-  defaultBaseSpeed: 0
+  missileSpeedMultiplier: 10
 --- !u!212 &8385894293681588682
 SpriteRenderer:
   m_ObjectHideFlags: 0

@@ -79,7 +79,7 @@ public class Boss : MonoBehaviour, IReinitializable
     public float rageBurstRoamDuration = 1.3f;
     public float rageLaserInterval = 0.1f;
     public float rageMissileSpeed = 12f;
-    private float[] rageStopYOffsetCandidates = new float[] { 2.5f, 1.5f, 0.7f, -0.3f };
+    private float[] rageStopYOffsetCandidates = new float[] { 4f, 2.5f, 1f, -0.3f };
     public float rageOffAnimEventFallbackTime = 4f;
 
     [Header("Boss Animator (Trigger Names)")]
@@ -173,6 +173,7 @@ public class Boss : MonoBehaviour, IReinitializable
     private bool spawnedHp20Anim = false;
     private int lastRageStopIndex = -1;
     private float pendingDamage = 0f;
+    private bool useRageBossMissileSpeed = false;
 
     // ===================== PUBLIC =====================
     public void Reinit() => ResetBossRuntime();
@@ -190,6 +191,7 @@ public class Boss : MonoBehaviour, IReinitializable
         state = State.Inactive;
         hp = maxHp;
         shootDisabledUntil = -999f;
+        useRageBossMissileSpeed = false;
         if (initialParent != null && transform.parent != initialParent)
             transform.SetParent(initialParent, true);
         transform.SetPositionAndRotation(initialWorldPos, initialWorldRot);
@@ -266,6 +268,7 @@ public class Boss : MonoBehaviour, IReinitializable
     private IEnumerator CoMain()
     {
         state = State.Entering;
+        SetBossMissileNormalSpeed();
         yield return MoveToOverTime(enterTargetWorldPos, enterMoveTime);
 
         state = State.Active;
@@ -454,7 +457,7 @@ public class Boss : MonoBehaviour, IReinitializable
             var bm = missile.GetComponent<BossMissile>();
             if (bm)
             {
-                bm.speed = missileSpeed;
+                bm.SetUseRageMoveSpeed(useRageBossMissileSpeed);
                 bm.usePool = usePool;
                 bm.poolTag = bossMissilePoolTag;
             }
@@ -489,6 +492,7 @@ public class Boss : MonoBehaviour, IReinitializable
     {
         if (state != State.Active) yield break;
 
+        SetBossMissileNormalSpeed();
         SetBossAnimTrigger(triggerBossRage);
 
         yield return CoWait(rageDoorOpenTime);
@@ -565,7 +569,18 @@ public class Boss : MonoBehaviour, IReinitializable
 
         SetBossAnimTrigger(triggerBossRageOff);
         yield return WaitForRageOffAnimToFinish();
+        SetBossMissileRageSpeed();
         EndRageModeImmediate();
+    }
+
+    private void SetBossMissileNormalSpeed()
+    {
+        useRageBossMissileSpeed = false;
+    }
+
+    private void SetBossMissileRageSpeed()
+    {
+        useRageBossMissileSpeed = true;
     }
 
 

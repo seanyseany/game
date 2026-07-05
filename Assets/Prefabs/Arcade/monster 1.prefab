@@ -14,7 +14,6 @@ GameObject:
   - component: {fileID: 3372728597166327916}
   - component: {fileID: 3861317006378835481}
   - component: {fileID: 3370661305281328837}
-  - component: {fileID: 4575890466918380600}
   m_Layer: 0
   m_Name: monster 1
   m_TagString: Untagged
@@ -192,22 +191,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7a1e3935f6ae94d089cb3a1cc13fa569, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Monster
-  targetAnimator: {fileID: 0}
+  targetAnimator: {fileID: 5060580608188640380}
   destroyTriggerName: die
+  destroyAnimationClip: {fileID: 7400000, guid: 3eb1b3a7024104d83be0d1006e131be3, type: 2}
   destroyAnimationDuration: 0.6
   gateTag: Gate
   damageGateOnContact: 1
---- !u!114 &4575890466918380600
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6842220691773557582}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 88dfcaede4c9340e8a74567b94c88fdd, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Mover
-  baseSpeed: 6
-  defaultBaseSpeed: 0

@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 8981302590899611703}
   - component: {fileID: 9044978458654600445}
   - component: {fileID: 4508872061710983413}
+  - component: {fileID: 4303179023994530510}
   m_Layer: 0
   m_Name: RageLightning
   m_TagString: Untagged
@@ -29,8 +30,8 @@ Transform:
   m_GameObject: {fileID: 769946336907460623}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 5.2373, y: 0.2954, z: 0}
-  m_LocalScale: {x: 0.87419665, y: 0.69855225, z: 1}
+  m_LocalPosition: {x: 5.331, y: 1.0067, z: 0}
+  m_LocalScale: {x: 1.0164285, y: 0.8720027, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -47,17 +48,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d499df8f76bfe41b1bfda5fb7fdef6a9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  life: 0.42
+  life: 0.55
   damage: 999
-  lightningFrames:
-  - {fileID: -765505915393418316, guid: 30ac9d5c89ce84b39ad3039125553681, type: 3}
-  - {fileID: 6821317146343354075, guid: be5f10fa105aa4575932246cb5d33b17, type: 3}
-  - {fileID: -8683286035884786263, guid: 1037701f9927541ffb28ad1993fdca90, type: 3}
-  - {fileID: 3099113527179823052, guid: 17e8ef1581aa6475885bd193ab93f083, type: 3}
-  - {fileID: 2621321484421499544, guid: 02262e1677ed2430180a2b665c919405, type: 3}
-  - {fileID: 2356806035654995735, guid: 38a6bac0a1845479c961ea9cc421ef7e, type: 3}
-  - {fileID: 3292038625947617261, guid: 8b6aea6bcc674465382be6639f994379, type: 3}
-  frameRate: 0.06
   colliderEnabledOnSpawn: 1
   usePool: 1
   poolTag: RageLightening
@@ -98,9 +90,9 @@ BoxCollider2D:
   m_Offset: {x: 0.08886814, y: 0.07387459}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
-    pivot: {x: 0.004, y: 0.53}
-    oldSize: {x: 24.571428, y: 10}
-    newSize: {x: 24.571428, y: 10}
+    pivot: {x: 0.04, y: 0.5}
+    oldSize: {x: 16.47, y: 8.2}
+    newSize: {x: 16.47, y: 8.2}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
     adaptiveTiling: 0
@@ -180,15 +172,37 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
-  m_Sprite: {fileID: -8683286035884786263, guid: 1037701f9927541ffb28ad1993fdca90, type: 3}
+  m_SortingOrder: 1
+  m_Sprite: {fileID: 3497801490124241710, guid: 81ac4df84351a47adaab4b3f2d0fd6c7, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 24.571428, y: 10}
+  m_Size: {x: 16.47, y: 8.2}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!95 &4303179023994530510
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 769946336907460623}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: 420cc541297a4bea98423ef6e88622fa, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0

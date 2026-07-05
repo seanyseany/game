@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 8977519557220043701}
   - component: {fileID: 581392895151364694}
   - component: {fileID: 3910090591098351475}
+  - component: {fileID: 1817134827649756566}
   m_Layer: 0
   m_Name: RageLazer
   m_TagString: Untagged
@@ -29,8 +30,8 @@ Transform:
   m_GameObject: {fileID: 5089941723758895802}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 1.852, y: -0.2309, z: 0}
-  m_LocalScale: {x: 0.821009, y: 0.68853295, z: 1}
+  m_LocalPosition: {x: 1.7974, y: -0.2309, z: 0}
+  m_LocalScale: {x: 0.9037667, y: 0.68853295, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -47,16 +48,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d499df8f76bfe41b1bfda5fb7fdef6a9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  life: 0.48
+  life: 0.5
   damage: 999
-  lightningFrames:
-  - {fileID: -5383610543187984350, guid: 199213c4ea66c4190a8248013c77eb5c, type: 3}
-  - {fileID: 5151954468699477538, guid: 199213c4ea66c4190a8248013c77eb5c, type: 3}
-  - {fileID: 5857063483998636449, guid: 199213c4ea66c4190a8248013c77eb5c, type: 3}
-  - {fileID: 4628022158471100318, guid: 199213c4ea66c4190a8248013c77eb5c, type: 3}
-  - {fileID: -6083211196072834408, guid: 199213c4ea66c4190a8248013c77eb5c, type: 3}
-  - {fileID: 2930937892158183173, guid: 199213c4ea66c4190a8248013c77eb5c, type: 3}
-  frameRate: 0.08
   colliderEnabledOnSpawn: 1
   usePool: 1
   poolTag: Lazer
@@ -97,9 +90,9 @@ BoxCollider2D:
   m_Offset: {x: 9.715878, y: 0.17217118}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
-    pivot: {x: -0.57877684, y: 0.50662553}
-    oldSize: {x: 1.29, y: 1.23}
-    newSize: {x: 16.54, y: 2.13}
+    pivot: {x: -0.04, y: 0.5000001}
+    oldSize: {x: 16.5, y: 6.3}
+    newSize: {x: 16.5, y: 6.3}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
     adaptiveTiling: 0
@@ -179,15 +172,37 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 12
-  m_Sprite: {fileID: 5857063483998636449, guid: 199213c4ea66c4190a8248013c77eb5c, type: 3}
+  m_SortingOrder: 1
+  m_Sprite: {fileID: -5248924891338901782, guid: 6b02655efcc554032bc6f330b7223c03, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 16.54, y: 2.13}
+  m_Size: {x: 16.5, y: 6.3}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!95 &1817134827649756566
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5089941723758895802}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: d9fe8f010e134965ba5af0ac491ee5c3, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0

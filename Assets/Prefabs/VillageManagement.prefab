@@ -1,0 +1,68 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &8123812574019273381
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 780832325549678946}
+  - component: {fileID: 7855831672790954535}
+  m_Layer: 0
+  m_Name: VillageManagement
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &780832325549678946
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8123812574019273381}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 9.31405, y: -5.24188, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7855831672790954535
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8123812574019273381}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 214feb3c08fa04e3b9efa3b1156bbc87, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::VillageManagement
+  dontDestroyOnLoad: 1
+  autoSaveOnChange: 1
+  saveFileName: village_save.json
+  awardArcadeOxygenToCurrentOxygen: 1
+  awardArcadeEnergyToCurrentEnergy: 1
+  debugControls:
+    currentOxygen: 0
+    oxygenCapacity: 0
+    currentEnergy: 0
+    energyCapacity: 0
+    applyResourceValues: 0
+    fillAllBuildingSalary: 0
+    emptyAllBuildingSalary: 0
+    fillAllTurretAmmo: 0
+    emptyAllTurretAmmo: 0
+    fillEnergyToMax: 0
+    emptyEnergy: 0
+    emergencyDifficulty: 1
+    triggerEmergency: 0
+    refreshBloodDebugStates: 0
+    activeCustomerBloods: []
+    activeWhiteBloodCells: []

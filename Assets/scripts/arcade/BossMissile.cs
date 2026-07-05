@@ -1,9 +1,12 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public class BossMissile : MonoBehaviour
 {
     [Header("Movement")]
-    public float speed = 8f;
+    [FormerlySerializedAs("speed")]
+    public float moveSpeed = 8f;
+    public float rageMoveSpeed = 12f;
     public Vector3[] targetPoints = new Vector3[4];
 
     [Header("Hit")]
@@ -17,10 +20,13 @@ public class BossMissile : MonoBehaviour
 
     private Vector3 target;
     private bool hasTarget = false;
+    private bool useRageMoveSpeed = false;
+    private float currentMoveSpeed;
 
     private void OnEnable()
     {
         PickTarget();
+        ApplyMoveSpeed();
     }
 
     private void Update()
@@ -30,7 +36,7 @@ public class BossMissile : MonoBehaviour
 
         if (!hasTarget) return;
 
-        transform.position = Vector3.MoveTowards(transform.position, target, speed * Time.deltaTime);
+        transform.position = Vector3.MoveTowards(transform.position, target, currentMoveSpeed * Time.deltaTime);
 
         // 목표점 도착하면 그냥 소멸(필요하면 여기서 폭발)
         if ((transform.position - target).sqrMagnitude <= 0.01f)
@@ -112,5 +118,16 @@ public class BossMissile : MonoBehaviour
     {
         targetPoints = points;
         PickTarget();
+    }
+
+    public void SetUseRageMoveSpeed(bool useRageSpeed)
+    {
+        useRageMoveSpeed = useRageSpeed;
+        ApplyMoveSpeed();
+    }
+
+    private void ApplyMoveSpeed()
+    {
+        currentMoveSpeed = useRageMoveSpeed ? rageMoveSpeed : moveSpeed;
     }
 }

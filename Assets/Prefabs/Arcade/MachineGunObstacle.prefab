@@ -1,0 +1,61 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &5581291937688133704
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5497865425015623950}
+  - component: {fileID: 5238461836741512567}
+  m_Layer: 0
+  m_Name: MachineGunObstacle
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5497865425015623950
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5581291937688133704}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 8.49617, y: -0.18667, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &5238461836741512567
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5581291937688133704}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6d5628ab50c464c5dbdc9495d12598e2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MachineGunObstacle
+  machineGunSpawnWorldPositions:
+  - {x: 12.71, y: 2.3, z: 0}
+  - {x: 12.71, y: 0, z: 0}
+  - {x: 12.71, y: -2.7, z: 0}
+  machineGunSpawnStartDelay: 3
+  machineGunSpawnInterval: 0.93
+  machineGunSpawnEndLeadTime: 3
+  machineGunObstaclesPerPoint: 1
+  machineGunObstaclePoolTags66:
+  - Obstacle-BigOfM
+  - Obstacle-BigOsM
+  - Obstacle-BigOfM
+  machineGunObstaclePoolTags33:
+  - Obstacle-SmallOsM
+  - Obstacle-SmallOfM

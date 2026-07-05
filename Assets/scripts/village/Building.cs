@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class Building : MonoBehaviour
@@ -6,7 +7,7 @@ public class Building : MonoBehaviour
     [System.Serializable]
     public class LevelDefinition
     {
-        public GameObject visualRoot;
+        public GameObject buildingPrefab;
         public int oxygenPrice = 10;
         public float constructionTime = 3f;
         public int totalSalaryCapacity = 10;
@@ -31,35 +32,33 @@ public class Building : MonoBehaviour
     [SerializeField] private int level = 1;
     [SerializeField] private bool isPlaced = true;
     [SerializeField] private bool isWorking = true;
-    [SerializeField] private int energyValue = 1;
     [SerializeField] private int currentSalary = 0;
-    [SerializeField] private int maxSalary = 10;
 
-    [Header("Level Data")]
+    [Header("Level 1")]
     [SerializeField] private LevelDefinition level1 = new LevelDefinition();
+    [SerializeField] private GameObject level1BossPrefab;
+
+    [Header("Level 2")]
     [SerializeField] private LevelDefinition level2 = new LevelDefinition();
-    [SerializeField] private Sprite level1Sprite;
-    [SerializeField] private Sprite level2Sprite;
-    [SerializeField] private Sprite workingBloodSprite;
+
+    [Header("Common")]
+    [SerializeField] private Vector2 ownerLocalPosition;
+    [SerializeField] private GameObject bossCustomerPointPrefab;
+    [SerializeField] private GameObject customerPointPrefab;
+    [SerializeField] private int energyValue = 1;
     [SerializeField] private float workTickSeconds = 5f;
-    [SerializeField] private GameObject[] disableWhenSalaryEmpty;
-    [SerializeField] private GameObject exclamationPrefab;
-
-    [Header("Points")]
-    [SerializeField] private Transform itemPoint;
-    [SerializeField] private Transform ownerPoint;
-    [SerializeField] private Transform customerPoint;
-    [SerializeField] private Transform line1Point;
-    [SerializeField] private Transform line2Point;
-    [SerializeField] private string customerPointRequiredTag = "CustomerPoint";
+    [SerializeField] private float line1LocalX = -0.6f;
+    [SerializeField] private float line2LocalX = -1.2f;
+    [SerializeField] private GameObject ownerPatrolFromPointPrefab;
+    [SerializeField] private GameObject ownerPatrolToPointPrefab;
     [SerializeField] private Vector2 bottomLocalPosition;
+    [SerializeField] private GameObject exclamationPrefab;
+    [SerializeField] private GameObject[] salaryControlledPrefabs;
+    [SerializeField] private string customerPointRequiredTag = "CustomerPoint";
 
-    [Header("Owner Patrol Range")]
-    [SerializeField] private float ownerPatrolMinLocalX = -1f;
-    [SerializeField] private float ownerPatrolMaxLocalX = 1f;
-
-    [Header("References")]
-    [SerializeField] private OwnerBlood ownerBlood;
+    private const float QueueLocalY = 0f;
+    private const string Line1AnchorName = "_Line1Point";
+    private const string Line2AnchorName = "_Line2Point";
 
     private CustomerBlood counterCustomer;
     private CustomerBlood queueCustomer1;
@@ -67,6 +66,13 @@ public class Building : MonoBehaviour
     private bool serviceRunning;
     private Coroutine salaryRoutine;
     private GameObject exclamationInstance;
+    private GameObject runtimeBossCustomerPointObject;
+    private GameObject runtimeCustomerPointObject;
+    private GameObject runtimeOwnerPatrolFromPointObject;
+    private GameObject runtimeOwnerPatrolToPointObject;
+    private OwnerBlood activeOwnerBlood;
+    private Transform line1Point;
+    private Transform line2Point;
 
     public string SlotId => slotId;
     public string BuildingId => buildingId;
@@ -75,32 +81,32 @@ public class Building : MonoBehaviour
     public bool IsWorking => isPlaced && isWorking;
     public int EnergyValue => energyValue;
     public int CurrentSalary => currentSalary;
-    public int MaxSalary => maxSalary;
-    public Transform ItemPoint => itemPoint != null ? itemPoint : transform;
-    public Transform OwnerPoint => ownerPoint != null ? ownerPoint : transform;
-    public Transform CustomerPoint => customerPoint != null ? customerPoint : transform;
+    public int MaxSalary => GetDefinitionForLevel(level).totalSalaryCapacity;
+    public Transform ItemPoint => OwnerPoint;
+    public Transform OwnerPoint => runtimeBossCustomerPointObject != null ? runtimeBossCustomerPointObject.transform : transform;
+    public Transform CustomerPoint => runtimeCustomerPointObject != null ? runtimeCustomerPointObject.transform : transform;
     public Transform Line1Point => line1Point != null ? line1Point : transform;
     public Transform Line2Point => line2Point != null ? line2Point : transform;
-    public float OwnerPatrolMinLocalX => Mathf.Min(ownerPatrolMinLocalX, ownerPatrolMaxLocalX);
-    public float OwnerPatrolMaxLocalX => Mathf.Max(ownerPatrolMinLocalX, ownerPatrolMaxLocalX);
+    public Vector2 OwnerLocalPosition => ownerLocalPosition;
+    public Vector2 OwnerPatrolFromLocalPosition => GetOrderedPatrolPoint(true);
+    public Vector2 OwnerPatrolToLocalPosition => GetOrderedPatrolPoint(false);
     public Vector2 BottomLocalPosition => bottomLocalPosition;
-    public Sprite Level1Sprite => level1Sprite;
-    public Sprite Level2Sprite => level2Sprite != null ? level2Sprite : level1Sprite;
-    public Sprite WorkingBloodSprite => workingBloodSprite;
+    public Sprite Level1Sprite => GetBuildingPreviewSprite(level1);
+    public Sprite Level2Sprite => GetBuildingPreviewSprite(level2) != null ? GetBuildingPreviewSprite(level2) : GetBuildingPreviewSprite(level1);
+    public Sprite WorkingBloodSprite => GetWorkingBloodSprite();
 
     private void Awake()
     {
-        if (ownerBlood == null)
-            ownerBlood = GetComponentInChildren<OwnerBlood>(true);
-
-        if (ownerBlood != null)
-            ownerBlood.BindBuilding(this);
+        EnsureRuntimeAnchors();
+        EnsurePointObjects();
+        UpdateAnchorPositions();
+        ApplyLevelPresentation();
+        BindOwnerBlood();
     }
 
     private void Start()
     {
-        ApplyLevelVisuals();
-        UpdateWorkingStateFromSalary();
+        UpdateWorkingStateFromSalary(false);
         RestartSalaryRoutine();
         PushStateToVillageManagement();
     }
@@ -114,12 +120,29 @@ public class Building : MonoBehaviour
         }
     }
 
+    private void OnValidate()
+    {
+        level = Mathf.Clamp(level, 1, 2);
+        currentSalary = Mathf.Max(0, currentSalary);
+        level1.totalSalaryCapacity = Mathf.Max(0, level1.totalSalaryCapacity);
+        level2.totalSalaryCapacity = Mathf.Max(0, level2.totalSalaryCapacity);
+
+        ApplyLevelBuildingVisual();
+
+        if (level1BossPrefab != null)
+            level1BossPrefab.transform.localPosition = new Vector3(ownerLocalPosition.x, ownerLocalPosition.y, 0f);
+
+        if (Application.isPlaying)
+        {
+            UpdateAnchorPositions();
+            ApplyLevelPresentation();
+            UpdateWorkingStateFromSalary(false);
+        }
+    }
+
     public float GetPurchaseChance()
     {
-        if (level >= 2)
-            return 0.8f;
-
-        return 0.6f;
+        return level >= 2 ? 0.8f : 0.6f;
     }
 
     public bool HasPurchasableCustomerPoint()
@@ -128,6 +151,9 @@ public class Building : MonoBehaviour
             return false;
 
         if (string.IsNullOrWhiteSpace(customerPointRequiredTag))
+            return true;
+
+        if (runtimeCustomerPointObject != null)
             return true;
 
         return CustomerPoint.CompareTag(customerPointRequiredTag);
@@ -153,9 +179,12 @@ public class Building : MonoBehaviour
         LevelDefinition definition = GetDefinitionForLevel(level);
         switch (percent)
         {
-            case 30: return definition.salaryPrice30;
-            case 60: return definition.salaryPrice60;
-            default: return definition.salaryPrice100;
+            case 30:
+                return definition.salaryPrice30;
+            case 60:
+                return definition.salaryPrice60;
+            default:
+                return definition.salaryPrice100;
         }
     }
 
@@ -166,6 +195,7 @@ public class Building : MonoBehaviour
 
     public bool CanReceiveSalaryPercent(int percent)
     {
+        int maxSalary = MaxSalary;
         return currentSalary < maxSalary && currentSalary + GetSalaryAmountForPercent(percent) <= maxSalary;
     }
 
@@ -174,8 +204,8 @@ public class Building : MonoBehaviour
         if (!CanReceiveSalaryPercent(percent))
             return false;
 
-        currentSalary = Mathf.Clamp(currentSalary + GetSalaryAmountForPercent(percent), 0, maxSalary);
-        UpdateWorkingStateFromSalary();
+        currentSalary = Mathf.Clamp(currentSalary + GetSalaryAmountForPercent(percent), 0, MaxSalary);
+        UpdateWorkingStateFromSalary(true);
         RestartSalaryRoutine();
         PushStateToVillageManagement();
         return true;
@@ -287,8 +317,11 @@ public class Building : MonoBehaviour
 
     public void SetWorking(bool working)
     {
-        isWorking = working;
-        ToggleInactiveVisuals(!IsWorking);
+        bool previousWorking = IsWorking;
+        isWorking = working && currentSalary > 0;
+        ToggleWorkObjects(IsWorking);
+        UpdateExclamation();
+        NotifyWorkStateChanged(previousWorking);
         PushStateToVillageManagement();
 
         if (!isWorking)
@@ -299,20 +332,20 @@ public class Building : MonoBehaviour
 
     public void SetSalary(int current, int max)
     {
-        maxSalary = Mathf.Max(0, max);
-        currentSalary = Mathf.Clamp(current, 0, maxSalary);
-        UpdateWorkingStateFromSalary();
+        LevelDefinition definition = GetDefinitionForLevel(level);
+        definition.totalSalaryCapacity = Mathf.Max(0, max);
+        currentSalary = Mathf.Clamp(current, 0, definition.totalSalaryCapacity);
+        UpdateWorkingStateFromSalary(true);
         RestartSalaryRoutine();
         PushStateToVillageManagement();
     }
 
     public void SetLevel(int nextLevel)
     {
-        level = Mathf.Max(1, nextLevel);
-        maxSalary = GetDefinitionForLevel(level).totalSalaryCapacity;
-        currentSalary = Mathf.Clamp(currentSalary, 0, maxSalary);
-        ApplyLevelVisuals();
-        UpdateWorkingStateFromSalary();
+        level = Mathf.Clamp(nextLevel, 1, 2);
+        currentSalary = Mathf.Clamp(currentSalary, 0, MaxSalary);
+        ApplyLevelPresentation();
+        UpdateWorkingStateFromSalary(true);
         RestartSalaryRoutine();
         PushStateToVillageManagement();
     }
@@ -325,7 +358,7 @@ public class Building : MonoBehaviour
     public void MarkPlaced(bool placed)
     {
         isPlaced = placed;
-        UpdateWorkingStateFromSalary();
+        UpdateWorkingStateFromSalary(true);
         PushStateToVillageManagement();
     }
 
@@ -341,7 +374,7 @@ public class Building : MonoBehaviour
             buildingId = buildingId,
             level = level,
             currentSalary = currentSalary,
-            maxSalary = maxSalary,
+            maxSalary = MaxSalary,
             isPlaced = isPlaced,
             isWorking = IsWorking,
             underConstruction = false,
@@ -375,14 +408,14 @@ public class Building : MonoBehaviour
 
     private void TryStartService()
     {
-        if (serviceRunning || !IsWorking || ownerBlood == null || counterCustomer == null)
+        if (serviceRunning || !IsWorking || activeOwnerBlood == null || counterCustomer == null)
             return;
 
         if (!counterCustomer.IsWaitingAtCounter(this))
             return;
 
         serviceRunning = true;
-        ownerBlood.ServeCustomer(counterCustomer);
+        activeOwnerBlood.ServeCustomer(counterCustomer);
     }
 
     private LevelDefinition GetDefinitionForLevel(int targetLevel)
@@ -390,33 +423,62 @@ public class Building : MonoBehaviour
         return targetLevel >= 2 ? level2 : level1;
     }
 
-    private void ApplyLevelVisuals()
+    private void ApplyLevelPresentation()
     {
-        if (level1.visualRoot != null)
-            level1.visualRoot.SetActive(level <= 1);
-
-        if (level2.visualRoot != null)
-            level2.visualRoot.SetActive(level >= 2);
+        ApplyLevelBuildingVisual();
+        ApplyOwnerActor();
+        UpdateAnchorPositions();
     }
 
-    private void UpdateWorkingStateFromSalary()
+    private void ApplyLevelBuildingVisual()
     {
-        maxSalary = GetDefinitionForLevel(level).totalSalaryCapacity;
-        currentSalary = Mathf.Clamp(currentSalary, 0, maxSalary);
+        if (level1.buildingPrefab != null)
+            level1.buildingPrefab.SetActive(level >= 1);
+
+        if (level2.buildingPrefab != null)
+            level2.buildingPrefab.SetActive(level >= 2);
+    }
+
+    private void ApplyOwnerActor()
+    {
+        activeOwnerBlood = level1BossPrefab != null ? level1BossPrefab.GetComponentInChildren<OwnerBlood>(true) : null;
+
+        if (level1BossPrefab != null && activeOwnerBlood == null)
+            Debug.LogWarning($"Building '{name}' owner object is missing OwnerBlood component.", this);
+
+        BindOwnerBlood();
+    }
+
+    private void BindOwnerBlood()
+    {
+        if (activeOwnerBlood != null)
+            activeOwnerBlood.BindBuilding(this);
+    }
+
+    private void UpdateWorkingStateFromSalary(bool notifyEntranceManagement)
+    {
+        bool previousWorking = IsWorking;
+        currentSalary = Mathf.Clamp(currentSalary, 0, MaxSalary);
         isWorking = currentSalary > 0 && isPlaced;
-        ToggleInactiveVisuals(!isWorking);
+        ToggleWorkObjects(IsWorking);
         UpdateExclamation();
+        NotifyWorkStateChanged(previousWorking, notifyEntranceManagement);
+
+        if (!IsWorking)
+            serviceRunning = false;
+        else
+            TryStartService();
     }
 
-    private void ToggleInactiveVisuals(bool inactive)
+    private void ToggleWorkObjects(bool working)
     {
-        if (disableWhenSalaryEmpty == null)
+        if (salaryControlledPrefabs == null)
             return;
 
-        for (int i = 0; i < disableWhenSalaryEmpty.Length; i++)
+        for (int i = 0; i < salaryControlledPrefabs.Length; i++)
         {
-            if (disableWhenSalaryEmpty[i] != null)
-                disableWhenSalaryEmpty[i].SetActive(!inactive);
+            if (salaryControlledPrefabs[i] != null)
+                salaryControlledPrefabs[i].SetActive(working);
         }
     }
 
@@ -432,6 +494,19 @@ public class Building : MonoBehaviour
         {
             Destroy(exclamationInstance);
             exclamationInstance = null;
+        }
+    }
+
+    private void NotifyWorkStateChanged(bool previousWorking, bool notifyEntranceManagement = true)
+    {
+        if (previousWorking == IsWorking)
+            return;
+
+        if (notifyEntranceManagement)
+        {
+            EntranceManagement entranceManagement = FindFirstObjectByType<EntranceManagement>();
+            if (entranceManagement != null)
+                entranceManagement.NotifyBuildingTrafficChanged();
         }
     }
 
@@ -457,8 +532,94 @@ public class Building : MonoBehaviour
                 continue;
 
             currentSalary = Mathf.Max(0, currentSalary - 1);
-            UpdateWorkingStateFromSalary();
+            UpdateWorkingStateFromSalary(true);
             PushStateToVillageManagement();
         }
+    }
+
+    private void EnsureRuntimeAnchors()
+    {
+        line1Point = FindOrCreateAnchor(Line1AnchorName);
+        line2Point = FindOrCreateAnchor(Line2AnchorName);
+    }
+
+    private void EnsurePointObjects()
+    {
+        runtimeBossCustomerPointObject = ResolvePointObject(bossCustomerPointPrefab, "_BossCustomerPoint");
+        runtimeCustomerPointObject = ResolvePointObject(customerPointPrefab, "_CustomerPoint");
+        runtimeOwnerPatrolFromPointObject = ResolvePointObject(ownerPatrolFromPointPrefab, "_OwnerPatrolFromPoint");
+        runtimeOwnerPatrolToPointObject = ResolvePointObject(ownerPatrolToPointPrefab, "_OwnerPatrolToPoint");
+    }
+
+    private GameObject ResolvePointObject(GameObject referenceObject, string fallbackName)
+    {
+        if (referenceObject != null)
+            return referenceObject;
+
+        Transform existing = transform.Find(fallbackName);
+        if (existing != null)
+            return existing.gameObject;
+
+        GameObject point = new GameObject(fallbackName);
+        point.transform.SetParent(transform, false);
+        return point;
+    }
+
+    private Transform FindOrCreateAnchor(string anchorName)
+    {
+        Transform anchor = transform.Find(anchorName);
+        if (anchor != null)
+            return anchor;
+
+        GameObject root = new GameObject(anchorName);
+        root.transform.SetParent(transform, false);
+        return root.transform;
+    }
+
+    private void UpdateAnchorPositions()
+    {
+        if (line1Point != null)
+            line1Point.localPosition = new Vector3(line1LocalX, QueueLocalY, 0f);
+
+        if (line2Point != null)
+            line2Point.localPosition = new Vector3(line2LocalX, QueueLocalY, 0f);
+
+        if (level1BossPrefab != null)
+            level1BossPrefab.transform.localPosition = new Vector3(ownerLocalPosition.x, ownerLocalPosition.y, 0f);
+    }
+
+    private Vector2 GetOrderedPatrolPoint(bool getMin)
+    {
+        Vector2 from = runtimeOwnerPatrolFromPointObject != null ? (Vector2)runtimeOwnerPatrolFromPointObject.transform.localPosition : Vector2.zero;
+        Vector2 to = runtimeOwnerPatrolToPointObject != null ? (Vector2)runtimeOwnerPatrolToPointObject.transform.localPosition : Vector2.zero;
+
+        return new Vector2(
+            getMin ? Mathf.Min(from.x, to.x) : Mathf.Max(from.x, to.x),
+            getMin ? Mathf.Min(from.y, to.y) : Mathf.Max(from.y, to.y));
+    }
+
+    private Sprite GetPrimarySprite(LevelDefinition definition)
+    {
+        if (definition == null || definition.buildingPrefab == null)
+            return null;
+
+        SpriteRenderer prefabSpriteRenderer = definition.buildingPrefab.GetComponentInChildren<SpriteRenderer>(true);
+        return prefabSpriteRenderer != null ? prefabSpriteRenderer.sprite : null;
+    }
+
+    private Sprite GetWorkingBloodSprite()
+    {
+        if (level1BossPrefab != null)
+        {
+            SpriteRenderer prefabSpriteRenderer = level1BossPrefab.GetComponentInChildren<SpriteRenderer>(true);
+            if (prefabSpriteRenderer != null)
+                return prefabSpriteRenderer.sprite;
+        }
+        return null;
+    }
+
+    private Sprite GetBuildingPreviewSprite(LevelDefinition definition)
+    {
+        return GetPrimarySprite(definition);
     }
 }

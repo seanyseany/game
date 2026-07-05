@@ -11,7 +11,6 @@ GameObject:
   - component: {fileID: 1541285062343360166}
   - component: {fileID: 5466807453487914832}
   - component: {fileID: 2919804444050850644}
-  - component: {fileID: 9013144821909911245}
   - component: {fileID: -6485782237860276794}
   m_Layer: 0
   m_Name: machinGunTrigger
@@ -94,20 +93,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MachineGunTrigger
   consumeOnGateContact: 1
---- !u!114 &9013144821909911245
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5571825750667307304}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 88dfcaede4c9340e8a74567b94c88fdd, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Mover
-  baseSpeed: 12
-  defaultBaseSpeed: 0
 --- !u!50 &-6485782237860276794
 Rigidbody2D:
   serializedVersion: 5

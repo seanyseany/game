@@ -58,7 +58,6 @@ public class O2 : MonoBehaviour, IReinitializable
     private void OnEnable()
     {
         GameData.OnRageStart += HandleRageStart;
-        GameData.OnMachineGunTrigger += HandleMachineGunTrigger;
 
         if (spriteRenderer == null)
             spriteRenderer = GetComponent<SpriteRenderer>();
@@ -72,7 +71,6 @@ public class O2 : MonoBehaviour, IReinitializable
     private void OnDisable()
     {
         GameData.OnRageStart -= HandleRageStart;
-        GameData.OnMachineGunTrigger -= HandleMachineGunTrigger;
         RestoreIdleVisualState();
 
         if (collectRoutine != null)
@@ -177,14 +175,6 @@ public class O2 : MonoBehaviour, IReinitializable
     }
 
     private void HandleRageStart()
-    {
-        if (!isActiveAndEnabled || collected)
-            return;
-
-        StartDestroySequence(grantReward: false);
-    }
-
-    private void HandleMachineGunTrigger()
     {
         if (!isActiveAndEnabled || collected)
             return;

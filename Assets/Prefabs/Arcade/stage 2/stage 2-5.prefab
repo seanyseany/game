@@ -9,6 +9,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6340716225815163468}
+  - component: {fileID: -3404440420551510527}
   m_Layer: 0
   m_Name: stage 2-5
   m_TagString: Untagged
@@ -41,6 +42,21 @@ Transform:
   - {fileID: 2959007182818366225}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &-3404440420551510527
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2659614723417223950}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 88dfcaede4c9340e8a74567b94c88fdd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Mover
+  baseSpeed: 6
+  applyStageSpeedMultiplier: 1
+  defaultBaseSpeed: 0
 --- !u!1001 &923586587181394181
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -133,7 +149,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3650951727792218632, guid: de77b24b6f87441108acc9cdb4c76333, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -1.99
+      value: -1.8599999
       objectReference: {fileID: 0}
     - target: {fileID: 3650951727792218632, guid: de77b24b6f87441108acc9cdb4c76333, type: 3}
       propertyPath: m_LocalPosition.z
@@ -251,13 +267,21 @@ PrefabInstance:
       propertyPath: m_Name
       value: Obstacle_D upDown4 (1)
       objectReference: {fileID: 0}
+    - target: {fileID: 4699660164343134443, guid: 0eef24c33ddb14d35a2ff59e13cc866c, type: 3}
+      propertyPath: moveSpeed
+      value: 2.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 4699660164343134443, guid: 0eef24c33ddb14d35a2ff59e13cc866c, type: 3}
+      propertyPath: moveYOffset
+      value: 5
+      objectReference: {fileID: 0}
     - target: {fileID: 5953909692756639684, guid: 0eef24c33ddb14d35a2ff59e13cc866c, type: 3}
       propertyPath: m_LocalPosition.x
       value: -17.56
       objectReference: {fileID: 0}
     - target: {fileID: 5953909692756639684, guid: 0eef24c33ddb14d35a2ff59e13cc866c, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -6.94
+      value: -9.01
       objectReference: {fileID: 0}
     - target: {fileID: 5953909692756639684, guid: 0eef24c33ddb14d35a2ff59e13cc866c, type: 3}
       propertyPath: m_LocalPosition.z
@@ -375,6 +399,14 @@ PrefabInstance:
       propertyPath: m_Name
       value: Obstacle_D upDown4
       objectReference: {fileID: 0}
+    - target: {fileID: 4699660164343134443, guid: 0eef24c33ddb14d35a2ff59e13cc866c, type: 3}
+      propertyPath: moveSpeed
+      value: 2.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 4699660164343134443, guid: 0eef24c33ddb14d35a2ff59e13cc866c, type: 3}
+      propertyPath: moveYOffset
+      value: 5
+      objectReference: {fileID: 0}
     - target: {fileID: 5953909692756639684, guid: 0eef24c33ddb14d35a2ff59e13cc866c, type: 3}
       propertyPath: m_LocalScale.x
       value: 0.80992
@@ -385,7 +417,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5953909692756639684, guid: 0eef24c33ddb14d35a2ff59e13cc866c, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -8.39
+      value: -10.39
       objectReference: {fileID: 0}
     - target: {fileID: 5953909692756639684, guid: 0eef24c33ddb14d35a2ff59e13cc866c, type: 3}
       propertyPath: m_LocalPosition.z
@@ -517,11 +549,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3650951727792218632, guid: de77b24b6f87441108acc9cdb4c76333, type: 3}
       propertyPath: m_LocalPosition.x
-      value: -12.806608
+      value: -12.74
       objectReference: {fileID: 0}
     - target: {fileID: 3650951727792218632, guid: de77b24b6f87441108acc9cdb4c76333, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -1.0300002
+      value: -1.05
       objectReference: {fileID: 0}
     - target: {fileID: 3650951727792218632, guid: de77b24b6f87441108acc9cdb4c76333, type: 3}
       propertyPath: m_LocalPosition.z
@@ -651,13 +683,21 @@ PrefabInstance:
       propertyPath: m_Name
       value: Obstacle_D upDown4 (2)
       objectReference: {fileID: 0}
+    - target: {fileID: 4699660164343134443, guid: 0eef24c33ddb14d35a2ff59e13cc866c, type: 3}
+      propertyPath: moveSpeed
+      value: 2.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 4699660164343134443, guid: 0eef24c33ddb14d35a2ff59e13cc866c, type: 3}
+      propertyPath: moveYOffset
+      value: 5
+      objectReference: {fileID: 0}
     - target: {fileID: 5953909692756639684, guid: 0eef24c33ddb14d35a2ff59e13cc866c, type: 3}
       propertyPath: m_LocalPosition.x
       value: -12.8
       objectReference: {fileID: 0}
     - target: {fileID: 5953909692756639684, guid: 0eef24c33ddb14d35a2ff59e13cc866c, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -5.8700004
+      value: -8.17
       objectReference: {fileID: 0}
     - target: {fileID: 5953909692756639684, guid: 0eef24c33ddb14d35a2ff59e13cc866c, type: 3}
       propertyPath: m_LocalPosition.z

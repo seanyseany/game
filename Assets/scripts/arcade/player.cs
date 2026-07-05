@@ -77,6 +77,7 @@ public class Player : MonoBehaviour
     public string rageSmokePoolTag = "transformSmoke";
     public string rageSmokePoolTagSecondary = "transformSmoke";
     public string rageAttackSmokePoolTag = "p5ragesmoke";
+    public string rageAttackSmokePoolTagSecondary = "p5ragesmoke_secondary";
     public string hitboxP1PoolTag = "PlayerHitboxP1";
     public string hitboxP3PoolTag = "PlayerHitboxP3";
     public string hitboxP5PoolTag = "PlayerHitboxP5";
@@ -127,6 +128,7 @@ public class Player : MonoBehaviour
     public GameObject rageSmokePrefab;
     public GameObject rageSmokePrefabSecondary;
     public GameObject rageAttackSmokePrefab;
+    public GameObject rageAttackSmokePrefabSecondary;
     public GameObject rageAttachedSmokePrimary;
     public GameObject rageAttachedSmokeSecondary;
     public Vector2 rageTransformHitboxSize = new Vector2(15f, 2f);
@@ -192,6 +194,7 @@ public class Player : MonoBehaviour
     private bool isLanding = false;
     private float lastGroundedTime = -999f;
     private float attackStateStartTime = -999f;
+    private float flyattackProtectedUntil = -999f;
     private bool isSpawnIntroActive = false;
     private Coroutine spawnIntroRoutine;
     private bool jumpedThisAirborne = false;
@@ -201,6 +204,7 @@ public class Player : MonoBehaviour
     private const float rangedFlyattackDuration = 0.5f;
     private Coroutine activeLandingRoutine;
     private const float rageRangedAttackAnimDuration = 0.5f;
+    private const float stompFlyattackProtectDuration = 0.1f;
 
     [Header("Running Smoke")]
     public GameObject runningSmokePrefab;
@@ -666,11 +670,13 @@ public class Player : MonoBehaviour
         isAttacking = false;
         attackStateStartTime = -999f;
 
-        if (!foundGround || isDead)
+        if (isDead)
             yield break;
 
         if (playerType == T1 || playerType == T5)
         {
+            // P1/P5 지상 공격은 접지 probe가 흔들려도 Attack 다음에 반드시 Land를 거치게 한다.
+            isGrounded = true;
             isLanding = true;
             hasLanded = false;
 
@@ -682,6 +688,9 @@ public class Player : MonoBehaviour
             isLanding = false;
             yield break;
         }
+
+        if (!foundGround)
+            yield break;
 
         ForceAnimationState("Base Walk", "Walk");
     }
@@ -1610,6 +1619,7 @@ public class Player : MonoBehaviour
         if (isGrounded) yield break;
         isAttacking = true;
         attackStateStartTime = Time.time;
+        flyattackProtectedUntil = Time.time + stompFlyattackProtectDuration;
 
         rb.gravityScale = cachedGravity;
         rb.linearVelocity = new Vector2(rb.linearVelocity.x, stompSpeed);
@@ -1624,6 +1634,7 @@ public class Player : MonoBehaviour
         if (isGrounded) yield break;
         isAttacking = true;
         attackStateStartTime = Time.time;
+        flyattackProtectedUntil = Time.time + stompFlyattackProtectDuration;
 
         rb.gravityScale = cachedGravity;
         rb.linearVelocity = new Vector2(rb.linearVelocity.x, stompSpeed*1.5f);
@@ -1639,6 +1650,7 @@ public class Player : MonoBehaviour
         if (!isAttacking || !isGrounded || hasLanded || isLanding) return;  // isLanding 추가
         if (GameData.Instance == null) return;
         if (!IsFlyattackStateActive()) return;
+        if (IsStompFlyattackProtected()) return;
 
         hasLanded = true;
         isLanding = true;   // 추가
@@ -1679,11 +1691,11 @@ public class Player : MonoBehaviour
                     }
                     break;
                 case T5:
-                    if (onFloor && rageAttackSmokePrefab != null)
+                    if (onFloor && (rageAttackSmokePrefab != null || rageAttackSmokePrefabSecondary != null))
                     {
-                        prefab = rageAttackSmokePrefab;
-                        tag = rageAttackSmokePoolTag;
-                        scale = 4f;
+                        Vector3 ragePos = new Vector3(transform.position.x, transform.position.y - 0.5f, -0.5f);
+                        SpawnP5RageAttackSmokes(ragePos, 4f);
+                        return;
                     }
                     break;
             }
@@ -1955,7 +1967,7 @@ public class Player : MonoBehaviour
         {
             // Rage 전용 (floor에서만)
             Vector3 pos = new Vector3(transform.position.x, transform.position.y - 0.5f, -0.5f);
-            SpawnSmokeFromPrefab(rage3SmokePrefab, pos, rage3SmokePoolTag);
+            SpawnP3RageSmokeInstance(pos);
         }
         yield return new WaitForSeconds(landDuration * 1.5f);
         if (isTransformLock || currentAnim == "Transform")
@@ -2010,11 +2022,8 @@ public class Player : MonoBehaviour
         // ✅ Rage 상태일 때 연기 크기 1.5배
         if (spawnLandingSmoke && landedOnFloor && isRageMode && isGrounded)
         {
-            if (rageAttackSmokePrefab != null)
-            {
-                Vector3 pos = new Vector3(transform.position.x, transform.position.y - 0.5f, -0.5f);
-                SpawnSmokeFromPrefab(rageAttackSmokePrefab, pos, rageAttackSmokePoolTag, 4f);  // 🔥 크기 4배
-            }
+            Vector3 pos = new Vector3(transform.position.x, transform.position.y - 0.5f, -0.5f);
+            SpawnP5RageAttackSmokes(pos, 4f);  // 🔥 크기 4배
         }
         else if (spawnLandingSmoke)
         {
@@ -2479,12 +2488,10 @@ public class Player : MonoBehaviour
         if (isRageMode && rage3SmokePrefab != null)
         {
             Vector3 pos = new Vector3(transform.position.x, transform.position.y - 0.5f, -0.5f);
-            bool fromPool;
-            var go = SpawnWithPool(rage3SmokePrefab, rage3SmokePoolTag, pos, Quaternion.identity, out fromPool, 8);
+            var go = SpawnP3RageSmokeInstance(pos);
             var zig = go != null ? go.GetComponent<ZigzagLightning>() : null;
             if (zig)
             {
-                zig.ConfigurePooling(fromPool, rage3SmokePoolTag);
                 zig.damage = stats.attack;
             }
         }
@@ -2764,7 +2771,10 @@ public class Player : MonoBehaviour
             smoke.SetActive(active);
 
         if (active)
+        {
+            RestartAnimatorFromBeginning(smoke);
             ApplyRageSmokeDirection(smoke, ResolveRageSmokeDirection());
+        }
     }
 
     private void UpdateRageSmokeAnimationState()
@@ -3517,6 +3527,7 @@ public class Player : MonoBehaviour
         int t = GameData.Instance.selectedPlayerType;
         if (!IsStompPlayerType(t)) return;
         if (!isAttacking || !IsFlyattackStateActive()) return;
+        if (IsStompFlyattackProtected()) return;
 
         bool groundedNow = isGrounded || IsStandingOnGround();
         if (!groundedNow) return;
@@ -3542,6 +3553,7 @@ public class Player : MonoBehaviour
 
         int t = GameData.Instance.selectedPlayerType;
         if (!IsStompPlayerType(t)) return;
+        if (IsStompFlyattackProtected()) return;
 
         bool groundedNow = isGrounded || IsStandingOnGround();
         if (!groundedNow) return;
@@ -3603,6 +3615,21 @@ public class Player : MonoBehaviour
         ForceAnimationState("Base Walk", "Walk");
     }
 
+    private bool IsStompFlyattackProtected()
+    {
+        if (Time.time > flyattackProtectedUntil)
+            return false;
+
+        if (GameData.Instance == null)
+            return false;
+
+        int t = GameData.Instance.selectedPlayerType;
+        if (!IsStompPlayerType(t))
+            return false;
+
+        return IsFlyattackStateActive() || currentAnim == "Jump";
+    }
+
     private GameObject SpawnWithPool(GameObject prefab, string tag, Vector3 pos, Quaternion rot, out bool spawnedFromPool, int initialSize = 0)
     {
         spawnedFromPool = false;
@@ -3651,6 +3678,17 @@ public class Player : MonoBehaviour
         return tag;
     }
 
+    private void SpawnP5RageAttackSmokes(Vector3 pos, float scale = 4f)
+    {
+        if (rageAttackSmokePrefab != null)
+            SpawnSmokeFromPrefab(rageAttackSmokePrefab, pos, rageAttackSmokePoolTag, scale);
+
+        if (rageAttackSmokePrefabSecondary == null)
+            return;
+
+        SpawnSmokeFromPrefab(rageAttackSmokePrefabSecondary, pos, rageAttackSmokePoolTagSecondary, scale);
+    }
+
     private GameObject SpawnSmokeFromPrefab(GameObject prefab, Vector3 pos, string poolTag, float scaleMult = 1f)
     {
         bool fromPool;
@@ -3665,7 +3703,80 @@ public class Player : MonoBehaviour
         if (mover != null)
             mover.ConfigurePooling(fromPool, poolTag);
 
+        RestartAnimatorFromBeginning(go);
+
         return go;
+    }
+
+    private GameObject SpawnP3RageSmokeInstance(Vector3 pos, float scaleMult = 1f)
+    {
+        if (rage3SmokePrefab == null)
+            return null;
+
+        var go = Instantiate(rage3SmokePrefab, pos, Quaternion.identity);
+        if (go == null)
+            return null;
+
+        go.transform.position = new Vector3(pos.x, pos.y, -0.5f);
+        go.transform.rotation = Quaternion.identity;
+        go.transform.localScale = rage3SmokePrefab.transform.localScale * Mathf.Max(0.01f, scaleMult);
+
+        var mover = go.GetComponent<SmokeMover>();
+        if (mover != null)
+            mover.ConfigurePooling(false, string.Empty);
+
+        RestartAnimatorFromBeginning(go);
+
+        var zig = go.GetComponent<ZigzagLightning>();
+        if (zig != null)
+        {
+            zig.ConfigurePooling(false, string.Empty);
+
+            float clipLength = GetPrimaryAnimatorClipLength(go);
+            if (clipLength > zig.life)
+                zig.ActivateDamageHitbox(zig.damage, clipLength, false, string.Empty);
+        }
+
+        return go;
+    }
+
+    private float GetPrimaryAnimatorClipLength(GameObject target)
+    {
+        if (target == null)
+            return 0f;
+
+        var animator = target.GetComponent<Animator>();
+        if (animator == null || animator.runtimeAnimatorController == null)
+            return 0f;
+
+        var clips = animator.runtimeAnimatorController.animationClips;
+        if (clips == null || clips.Length == 0)
+            return 0f;
+
+        float maxLength = 0f;
+        for (int i = 0; i < clips.Length; i++)
+        {
+            var clip = clips[i];
+            if (clip != null && clip.length > maxLength)
+                maxLength = clip.length;
+        }
+
+        return maxLength;
+    }
+
+    private void RestartAnimatorFromBeginning(GameObject target)
+    {
+        if (target == null)
+            return;
+
+        var animator = target.GetComponent<Animator>();
+        if (animator == null || animator.runtimeAnimatorController == null)
+            return;
+
+        animator.Rebind();
+        animator.Update(0f);
+        animator.Play(0, 0, 0f);
+        animator.Update(0f);
     }
 
     private void StartRageSpeedEffect()
@@ -3919,6 +4030,14 @@ public class Player : MonoBehaviour
         }
         if (string.IsNullOrEmpty(rageAttackSmokePoolTag))
             rageAttackSmokePoolTag = "P5RageAttackSmoke";
+        if (string.IsNullOrEmpty(rageAttackSmokePoolTagSecondary))
+            rageAttackSmokePoolTagSecondary = rageAttackSmokePoolTag;
+        if (rageAttackSmokePrefabSecondary != null &&
+            rageAttackSmokePrefabSecondary != rageAttackSmokePrefab &&
+            rageAttackSmokePoolTagSecondary == rageAttackSmokePoolTag)
+        {
+            rageAttackSmokePoolTagSecondary = rageAttackSmokePoolTag + "_Secondary";
+        }
         if (string.IsNullOrEmpty(floorSmokePoolTag))
             floorSmokePoolTag = "FloorSmoke";
         if (string.IsNullOrEmpty(speedEffectPoolTag))
@@ -3978,6 +4097,22 @@ public class Player : MonoBehaviour
                 smokeP5PoolTag = smokePoolTag + "_P5";
         }
 
+        if (rageAttackSmokePrefab != null)
+        {
+            var mover = rageAttackSmokePrefab.GetComponent<SmokeMover>();
+            if (mover != null && !string.IsNullOrEmpty(mover.PoolTag))
+                rageAttackSmokePoolTag = mover.PoolTag;
+        }
+
+        if (rageAttackSmokePrefabSecondary != null)
+        {
+            var mover = rageAttackSmokePrefabSecondary.GetComponent<SmokeMover>();
+            if (mover != null && !string.IsNullOrEmpty(mover.PoolTag))
+                rageAttackSmokePoolTagSecondary = mover.PoolTag;
+            else if (rageAttackSmokePoolTagSecondary == rageAttackSmokePoolTag)
+                rageAttackSmokePoolTagSecondary = rageAttackSmokePoolTag + "_Secondary";
+        }
+
         if (floorSmokePrefab != null)
         {
             var mover = floorSmokePrefab.GetComponent<SmokeMover>();
@@ -4025,6 +4160,11 @@ public class Player : MonoBehaviour
             PrewarmPool(rageSmokePoolTagSecondary, secondaryPrefab, 8);
         }
         PrewarmPool(rageAttackSmokePoolTag, rageAttackSmokePrefab, 8);
+        if (rageAttackSmokePrefabSecondary != null || rageAttackSmokePoolTagSecondary != rageAttackSmokePoolTag)
+        {
+            GameObject secondaryPrefab = rageAttackSmokePrefabSecondary != null ? rageAttackSmokePrefabSecondary : rageAttackSmokePrefab;
+            PrewarmPool(rageAttackSmokePoolTagSecondary, secondaryPrefab, 8);
+        }
         PrewarmPool(runningSmokePoolTag, runningSmokePrefab, 12);
         int speedEffectPoolSize = speedEffectSpawnWorldPositions != null && speedEffectSpawnWorldPositions.Length > 0
             ? speedEffectSpawnWorldPositions.Length * 2

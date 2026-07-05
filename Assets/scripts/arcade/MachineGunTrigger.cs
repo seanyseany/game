@@ -45,6 +45,8 @@ public class MachineGunTrigger : MonoBehaviour
 
         if (!playerIsRaging)
         {
+            MachineGunObstacle.SetCurrentSource(ResolveMachineGunObstacle());
+
             int queuedBossStage = 0;
             if (StageManager.Instance != null &&
                 StageManager.Instance.TryResolveBossStageFromTaggedObject(gameObject, out int bossStage))
@@ -64,5 +66,30 @@ public class MachineGunTrigger : MonoBehaviour
     private static bool IsGateCollider(Collider2D other)
     {
         return other.GetComponent<GateHealth>() != null || other.GetComponentInParent<GateHealth>() != null;
+    }
+
+    private MachineGunObstacle ResolveMachineGunObstacle()
+    {
+        MachineGunObstacle obstacle = GetComponent<MachineGunObstacle>();
+        if (obstacle != null)
+            return obstacle;
+
+        obstacle = GetComponentInParent<MachineGunObstacle>(true);
+        if (obstacle != null)
+            return obstacle;
+
+        PhaseLayoutSnapshot phaseRoot = GetComponentInParent<PhaseLayoutSnapshot>(true);
+        if (phaseRoot != null)
+        {
+            obstacle = phaseRoot.GetComponent<MachineGunObstacle>();
+            if (obstacle != null)
+                return obstacle;
+
+            obstacle = phaseRoot.GetComponentInChildren<MachineGunObstacle>(true);
+            if (obstacle != null)
+                return obstacle;
+        }
+
+        return GetComponentInChildren<MachineGunObstacle>(true);
     }
 }

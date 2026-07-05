@@ -69,16 +69,27 @@ public class OxygenImplementation : MonoBehaviour
 
     public void TryUpgrade()
     {
-        if (currentOxygen == null || currentOxygen.Level >= 3 || currentOxygen.UpgradePrefab == null || VillageManagement.Instance == null)
+        if (currentOxygen == null || currentOxygen.Level >= 3 || VillageManagement.Instance == null)
             return;
 
-        Oxygen upgradePrefab = currentOxygen.UpgradePrefab;
+        Oxygen upgradePrefab = GetUpgradePrefab();
+        if (upgradePrefab == null)
+            return;
+
         if (!VillageManagement.Instance.TrySpendOxygen(upgradePrefab.CurrentOxygenPrice))
             return;
 
         Destroy(currentOxygen.gameObject);
         PlaceOxygen(GetPrefabForLevel(upgradePrefab.Level, upgradePrefab), upgradePrefab.Level);
         oxygenGeneratorUI?.Open(this, currentOxygen);
+    }
+
+    public Oxygen GetUpgradePrefab()
+    {
+        if (currentOxygen == null)
+            return null;
+
+        return GetPrefabForLevel(currentOxygen.Level + 1, null);
     }
 
     public void RemoveOxygen()

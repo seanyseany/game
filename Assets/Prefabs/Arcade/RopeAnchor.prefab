@@ -10,7 +10,6 @@ GameObject:
   m_Component:
   - component: {fileID: 346637303079487551}
   - component: {fileID: 3878306062186373023}
-  - component: {fileID: -7511342457959104933}
   - component: {fileID: 3863570834917802535}
   - component: {fileID: -128200475052660533}
   m_Layer: 3
@@ -63,20 +62,6 @@ Rigidbody2D:
   m_SleepingMode: 1
   m_CollisionDetection: 0
   m_Constraints: 0
---- !u!114 &-7511342457959104933
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 574826466508047915}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 88dfcaede4c9340e8a74567b94c88fdd, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  baseSpeed: 6
-  defaultBaseSpeed: 0
 --- !u!114 &3863570834917802535
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -417,6 +402,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   rb: {fileID: 1390210288586801323}
   initialTorque: 4000
+  fallbackAngularVelocity: 45
 --- !u!114 &6668431722383761550
 MonoBehaviour:
   m_ObjectHideFlags: 0
