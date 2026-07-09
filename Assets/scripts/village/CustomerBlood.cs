@@ -5,19 +5,31 @@ using UnityEngine;
 [RequireComponent(typeof(Collider2D))]
 public class CustomerBlood : MonoBehaviour
 {
+    private enum VisualState
+    {
+        Walking,
+        ReceivingItem,
+        CarryingItem
+    }
+
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 2f;
     [SerializeField] private Vector2 heldItemLocalPosition = new Vector2(0.2f, 0.2f);
+    [SerializeField] private Vector2 receiveItemLocalPosition = new Vector2(0.1f, 0.2f);
+    [SerializeField] private float roamPauseMin = 0f;
+    [SerializeField] private float roamPauseMax = 0f;
 
-    [Header("Animation")]
-    [SerializeField] private Animator animator;
-    [SerializeField] private string liftTrigger = "Lift";
-    [SerializeField] private string idleTrigger = "Idle";
-    [SerializeField] private string walkTrigger = "Walk";
+    [Header("Sprites")]
+    [SerializeField] private SpriteRenderer spriteRenderer;
+    [SerializeField] private Sprite receiveItemSprite;
+    [SerializeField] private Sprite carryingWalkSprite;
+    [SerializeField] private Sprite walkingSprite;
+    [SerializeField] private float receivingToCarryingDelay = 0.5f;
 
     private Rigidbody2D body;
     private Coroutine lifeRoutine;
     private Coroutine moveRoutine;
+    private Coroutine visualRoutine;
     private EntranceManagement ownerEntranceManagement;
     private Entrance sourceEntrance;
     private Way currentWay;
@@ -25,19 +37,29 @@ public class CustomerBlood : MonoBehaviour
     private Building targetBuilding;
     private Building.QueueSlot currentQueueSlot = Building.QueueSlot.None;
     private GameObject heldItemInstance;
-    private bool facingRight = true;
+    private bool facingLeft = true;
     private bool waitingAtCounter;
     private bool purchaseFinished;
+    private bool transitioningToCarry;
     private string spawnEntryId;
+    private float fixedZ;
+    private int routeSequenceIndex = int.MinValue;
     private int currentRouteNodeIndex = -1;
+    private int routeTravelDirection = 1;
+    private readonly WaitForFixedUpdate waitForFixedUpdate = new WaitForFixedUpdate();
 
     public string SpawnEntryId => spawnEntryId;
 
     private void Awake()
     {
+        if (spriteRenderer == null)
+            spriteRenderer = GetComponentInChildren<SpriteRenderer>();
+
         body = GetComponent<Rigidbody2D>();
+        body.interpolation = RigidbodyInterpolation2D.Interpolate;
         body.gravityScale = 0f;
         body.linearVelocity = Vector2.zero;
+        fixedZ = transform.position.z;
     }
 
     public void InitializeSpawn(
@@ -45,7 +67,8 @@ public class CustomerBlood : MonoBehaviour
         EntranceManagement entranceManagement,
         Entrance entrance,
         Way way,
-        Path path)
+        Path path,
+        int selectedRouteSequenceIndex)
     {
         ResetState();
 
@@ -54,9 +77,11 @@ public class CustomerBlood : MonoBehaviour
         sourceEntrance = entrance;
         currentWay = way;
         currentPath = path;
+        routeSequenceIndex = selectedRouteSequenceIndex;
         targetBuilding = path != null ? path.Building : null;
 
-        transform.position = entrance != null ? entrance.SpawnWorldPosition : transform.position;
+        Vector3 spawnPosition = entrance != null ? entrance.SpawnWorldPosition : transform.position;
+        transform.position = WithFixedZ(spawnPosition);
 
         if (lifeRoutine != null)
             StopCoroutine(lifeRoutine);
@@ -84,13 +109,18 @@ public class CustomerBlood : MonoBehaviour
         if (itemPrefab != null)
         {
             heldItemInstance = Instantiate(itemPrefab, transform);
-            heldItemInstance.transform.localPosition = heldItemLocalPosition;
+            heldItemInstance.transform.localPosition = receiveItemLocalPosition;
             heldItemInstance.transform.localRotation = Quaternion.identity;
         }
 
         purchaseFinished = true;
         waitingAtCounter = false;
-        PlayTrigger(liftTrigger);
+        transitioningToCarry = true;
+
+        if (visualRoutine != null)
+            StopCoroutine(visualRoutine);
+
+        visualRoutine = StartCoroutine(ReceiveThenCarryRoutine());
     }
 
     private IEnumerator LifeCycleRoutine()
@@ -110,10 +140,13 @@ public class CustomerBlood : MonoBehaviour
 
             while (!purchaseFinished && Time.time < endTime)
                 yield return null;
+
+            while (transitioningToCarry && Time.time < endTime)
+                yield return null;
         }
         else
         {
-            PlayTrigger(walkTrigger);
+            ApplyVisualState(VisualState.Walking);
             yield return RoamUntil(endTime);
         }
 
@@ -134,13 +167,25 @@ public class CustomerBlood : MonoBehaviour
             }
         }
 
-        Vector3 waypointPosition = currentWay != null
-            ? GetNextWayNodeWorldPosition()
-            : currentPath.GetRandomWorldPointOnPath();
-        yield return MoveToRoutine(waypointPosition, false, null);
+        if (currentWay != null)
+        {
+            int nextRouteNodeIndex = GetNextWayNodeIndex();
+            if (nextRouteNodeIndex >= 0)
+                yield return MoveToRouteNodeRoutine(nextRouteNodeIndex);
+            else
+                yield return MoveToRoutine(currentWay.GetRandomRoamWorldPoint(), false, null);
+        }
+        else
+        {
+            yield return MoveToRoutine(currentPath.GetRandomWorldPointOnPath(), false, null);
+        }
 
         if (Time.time < endTime)
-            yield return new WaitForSeconds(Random.Range(0.2f, 0.8f));
+        {
+            float pauseDuration = GetRoamPauseDuration();
+            if (pauseDuration > 0f)
+                yield return new WaitForSeconds(pauseDuration);
+        }
     }
 
     private IEnumerator ReturnToEntranceAndDespawn()
@@ -148,32 +193,42 @@ public class CustomerBlood : MonoBehaviour
         if (targetBuilding != null)
             targetBuilding.NotifyCustomerLeaving(this);
 
+        yield return ReturnAlongRouteSequence();
+
         Vector3 targetPosition = sourceEntrance != null ? sourceEntrance.DespawnWorldPosition : transform.position;
         yield return MoveToRoutine(targetPosition, false, null);
 
-        ownerEntranceManagement.NotifyCustomerDespawned(this);
+        ownerEntranceManagement?.NotifyCustomerDespawned(this);
         gameObject.SetActive(false);
     }
 
     private IEnumerator MoveToRoutine(Vector3 targetPosition, bool idleAtEnd, Building notifyBuilding)
     {
         waitingAtCounter = false;
+        targetPosition = WithFixedZ(targetPosition);
 
         while (Vector3.Distance(transform.position, targetPosition) > 0.03f)
         {
-            Vector3 next = Vector3.MoveTowards(transform.position, targetPosition, moveSpeed * Time.deltaTime);
+            Vector3 next = Vector3.MoveTowards(transform.position, targetPosition, moveSpeed * Time.fixedDeltaTime);
+            next.z = fixedZ;
             UpdateFacing(next.x - transform.position.x);
             body.MovePosition(next);
-            PlayTrigger(walkTrigger);
-            yield return null;
+            if (!purchaseFinished)
+                ApplyVisualState(VisualState.Walking);
+            else if (transitioningToCarry)
+                ApplyVisualState(VisualState.ReceivingItem);
+            else
+                ApplyVisualState(VisualState.CarryingItem);
+            yield return waitForFixedUpdate;
         }
 
-        body.MovePosition(targetPosition);
+        body.MovePosition(WithFixedZ(targetPosition));
 
         if (idleAtEnd)
         {
             waitingAtCounter = true;
-            PlayTrigger(idleTrigger);
+            if (!purchaseFinished)
+                ApplyVisualState(VisualState.Walking);
         }
 
         if (notifyBuilding != null)
@@ -194,6 +249,12 @@ public class CustomerBlood : MonoBehaviour
             lifeRoutine = null;
         }
 
+        if (visualRoutine != null)
+        {
+            StopCoroutine(visualRoutine);
+            visualRoutine = null;
+        }
+
         if (heldItemInstance != null)
             Destroy(heldItemInstance);
 
@@ -208,28 +269,90 @@ public class CustomerBlood : MonoBehaviour
         currentQueueSlot = Building.QueueSlot.None;
         waitingAtCounter = false;
         purchaseFinished = false;
-        currentRouteNodeIndex = -1;
+        transitioningToCarry = false;
         spawnEntryId = string.Empty;
+        routeSequenceIndex = int.MinValue;
+        currentRouteNodeIndex = -1;
+        routeTravelDirection = 1;
         body.linearVelocity = Vector2.zero;
-        PlayTrigger(walkTrigger);
+        facingLeft = true;
+        Vector3 angles = transform.localEulerAngles;
+        angles.y = 0f;
+        transform.localEulerAngles = angles;
+        ApplyVisualState(VisualState.Walking);
     }
 
-    private Vector3 GetNextWayNodeWorldPosition()
+    private Vector3 WithFixedZ(Vector3 position)
+    {
+        position.z = fixedZ;
+        return position;
+    }
+
+    private int GetNextWayNodeIndex()
     {
         if (currentWay == null)
-            return transform.position;
+            return -1;
 
-        int nextIndex = currentRouteNodeIndex < 0
-            ? currentWay.GetFirstRouteNodeIndex()
-            : currentWay.GetNextRouteNodeIndex(currentRouteNodeIndex);
+        if (currentRouteNodeIndex < 0)
+            return currentWay.GetFirstRouteNodeIndex(routeSequenceIndex);
 
-        if (nextIndex >= 0 && currentWay.TryGetRouteNode(nextIndex, out Vector3 worldPoint))
+        if (routeTravelDirection >= 0)
         {
-            currentRouteNodeIndex = nextIndex;
-            return worldPoint;
+            int nextIndex = currentWay.GetNextRouteNodeIndexNoLoop(routeSequenceIndex, currentRouteNodeIndex);
+            if (nextIndex >= 0)
+                return nextIndex;
+
+            routeTravelDirection = -1;
+            int previousIndex = currentWay.GetPreviousRouteNodeIndexNoLoop(routeSequenceIndex, currentRouteNodeIndex);
+            return previousIndex >= 0 ? previousIndex : currentRouteNodeIndex;
         }
 
-        return transform.position;
+        int reverseIndex = currentWay.GetPreviousRouteNodeIndexNoLoop(routeSequenceIndex, currentRouteNodeIndex);
+        if (reverseIndex >= 0)
+            return reverseIndex;
+
+        routeTravelDirection = 1;
+        int forwardIndex = currentWay.GetNextRouteNodeIndexNoLoop(routeSequenceIndex, currentRouteNodeIndex);
+        return forwardIndex >= 0 ? forwardIndex : currentRouteNodeIndex;
+    }
+
+    private IEnumerator ReturnAlongRouteSequence()
+    {
+        if (currentWay == null || routeSequenceIndex == int.MinValue)
+            yield break;
+
+        int returnNodeIndex;
+        if (currentRouteNodeIndex < 0)
+        {
+            returnNodeIndex = currentWay.GetClosestRouteNodeIndex(routeSequenceIndex, transform.position);
+        }
+        else
+        {
+            int nextNodeIndex = currentWay.GetNextRouteNodeIndexNoLoop(routeSequenceIndex, currentRouteNodeIndex);
+            int lastNodeIndex = currentWay.GetLastRouteNodeIndex(routeSequenceIndex);
+            if (nextNodeIndex >= 0)
+                returnNodeIndex = nextNodeIndex;
+            else
+                returnNodeIndex = lastNodeIndex >= 0 ? lastNodeIndex : currentRouteNodeIndex;
+        }
+
+        while (returnNodeIndex >= 0)
+        {
+            yield return MoveToRouteNodeRoutine(returnNodeIndex);
+            returnNodeIndex = currentWay.GetPreviousRouteNodeIndexNoLoop(routeSequenceIndex, returnNodeIndex);
+        }
+    }
+
+    private IEnumerator MoveToRouteNodeRoutine(int routeNodeIndex)
+    {
+        if (currentWay == null || routeNodeIndex < 0)
+            yield break;
+
+        if (!currentWay.TryGetRouteNode(routeSequenceIndex, routeNodeIndex, out Vector3 worldPoint))
+            yield break;
+
+        yield return MoveToRoutine(worldPoint, false, null);
+        currentRouteNodeIndex = routeNodeIndex;
     }
 
     private void UpdateFacing(float deltaX)
@@ -237,21 +360,63 @@ public class CustomerBlood : MonoBehaviour
         if (Mathf.Abs(deltaX) < 0.001f)
             return;
 
-        bool shouldFaceRight = deltaX > 0f;
-        if (facingRight == shouldFaceRight)
+        bool shouldFaceLeft = deltaX < 0f;
+        if (facingLeft == shouldFaceLeft)
             return;
 
-        facingRight = shouldFaceRight;
+        facingLeft = shouldFaceLeft;
         Vector3 angles = transform.localEulerAngles;
-        angles.y = facingRight ? 0f : 180f;
+        angles.y = facingLeft ? 0f : 180f;
         transform.localEulerAngles = angles;
     }
 
-    private void PlayTrigger(string triggerName)
+    private IEnumerator ReceiveThenCarryRoutine()
     {
-        if (animator == null || string.IsNullOrWhiteSpace(triggerName))
+        ApplyVisualState(VisualState.ReceivingItem);
+        UpdateHeldItemPosition(receiveItemLocalPosition);
+
+        yield return new WaitForSeconds(receivingToCarryingDelay);
+
+        transitioningToCarry = false;
+        ApplyVisualState(VisualState.CarryingItem);
+        UpdateHeldItemPosition(heldItemLocalPosition);
+        visualRoutine = null;
+    }
+
+    private void UpdateHeldItemPosition(Vector2 localPosition)
+    {
+        if (heldItemInstance == null)
             return;
 
-        animator.SetTrigger(triggerName);
+        heldItemInstance.transform.localPosition = localPosition;
+    }
+
+    private void ApplyVisualState(VisualState state)
+    {
+        if (spriteRenderer == null)
+            return;
+
+        switch (state)
+        {
+            case VisualState.ReceivingItem:
+                if (receiveItemSprite != null)
+                    spriteRenderer.sprite = receiveItemSprite;
+                break;
+            case VisualState.CarryingItem:
+                if (carryingWalkSprite != null)
+                    spriteRenderer.sprite = carryingWalkSprite;
+                break;
+            default:
+                if (walkingSprite != null)
+                    spriteRenderer.sprite = walkingSprite;
+                break;
+        }
+    }
+
+    private float GetRoamPauseDuration()
+    {
+        float minPause = Mathf.Max(0f, roamPauseMin);
+        float maxPause = Mathf.Max(minPause, roamPauseMax);
+        return maxPause <= 0f ? 0f : Random.Range(minPause, maxPause);
     }
 }

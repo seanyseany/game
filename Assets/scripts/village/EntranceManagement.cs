@@ -92,10 +92,12 @@ public class EntranceManagement : MonoBehaviour
             }
 
             CustomerBlood customer = Instantiate(entry.prefab);
-            customer.InitializeSpawn(entry.id, this, chosenEntrance, allocation.way, chosenPath);
+            string resolvedEntryId = customerBloodManagement.GetResolvedEntryId(entry.prefab);
+            int routeSequenceIndex = allocation.way != null ? allocation.way.GetRandomRouteSequenceIndex() : int.MinValue;
+            customer.InitializeSpawn(resolvedEntryId, this, chosenEntrance, allocation.way, chosenPath, routeSequenceIndex);
 
             activeCustomers.Add(customer);
-            customerBloodManagement.RegisterSpawn(entry.id);
+            customerBloodManagement.RegisterSpawn(resolvedEntryId);
             readySpawnTokens = Mathf.Max(0, readySpawnTokens - 1);
             allocation.remaining = Mathf.Max(0, allocation.remaining - 1);
         }

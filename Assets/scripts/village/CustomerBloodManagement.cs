@@ -6,7 +6,6 @@ public class CustomerBloodManagement : MonoBehaviour
     [System.Serializable]
     public class BloodEntry
     {
-        public string id;
         public CustomerBlood prefab;
         [Min(0)] public int count = 1;
     }
@@ -57,10 +56,11 @@ public class CustomerBloodManagement : MonoBehaviour
         for (int i = 0; i < available.Count; i++)
         {
             BloodEntry entry = available[i];
-            if (entry == null || entry.prefab == null || string.IsNullOrWhiteSpace(entry.id))
+            if (entry == null || entry.prefab == null)
                 continue;
 
-            int active = GetActiveCount(entry.id);
+            string resolvedId = GetResolvedEntryId(entry.prefab);
+            int active = GetActiveCount(resolvedId);
             if (active < Mathf.Max(0, entry.count))
                 spawnable.Add(entry);
         }
@@ -73,6 +73,11 @@ public class CustomerBloodManagement : MonoBehaviour
 
         selectedEntry = spawnable[Random.Range(0, spawnable.Count)];
         return true;
+    }
+
+    public string GetResolvedEntryId(CustomerBlood prefab)
+    {
+        return prefab != null ? prefab.name : string.Empty;
     }
 
     public void RegisterSpawn(string entryId)

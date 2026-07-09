@@ -277,6 +277,10 @@ public class Player : MonoBehaviour
     private float jumpObstacleJumpLockUntil = -1f;
     private bool resumeStompAttackAfterJumpObstacle = false;
     private GameObject activeRunningSmoke;
+    private GameObject activeP2RageLaser;
+    private GameObject activeP4RageLightning;
+    private bool skipNextP1RageLandingSmoke = false;
+    private bool skipNextP5RageLandingSmoke = false;
     private float groundProbeDistance = 0.28f;
     private float groundOverlapHeight = 0.12f;
     private float groundedLossGraceTime = 0.06f;
@@ -1488,9 +1492,11 @@ public class Player : MonoBehaviour
 
     private IEnumerator P1_GroundAttack()
     {
-        if (!isGrounded || isLanding) yield break;
+        if (!isGrounded) yield break;
 
         isAttacking = true;
+        isLanding = false;
+        hasLanded = false;
         attackStateStartTime = Time.time;
         ForceAnimationState("Base Attack", "Attack");
 
@@ -1504,8 +1510,9 @@ public class Player : MonoBehaviour
             StartCoroutine(ActivateAndDestroyCollider(hb, 0f, Mathf.Max(0.05f, fireRecovery)));
         }
 
-        if (!isRageMode)
-            SpawnSmokeEffect();
+        SpawnSmokeEffect();
+        if (isRageMode)
+            skipNextP1RageLandingSmoke = true;
 
         yield return new WaitForSeconds(fireRecovery);
         yield return StartCoroutine(WaitForGroundAttackAnimationToFinish());
@@ -1514,9 +1521,15 @@ public class Player : MonoBehaviour
 
     private IEnumerator P5_GroundAttack()
     {
-        if (!isGrounded || isLanding) yield break;
+        if (!isGrounded) yield break;
+        if (isLanding && !isRageMode) yield break;
 
         isAttacking = true;
+        if (isRageMode)
+        {
+            isLanding = false;
+            hasLanded = false;
+        }
         attackStateStartTime = Time.time;
         ForceAnimationState("Base Attack", "Attack");
 
@@ -1528,6 +1541,12 @@ public class Player : MonoBehaviour
             var hbComp = hb.GetComponent<Hitbox>();
             if (hbComp) hbComp.damage = stats.attack;
             StartCoroutine(ActivateAndDestroyCollider(hb, 0f, Mathf.Max(0.05f, fireRecovery)));
+        }
+
+        if (isRageMode)
+        {
+            SpawnSmokeEffect();
+            skipNextP5RageLandingSmoke = true;
         }
 
         yield return StartCoroutine(WaitForGroundAttackAnimationToFinish());
@@ -1599,14 +1618,30 @@ public class Player : MonoBehaviour
 
         if (t == T1)
         {
-            if (isGrounded) StartGroundedAttackRoutine(P1_GroundAttack());
+            if (isGrounded)
+            {
+                StopLandingRoutine();
+                isLanding = false;
+                hasLanded = false;
+                StartGroundedAttackRoutine(P1_GroundAttack());
+            }
             else StartCoroutine(P1_AirStomp());
             return;
         }
 
         if (t == T5)
         {
-            if (isGrounded) StartGroundedAttackRoutine(P5_GroundAttack());
+            if (isGrounded)
+            {
+                if (isRageMode)
+                {
+                    StopLandingRoutine();
+                    isLanding = false;
+                    hasLanded = false;
+                }
+
+                StartGroundedAttackRoutine(P5_GroundAttack());
+            }
             else StartCoroutine(P5_AirStomp());
         }
     }
@@ -1883,26 +1918,32 @@ public class Player : MonoBehaviour
 
         if (spawnLandingSmoke && isRageMode)
         {
-            // Rage 전용 히트박스
-            var hb = SpawnHitboxFromPool(hitboxPrefabP1, hitboxP1PoolTag, transform.position);
-            if (hb != null)
+            if (skipNextP1RageLandingSmoke)
             {
-                hb.transform.parent = transform;
-                AdjustHitboxIfRage(hb);
-                var hbComp = hb.GetComponent<Hitbox>();
-                if (hbComp) hbComp.damage = 1;
-                StartCoroutine(ActivateAndDestroyCollider(hb, 0f, 0.2f));
+                skipNextP1RageLandingSmoke = false;
             }
-            Vector3 pos = new Vector3(transform.position.x, transform.position.y - 0.5f, -0.5f);
-            if (landedOnFloor && rage1SmokePrefab != null)
+            else
             {
-                SpawnSmokeFromPrefab(rage1SmokePrefab, pos, rage1SmokePoolTag);
+                // Rage 전용 히트박스
+                var hb = SpawnHitboxFromPool(hitboxPrefabP1, hitboxP1PoolTag, transform.position);
+                if (hb != null)
+                {
+                    hb.transform.parent = transform;
+                    AdjustHitboxIfRage(hb);
+                    var hbComp = hb.GetComponent<Hitbox>();
+                    if (hbComp) hbComp.damage = 1;
+                    StartCoroutine(ActivateAndDestroyCollider(hb, 0f, 0.2f));
+                }
+                Vector3 pos = new Vector3(transform.position.x, transform.position.y - 0.5f, -0.5f);
+                if (landedOnFloor && rage1SmokePrefab != null)
+                {
+                    SpawnSmokeFromPrefab(rage1SmokePrefab, pos, rage1SmokePoolTag);
+                }
+                else if (landedOnPlatform && smokeEffectPrefab != null)
+                {
+                    SpawnSmokeFromPrefab(smokeEffectPrefab, pos, smokePoolTag);
+                }
             }
-            else if (landedOnPlatform && smokeEffectPrefab != null)
-            {
-                SpawnSmokeFromPrefab(smokeEffectPrefab, pos, smokePoolTag);
-            }
-                
         }
         else if (spawnLandingSmoke)
         {
@@ -2022,8 +2063,15 @@ public class Player : MonoBehaviour
         // ✅ Rage 상태일 때 연기 크기 1.5배
         if (spawnLandingSmoke && landedOnFloor && isRageMode && isGrounded)
         {
-            Vector3 pos = new Vector3(transform.position.x, transform.position.y - 0.5f, -0.5f);
-            SpawnP5RageAttackSmokes(pos, 4f);  // 🔥 크기 4배
+            if (skipNextP5RageLandingSmoke)
+            {
+                skipNextP5RageLandingSmoke = false;
+            }
+            else
+            {
+                Vector3 pos = new Vector3(transform.position.x, transform.position.y - 0.5f, -0.5f);
+                SpawnP5RageAttackSmokes(pos, 4f);  // 🔥 크기 4배
+            }
         }
         else if (spawnLandingSmoke)
         {
@@ -2456,14 +2504,19 @@ public class Player : MonoBehaviour
         bool groundedAttack = ShouldUseRageRangedGroundAttack();
         PlayRageRangedAttackAnimation(groundedAttack);
 
+        bool spawnedLaser = false;
         if (p2RageLaserPrefab != null)
         {
-            bool laserFromPool;
-            var laser = SpawnWithPool(p2RageLaserPrefab, p2RageLaserPoolTag, p2Muzzle.position, Quaternion.identity, out laserFromPool, 6);
+            spawnedLaser = TrySpawnRageOneShotEffect(
+                ref activeP2RageLaser,
+                p2RageLaserPrefab,
+                p2RageLaserPoolTag,
+                p2Muzzle != null ? p2Muzzle.position : transform.position,
+                6);
         }
 
         // ✅ 분노 상태 + 지면일 때 태그별로 연기 생성
-        if (groundedAttack)
+        if (groundedAttack && spawnedLaser)
         {
             if (lastGroundTag == "floor" && rage24SmokePrefab != null)
             {
@@ -2506,20 +2559,28 @@ public class Player : MonoBehaviour
         bool groundedAttack = ShouldUseRageRangedGroundAttack();
         PlayRageRangedAttackAnimation(groundedAttack);
 
+        bool spawnedLightning = false;
         if (p4RageLightningPrefab != null && p4Emitter != null)
         {
-            bool fromPool;
-            var go = SpawnWithPool(p4RageLightningPrefab, p4RageLightningPoolTag, p4Emitter.position, Quaternion.identity, out fromPool, 8);
-            var zig = go != null ? go.GetComponent<ZigzagLightning>() : null;
-            if (zig)
-            {
-                zig.ConfigurePooling(fromPool, p4RageLightningPoolTag);
-                zig.damage = stats.attack;
-            }
+            spawnedLightning = TrySpawnRageOneShotEffect(
+                ref activeP4RageLightning,
+                p4RageLightningPrefab,
+                p4RageLightningPoolTag,
+                p4Emitter.position,
+                8,
+                (go, fromPool) =>
+                {
+                    var zig = go != null ? go.GetComponent<ZigzagLightning>() : null;
+                    if (zig == null)
+                        return;
+
+                    zig.ConfigurePooling(fromPool, p4RageLightningPoolTag);
+                    zig.damage = stats.attack;
+                });
         }
 
         // ✅ 분노 상태 + 지면일 때 태그별로 연기 생성
-        if (groundedAttack)
+        if (groundedAttack && spawnedLightning)
         {
             if (lastGroundTag == "floor" && rage24SmokePrefab != null)
             {
@@ -3706,6 +3767,35 @@ public class Player : MonoBehaviour
         RestartAnimatorFromBeginning(go);
 
         return go;
+    }
+
+    private bool TrySpawnRageOneShotEffect(
+        ref GameObject activeEffect,
+        GameObject prefab,
+        string poolTag,
+        Vector3 position,
+        int initialSize,
+        System.Action<GameObject, bool> onSpawned = null)
+    {
+        if (prefab == null)
+            return false;
+
+        if (activeEffect != null)
+        {
+            if (activeEffect.activeInHierarchy)
+                return false;
+
+            activeEffect = null;
+        }
+
+        bool fromPool;
+        GameObject spawned = SpawnWithPool(prefab, poolTag, position, Quaternion.identity, out fromPool, initialSize);
+        if (spawned == null)
+            return false;
+
+        activeEffect = spawned;
+        onSpawned?.Invoke(spawned, fromPool);
+        return true;
     }
 
     private GameObject SpawnP3RageSmokeInstance(Vector3 pos, float scaleMult = 1f)

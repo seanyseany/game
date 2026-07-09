@@ -5,9 +5,11 @@ public class Obstacle : MonoBehaviour, IReinitializable
 {
     public Animator anim;   // Animator (Idle/Move + Die 포함)
     private const float DestroyAnimationDuration = 0.5f;
+    private const float OffscreenHitProtectionMargin = 0.25f;
 
     private bool destroyed = false;
     private static Player cachedPlayer;
+    private static Camera cachedMainCamera;
 
     private Collider2D col;
     private Rigidbody2D rb;
@@ -104,6 +106,8 @@ public class Obstacle : MonoBehaviour, IReinitializable
     private void OnTriggerEnter2D(Collider2D other)
     {
         if (destroyed) return;
+        if (!CanReactToHit())
+            return;
         
 
         if (other.GetComponent<BombHitBox>() != null || other.GetComponentInParent<BombHitBox>() != null)
@@ -151,6 +155,8 @@ public class Obstacle : MonoBehaviour, IReinitializable
     private void OnCollisionEnter2D(Collision2D colInfo)
     {
         if (destroyed) return;
+        if (!CanReactToHit())
+            return;
 
         var player = colInfo.gameObject.GetComponent<Player>();
         if (player != null && player.IsRageModeActive())
@@ -380,6 +386,41 @@ public class Obstacle : MonoBehaviour, IReinitializable
             cachedPlayer = Object.FindFirstObjectByType<Player>();
 
         return cachedPlayer;
+    }
+
+    private bool CanReactToHit()
+    {
+        if (!IsPhaseOwnedObstacle())
+            return true;
+
+        Camera cam = GetMainCamera();
+        if (cam == null || !cam.orthographic)
+            return true;
+
+        float cameraRightX = cam.transform.position.x + cam.orthographicSize * cam.aspect;
+
+        if (cachedRenderers != null)
+        {
+            for (int i = 0; i < cachedRenderers.Length; i++)
+            {
+                SpriteRenderer renderer = cachedRenderers[i];
+                if (renderer == null || !renderer.enabled)
+                    continue;
+
+                if (renderer.bounds.min.x <= cameraRightX + OffscreenHitProtectionMargin)
+                    return true;
+            }
+        }
+
+        return transform.position.x <= cameraRightX + OffscreenHitProtectionMargin;
+    }
+
+    private static Camera GetMainCamera()
+    {
+        if (cachedMainCamera == null)
+            cachedMainCamera = Camera.main;
+
+        return cachedMainCamera;
     }
 
     private void CacheRendererStates()

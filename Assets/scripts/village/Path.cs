@@ -44,7 +44,7 @@ public class Path : MonoBehaviour
         return new Vector3(
             Random.Range(bounds.min.x, bounds.max.x),
             Random.Range(bounds.min.y, bounds.max.y),
-            transform.position.z);
+            0f);
     }
 
     private void OnMouseUpAsButton()

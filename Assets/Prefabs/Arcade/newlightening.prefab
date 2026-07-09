@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 5755516564658162438}
   - component: {fileID: 4163423645204546787}
   - component: {fileID: 3427914068613845217}
+  - component: {fileID: 5061772765633700576}
   m_Layer: 0
   m_Name: newlightening
   m_TagString: Untagged
@@ -130,8 +131,8 @@ BoxCollider2D:
   m_Offset: {x: 13.7342415, y: -0.13140982}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
-    pivot: {x: 0.5, y: 0.5}
-    oldSize: {x: 19.16, y: 7.76}
+    pivot: {x: 0, y: 0.5}
+    oldSize: {x: 18.6, y: 6.7}
     newSize: {x: 26.385714, y: 1.2285714}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
@@ -180,14 +181,28 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   life: 0.42
   damage: 0
-  lightningFrames:
-  - {fileID: 4038263574537549466, guid: 40cdce01717a141edbf6ee0da7c12252, type: 3}
-  - {fileID: -1418784042621610797, guid: 716b9b7140e5143ed81ced552260e47d, type: 3}
-  - {fileID: 8046764006300367231, guid: 5560b122b9feb41e390bac65c193583b, type: 3}
-  - {fileID: 7092224380456279205, guid: 443d20631136741ccaed0b4b937f78f6, type: 3}
-  - {fileID: 3285187309092535248, guid: 103ee700716034136851808e3b8e318e, type: 3}
-  - {fileID: 6821666345051787651, guid: 926a06b594afb425e8f305a2c745e18f, type: 3}
-  frameRate: 0.07
   colliderEnabledOnSpawn: 1
   usePool: 1
   poolTag: Lightening
+--- !u!95 &5061772765633700576
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4162955322495281456}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: bce7f2e6e26794584965b2ca1d48aa40, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0

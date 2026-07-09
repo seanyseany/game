@@ -147,16 +147,13 @@ public class Building : MonoBehaviour
 
     public bool HasPurchasableCustomerPoint()
     {
-        if (CustomerPoint == null)
+        if (runtimeCustomerPointObject == null)
             return false;
 
         if (string.IsNullOrWhiteSpace(customerPointRequiredTag))
             return true;
 
-        if (runtimeCustomerPointObject != null)
-            return true;
-
-        return CustomerPoint.CompareTag(customerPointRequiredTag);
+        return runtimeCustomerPointObject.CompareTag(customerPointRequiredTag);
     }
 
     public bool HasQueueCapacity()
@@ -216,7 +213,7 @@ public class Building : MonoBehaviour
         slot = QueueSlot.None;
         target = null;
 
-        if (customer == null || !IsPlaced)
+        if (customer == null || !IsPlaced || !HasPurchasableCustomerPoint())
             return false;
 
         if (counterCustomer == customer)
@@ -546,7 +543,7 @@ public class Building : MonoBehaviour
     private void EnsurePointObjects()
     {
         runtimeBossCustomerPointObject = ResolvePointObject(bossCustomerPointPrefab, "_BossCustomerPoint");
-        runtimeCustomerPointObject = ResolvePointObject(customerPointPrefab, "_CustomerPoint");
+        runtimeCustomerPointObject = ResolveOptionalPointObject(customerPointPrefab, "_CustomerPoint");
         runtimeOwnerPatrolFromPointObject = ResolvePointObject(ownerPatrolFromPointPrefab, "_OwnerPatrolFromPoint");
         runtimeOwnerPatrolToPointObject = ResolvePointObject(ownerPatrolToPointPrefab, "_OwnerPatrolToPoint");
     }
@@ -563,6 +560,15 @@ public class Building : MonoBehaviour
         GameObject point = new GameObject(fallbackName);
         point.transform.SetParent(transform, false);
         return point;
+    }
+
+    private GameObject ResolveOptionalPointObject(GameObject referenceObject, string fallbackName)
+    {
+        if (referenceObject != null)
+            return referenceObject;
+
+        Transform existing = transform.Find(fallbackName);
+        return existing != null ? existing.gameObject : null;
     }
 
     private Transform FindOrCreateAnchor(string anchorName)

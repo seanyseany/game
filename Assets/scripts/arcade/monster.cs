@@ -15,6 +15,7 @@ public class Monster : MonoBehaviour, IReinitializable
     [Header("Gate")]
     [SerializeField] private string gateTag = "Gate";
     [SerializeField] private bool damageGateOnContact = true;
+    private const float OffscreenHitProtectionMargin = 0.25f;
 
     private SpriteRenderer spriteRenderer;
     private Collider2D hitCollider;
@@ -26,6 +27,7 @@ public class Monster : MonoBehaviour, IReinitializable
     private Color initialColor;
     private Sprite initialSprite;
     private RageUIController rageUi;
+    private static Camera cachedMainCamera;
 
     private void Awake()
     {
@@ -158,6 +160,9 @@ public class Monster : MonoBehaviour, IReinitializable
         if (!isActiveAndEnabled || dead)
             return;
 
+        if (!CanReactToHits())
+            return;
+
         StartDie(byPlayerKill: false);
     }
 
@@ -175,7 +180,7 @@ public class Monster : MonoBehaviour, IReinitializable
             return;
         }
 
-        if (IsPlayerAttackCollider(other))
+        if (IsPlayerAttackCollider(other) && CanReactToHits())
             StartDie(byPlayerKill: true);
     }
 
@@ -319,6 +324,32 @@ public class Monster : MonoBehaviour, IReinitializable
         }
 
         return false;
+    }
+
+    private bool CanReactToHits()
+    {
+        if (!IsPhaseOwnedMonster())
+            return true;
+
+        Camera cam = GetMainCamera();
+        if (cam == null || !cam.orthographic)
+            return true;
+
+        if (spriteRenderer != null && spriteRenderer.enabled)
+        {
+            float cameraRightX = cam.transform.position.x + cam.orthographicSize * cam.aspect;
+            return spriteRenderer.bounds.min.x <= cameraRightX + OffscreenHitProtectionMargin;
+        }
+
+        return transform.position.x <= cam.transform.position.x + cam.orthographicSize * cam.aspect + OffscreenHitProtectionMargin;
+    }
+
+    private static Camera GetMainCamera()
+    {
+        if (cachedMainCamera == null)
+            cachedMainCamera = Camera.main;
+
+        return cachedMainCamera;
     }
 
     private void Reset()

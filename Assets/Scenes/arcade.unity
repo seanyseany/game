@@ -1217,37 +1217,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 403041178}
   m_CullTransparentMesh: 1
---- !u!1 &472416999
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 472417000}
-  m_Layer: 0
-  m_Name: GameObject
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &472417000
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 472416999}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -7.17, y: -1.96, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &481371542
 GameObject:
   m_ObjectHideFlags: 0
@@ -3444,7 +3413,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2006843320572366924, guid: fae4c319019f9402eaeee6e7645d9498, type: 3}
       propertyPath: selectedPlayerType
-      value: 2
+      value: 4
       objectReference: {fileID: 0}
     - target: {fileID: 2006843320572366924, guid: fae4c319019f9402eaeee6e7645d9498, type: 3}
       propertyPath: holyLightSpawnPos.x
@@ -5652,7 +5621,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ac861eb8557084223a6741d05133becf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  testPhasePrefabs: []
+  testPhasePrefabs:
+  - {fileID: 2659614723417223950, guid: bac18af1ddfa44351a7f1056878d6a3e, type: 3}
   stage1PhasePrefabs:
   - {fileID: 2659614723417223950, guid: a72c1401e0d3543ceb8319395edbfd50, type: 3}
   - {fileID: 2659614723417223950, guid: f2580553c03134ef08bffc7fa9000e68, type: 3}
@@ -5672,6 +5642,7 @@ MonoBehaviour:
   - {fileID: 2659614723417223950, guid: 6678eb481175549efb6b5a8778cafbb2, type: 3}
   - {fileID: 2659614723417223950, guid: d4afd94230768400da94522327591a72, type: 3}
   - {fileID: 2659614723417223950, guid: 701c6a5c8df8541d88cf0e33f16e5734, type: 3}
+  - {fileID: 2659614723417223950, guid: f75fb91b6736b4d9c9cb1b3313cd658e, type: 3}
   stage2PhasePrefabs:
   - {fileID: 2659614723417223950, guid: 43e47fd73823e4310835e91494877cb6, type: 3}
   - {fileID: 2659614723417223950, guid: 2989d83a5039f4860b714b13400ab96c, type: 3}
@@ -5730,7 +5701,7 @@ MonoBehaviour:
   - {fileID: 2659614723417223950, guid: ef58c83c7f7004fd090153d7a0edc8b3, type: 3}
   - {fileID: 2659614723417223950, guid: ef58c83c7f7004fd090153d7a0edc8b3, type: 3}
   - {fileID: 2659614723417223950, guid: ef58c83c7f7004fd090153d7a0edc8b3, type: 3}
-  - {fileID: 2659614723417223950, guid: bf125dc3f5ad249b6b5cb3d3eab4c829, type: 3}
+  - {fileID: 2659614723417223950, guid: bac18af1ddfa44351a7f1056878d6a3e, type: 3}
   - {fileID: 2659614723417223950, guid: 0c2b8fa46b57f41fd946fae608c4b25d, type: 3}
   - {fileID: 2659614723417223950, guid: a8effd724f21d41a389f39f6c1674cec, type: 3}
   - {fileID: 2659614723417223950, guid: 5465d4e2e24e1465f90fc36e79fb579c, type: 3}
@@ -7715,4 +7686,3 @@ SceneRoots:
   - {fileID: 190357563}
   - {fileID: 2144732664}
   - {fileID: 1778094741}
-  - {fileID: 472417000}

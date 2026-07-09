@@ -3,9 +3,16 @@ using UnityEngine;
 
 public class Way : MonoBehaviour
 {
+    [System.Serializable]
+    public class RouteSequence
+    {
+        public List<Transform> nodes = new List<Transform>();
+    }
+
     [Header("Route")]
-    [SerializeField] private List<Transform> routeNodes = new List<Transform>();
+    [SerializeField] private List<RouteSequence> routeSequences = new List<RouteSequence>();
     [SerializeField] private bool loopRoute = true;
+    [SerializeField] private Collider2D roamCollider;
 
     [Header("Connections")]
     [SerializeField] private List<Path> connectedPaths = new List<Path>();
@@ -13,8 +20,14 @@ public class Way : MonoBehaviour
 
     public IReadOnlyList<Path> ConnectedPaths => connectedPaths;
     public IReadOnlyList<Entrance> ConnectedEntrances => connectedEntrances;
-    public IReadOnlyList<Transform> RouteNodes => routeNodes;
+    public IReadOnlyList<RouteSequence> RouteSequences => routeSequences;
     public bool LoopRoute => loopRoute;
+
+    private void Awake()
+    {
+        if (roamCollider == null)
+            roamCollider = GetComponent<Collider2D>();
+    }
 
     public float GetTrafficScore()
     {
@@ -110,11 +123,51 @@ public class Way : MonoBehaviour
         return true;
     }
 
-    public bool TryGetRouteNode(int index, out Vector3 worldPoint)
+    public Vector3 GetRandomRoamWorldPoint()
     {
-        if (index >= 0 && index < routeNodes.Count && routeNodes[index] != null)
+        if (roamCollider != null)
         {
-            worldPoint = routeNodes[index].position;
+            Bounds bounds = roamCollider.bounds;
+            for (int i = 0; i < 12; i++)
+            {
+                Vector3 candidate = new Vector3(
+                    Random.Range(bounds.min.x, bounds.max.x),
+                    Random.Range(bounds.min.y, bounds.max.y),
+                    0f);
+
+                if (roamCollider.OverlapPoint(candidate))
+                    return candidate;
+            }
+        }
+
+        int sequenceIndex = GetRandomRouteSequenceIndex();
+        int firstIndex = GetFirstRouteNodeIndex(sequenceIndex);
+        if (sequenceIndex != int.MinValue &&
+            firstIndex >= 0 &&
+            TryGetRouteNode(sequenceIndex, firstIndex, out Vector3 routePoint))
+            return routePoint;
+
+        return transform.position;
+    }
+
+    public int GetRandomRouteSequenceIndex()
+    {
+        List<int> validIndices = new List<int>();
+        for (int i = 0; i < routeSequences.Count; i++)
+        {
+            if (GetFirstRouteNodeIndex(i) >= 0)
+                validIndices.Add(i);
+        }
+
+        return validIndices.Count > 0 ? validIndices[Random.Range(0, validIndices.Count)] : int.MinValue;
+    }
+
+    public bool TryGetRouteNode(int sequenceIndex, int nodeIndex, out Vector3 worldPoint)
+    {
+        List<Transform> nodes = GetSequenceNodes(sequenceIndex);
+        if (nodeIndex >= 0 && nodeIndex < nodes.Count && nodes[nodeIndex] != null)
+        {
+            worldPoint = nodes[nodeIndex].position;
             return true;
         }
 
@@ -122,23 +175,25 @@ public class Way : MonoBehaviour
         return false;
     }
 
-    public int GetFirstRouteNodeIndex()
+    public int GetFirstRouteNodeIndex(int sequenceIndex)
     {
-        for (int i = 0; i < routeNodes.Count; i++)
+        List<Transform> nodes = GetSequenceNodes(sequenceIndex);
+        for (int i = 0; i < nodes.Count; i++)
         {
-            if (routeNodes[i] != null)
+            if (nodes[i] != null)
                 return i;
         }
 
         return -1;
     }
 
-    public int GetNextRouteNodeIndex(int currentIndex)
+    public int GetNextRouteNodeIndex(int sequenceIndex, int currentIndex)
     {
+        List<Transform> nodes = GetSequenceNodes(sequenceIndex);
         int nextIndex = currentIndex + 1;
-        while (nextIndex < routeNodes.Count)
+        while (nextIndex < nodes.Count)
         {
-            if (routeNodes[nextIndex] != null)
+            if (nodes[nextIndex] != null)
                 return nextIndex;
 
             nextIndex++;
@@ -147,18 +202,121 @@ public class Way : MonoBehaviour
         if (!loopRoute)
             return -1;
 
-        return GetFirstRouteNodeIndex();
+        return GetFirstRouteNodeIndex(sequenceIndex);
     }
+
+    public int GetNextRouteNodeIndexNoLoop(int sequenceIndex, int currentIndex)
+    {
+        List<Transform> nodes = GetSequenceNodes(sequenceIndex);
+        int nextIndex = currentIndex + 1;
+        while (nextIndex < nodes.Count)
+        {
+            if (nodes[nextIndex] != null)
+                return nextIndex;
+
+            nextIndex++;
+        }
+
+        return -1;
+    }
+
+    public int GetPreviousRouteNodeIndex(int sequenceIndex, int currentIndex)
+    {
+        List<Transform> nodes = GetSequenceNodes(sequenceIndex);
+        int previousIndex = currentIndex - 1;
+        while (previousIndex >= 0)
+        {
+            if (nodes[previousIndex] != null)
+                return previousIndex;
+
+            previousIndex--;
+        }
+
+        return -1;
+    }
+
+    public int GetPreviousRouteNodeIndexNoLoop(int sequenceIndex, int currentIndex)
+    {
+        List<Transform> nodes = GetSequenceNodes(sequenceIndex);
+        int previousIndex = currentIndex - 1;
+        while (previousIndex >= 0)
+        {
+            if (nodes[previousIndex] != null)
+                return previousIndex;
+
+            previousIndex--;
+        }
+
+        return -1;
+    }
+
+    public int GetLastRouteNodeIndex(int sequenceIndex)
+    {
+        List<Transform> nodes = GetSequenceNodes(sequenceIndex);
+        for (int i = nodes.Count - 1; i >= 0; i--)
+        {
+            if (nodes[i] != null)
+                return i;
+        }
+
+        return -1;
+    }
+
+    public int GetClosestRouteNodeIndex(int sequenceIndex, Vector3 worldPosition)
+    {
+        List<Transform> nodes = GetSequenceNodes(sequenceIndex);
+        int bestIndex = -1;
+        float bestDistance = float.MaxValue;
+
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            Transform node = nodes[i];
+            if (node == null)
+                continue;
+
+            float distance = (node.position - worldPosition).sqrMagnitude;
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestIndex = i;
+            }
+        }
+
+        return bestIndex;
+    }
+
+    private List<Transform> GetSequenceNodes(int sequenceIndex)
+    {
+        if (sequenceIndex >= 0 && sequenceIndex < routeSequences.Count && routeSequences[sequenceIndex] != null)
+            return routeSequences[sequenceIndex].nodes;
+
+        return s_emptyNodes;
+    }
+
+    private static readonly List<Transform> s_emptyNodes = new List<Transform>();
 
     private void OnDrawGizmos()
     {
         Gizmos.color = new Color(0.1f, 0.8f, 0.9f, 1f);
+        if (routeSequences == null || routeSequences.Count == 0)
+            return;
+
+        for (int i = 0; i < routeSequences.Count; i++)
+        {
+            DrawSequence(routeSequences[i] != null ? routeSequences[i].nodes : null);
+        }
+    }
+
+    private void DrawSequence(List<Transform> nodes)
+    {
+        if (nodes == null)
+            return;
 
         Transform previous = null;
         Transform first = null;
-        for (int i = 0; i < routeNodes.Count; i++)
+        for (int i = 0; i < nodes.Count; i++)
         {
-            Transform node = routeNodes[i];
+            Transform node = nodes[i];
             if (node == null)
                 continue;
 
