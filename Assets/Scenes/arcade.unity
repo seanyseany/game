@@ -3442,7 +3442,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2006843320572366924, guid: fae4c319019f9402eaeee6e7645d9498, type: 3}
       propertyPath: selectedPlayerType
-      value: 5
+      value: 2
       objectReference: {fileID: 0}
     - target: {fileID: 2006843320572366924, guid: fae4c319019f9402eaeee6e7645d9498, type: 3}
       propertyPath: holyLightSpawnPos.x
@@ -5658,8 +5658,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ac861eb8557084223a6741d05133becf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  testPhasePrefabs:
-  - {fileID: 2659614723417223950, guid: 86a9e3ef495cc4ed09cafdfc02a26ec3, type: 3}
+  testPhasePrefabs: []
   stage1PhasePrefabs:
   - {fileID: 2659614723417223950, guid: a72c1401e0d3543ceb8319395edbfd50, type: 3}
   - {fileID: 2659614723417223950, guid: f2580553c03134ef08bffc7fa9000e68, type: 3}
@@ -5750,42 +5749,11 @@ MonoBehaviour:
   - prefab: {fileID: 2659614723417223950, guid: bd4db3ea86b324149b25206e765fddb9, type: 3}
     spawnChance: 1
   stage4PhasePrefabs:
-  - {fileID: 2659614723417223950, guid: 79dfeedf66ebd4565bf36e6af6e961bb, type: 3}
-  - {fileID: 2659614723417223950, guid: 0c2b8fa46b57f41fd946fae608c4b25d, type: 3}
-  - {fileID: 2659614723417223950, guid: a8effd724f21d41a389f39f6c1674cec, type: 3}
-  - {fileID: 2659614723417223950, guid: 5465d4e2e24e1465f90fc36e79fb579c, type: 3}
-  - {fileID: 2659614723417223950, guid: 58777d01689f3477298f63679fc680b1, type: 3}
-  - {fileID: 2659614723417223950, guid: 58777d01689f3477298f63679fc680b1, type: 3}
-  - {fileID: 2659614723417223950, guid: fef97fb2a19c9439db5c3539c423eacc, type: 3}
-  - {fileID: 2659614723417223950, guid: 07b8c637d88d6440691c96165c2afd60, type: 3}
-  - {fileID: 2659614723417223950, guid: f9c0ae1b2912b4b72ac87b6e62780b72, type: 3}
-  - {fileID: 2659614723417223950, guid: 32e3cb3461ae94cf4a5c78ab1b3336b1, type: 3}
-  - {fileID: 2659614723417223950, guid: 5e3c06b8d7dfe44e8b411b6f59819fd9, type: 3}
-  - {fileID: 2659614723417223950, guid: eaa8db8c5115942ccac57407a2798a85, type: 3}
-  - {fileID: 2659614723417223950, guid: b0568adc9c28749c483e40e2fa142011, type: 3}
-  - {fileID: 2659614723417223950, guid: 41c85a31f729b40e3aa5f05d6d637deb, type: 3}
-  - {fileID: 2659614723417223950, guid: 7957b3ca73c784a30b8562e217c268de, type: 3}
-  - {fileID: 2659614723417223950, guid: 68013161f462f4eeb8d241065900a034, type: 3}
-  - {fileID: 2659614723417223950, guid: e65d44490a8ac407a870cb972cab57b2, type: 3}
-  - {fileID: 2659614723417223950, guid: 56aa660a3a9b048a4afcb55236c9a819, type: 3}
-  - {fileID: 2659614723417223950, guid: f7f0e5e00d21f4526b8ddf0c8a11dbc8, type: 3}
-  - {fileID: 2659614723417223950, guid: 04c826b3df47c45bd95fb0d6e1f7487f, type: 3}
-  - {fileID: 2659614723417223950, guid: c3d09e79b5bba44a4892d0cd1cc25d11, type: 3}
-  - {fileID: 2659614723417223950, guid: 0c89484e7292e46f39e81bbc0f2ef7fa, type: 3}
-  - {fileID: 2659614723417223950, guid: 37f233390f79246969414b93263844e6, type: 3}
-  - {fileID: 2659614723417223950, guid: 50c96dac4d92548fc8d6398779d0faef, type: 3}
-  - {fileID: 2659614723417223950, guid: 41e2271ff90b74613a4f9d7ffdcd19d8, type: 3}
-  - {fileID: 2659614723417223950, guid: 41e2271ff90b74613a4f9d7ffdcd19d8, type: 3}
-  - {fileID: 2659614723417223950, guid: 41e2271ff90b74613a4f9d7ffdcd19d8, type: 3}
-  - {fileID: 2659614723417223950, guid: ef58c83c7f7004fd090153d7a0edc8b3, type: 3}
-  - {fileID: 2659614723417223950, guid: ef58c83c7f7004fd090153d7a0edc8b3, type: 3}
-  - {fileID: 2659614723417223950, guid: ef58c83c7f7004fd090153d7a0edc8b3, type: 3}
   - {fileID: 2659614723417223950, guid: c927e24f86b7241a7b292da6aa9e4c25, type: 3}
   - {fileID: 2659614723417223950, guid: bd6995f5110094cfcba38132abcb42e1, type: 3}
-  - {fileID: 2659614723417223950, guid: 0c2b8fa46b57f41fd946fae608c4b25d, type: 3}
-  - {fileID: 2659614723417223950, guid: a8effd724f21d41a389f39f6c1674cec, type: 3}
-  - {fileID: 2659614723417223950, guid: 5e3c06b8d7dfe44e8b411b6f59819fd9, type: 3}
-  stage4SpecialPhasePrefabs: []
+  stage4SpecialPhasePrefabs:
+  - prefab: {fileID: 2659614723417223950, guid: 86a9e3ef495cc4ed09cafdfc02a26ec3, type: 3}
+    spawnChance: 1
   rageStagePrefabs:
   - {fileID: 2659614723417223950, guid: 7a541cbf89cab4cdb8ae9351e48f8988, type: 3}
   - {fileID: 2659614723417223950, guid: c2b115a4006a244db9530ee7b62e828f, type: 3}

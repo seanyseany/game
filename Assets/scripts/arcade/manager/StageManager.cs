@@ -316,7 +316,7 @@ public class StageManager : MonoBehaviour
         if (gameplayPauseByTransform)
             return;
 
-        if (miniBossPhasePauseActive && !HasAliveMiniBoss())
+        if (miniBossPhasePauseActive && !HasAliveMiniBoss() && !HasPendingMiniBossTrigger())
             ResolveMiniBossPhase();
 
         despawnCheckTimer += Time.deltaTime;
@@ -1803,10 +1803,6 @@ public class StageManager : MonoBehaviour
         if (!phaseObject.CompareTag(MiniBossStageTag))
             return;
 
-        MiniBossSpawner[] spawners = phaseObject.GetComponentsInChildren<MiniBossSpawner>(true);
-        for (int i = 0; i < spawners.Length; i++)
-            spawners[i]?.SpawnIfNeeded();
-
         miniBossPhasePauseActive = true;
         spawnPaused = true;
 
@@ -1844,6 +1840,12 @@ public class StageManager : MonoBehaviour
     {
         MiniBoss[] activeMiniBosses = FindObjectsByType<MiniBoss>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
         return activeMiniBosses != null && activeMiniBosses.Length > 0;
+    }
+
+    private static bool HasPendingMiniBossTrigger()
+    {
+        MiniBossTrigger[] activeTriggers = FindObjectsByType<MiniBossTrigger>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+        return activeTriggers != null && activeTriggers.Length > 0;
     }
 
     private bool ShouldInsertExtraNormalPhaseBeforeBoss(PhaseInfo sourcePhase)
