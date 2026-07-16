@@ -99,6 +99,7 @@ public class Missile : MonoBehaviour, IRageTransformPauseHandler
 
             if (!player.IsRageModeActive())
             {
+                CameraShakeManager.ShakeDefault();
                 player.TakeDamage(1);
             }
 

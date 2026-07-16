@@ -30,6 +30,7 @@ public class Obstacle : MonoBehaviour, IReinitializable
     private float[] cachedAnimatorSpeeds;
     private Transform initialParent;
     private bool runtimeSpawned;
+    private float spawnProtectionUntil;
 
     private void Awake()
     {
@@ -69,6 +70,7 @@ public class Obstacle : MonoBehaviour, IReinitializable
 
         ResetRuntimePose();
         destroyed = false;
+        spawnProtectionUntil = 0f;
 
         if (col)
         {
@@ -112,6 +114,13 @@ public class Obstacle : MonoBehaviour, IReinitializable
 
         if (other.GetComponent<BombHitBox>() != null || other.GetComponentInParent<BombHitBox>() != null)
         {
+            CholesterolBomb cholesterolBomb = GetComponent<CholesterolBomb>() ?? GetComponentInParent<CholesterolBomb>();
+            if (cholesterolBomb != null)
+            {
+                cholesterolBomb.TriggerExplosionFromExternalHit();
+                return;
+            }
+
             Die();
             return;
         }
@@ -167,6 +176,17 @@ public class Obstacle : MonoBehaviour, IReinitializable
 
     public void Hit(int damage)
     {
+        if (!CanReactToHit())
+            return;
+
+        Die();
+    }
+
+    public void TriggerDestroySequence()
+    {
+        if (!CanReactToHit())
+            return;
+
         Die();
     }
 
@@ -174,6 +194,10 @@ public class Obstacle : MonoBehaviour, IReinitializable
     {
         if (destroyed) return;
         destroyed = true;
+
+        MachineGunLastSpawnNotifier machineGunNotifier = GetComponent<MachineGunLastSpawnNotifier>() ?? GetComponentInParent<MachineGunLastSpawnNotifier>();
+        if (machineGunNotifier != null)
+            machineGunNotifier.NotifyDestroyTriggered();
 
         if (obstacleMover == null)
             obstacleMover = GetComponent<ObstacleMover>();
@@ -247,6 +271,14 @@ public class Obstacle : MonoBehaviour, IReinitializable
         ResetRuntimePose();
     }
 
+    public void ActivateTemporarySpawnProtection(float duration)
+    {
+        if (duration <= 0f)
+            return;
+
+        spawnProtectionUntil = Mathf.Max(spawnProtectionUntil, Time.time + duration);
+    }
+
     private void LateUpdate()
     {
         if (!runtimeSpawned && initialParent != null && transform.parent != initialParent)
@@ -256,6 +288,11 @@ public class Obstacle : MonoBehaviour, IReinitializable
     private bool IsPhaseOwnedObstacle()
     {
         return GetComponentInParent<PhaseLayoutSnapshot>(true) != null;
+    }
+
+    private bool HasTemporarySpawnProtection()
+    {
+        return spawnProtectionUntil > Time.time;
     }
 
     private void CacheLocalPose()
@@ -390,6 +427,9 @@ public class Obstacle : MonoBehaviour, IReinitializable
 
     private bool CanReactToHit()
     {
+        if (HasTemporarySpawnProtection())
+            return false;
+
         if (!IsPhaseOwnedObstacle())
             return true;
 

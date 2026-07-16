@@ -5,6 +5,13 @@ using UnityEngine.Serialization;
 
 public interface IReinitializable { void Reinit(); }
 
+[System.Serializable]
+public class SpecialPhaseEntry
+{
+    public GameObject prefab;
+    [Range(0f, 1f)] public float spawnChance = 0.2f;
+}
+
 public class StageManager : MonoBehaviour
 {
     public static StageManager Instance;
@@ -14,23 +21,29 @@ public class StageManager : MonoBehaviour
     private const int MinPhaseStage = 1;
     private const int MaxPhaseStage = 4;
     private const string MachineGunStageTag = "MachineGunStage";
+    private const string MiniBossStageTag = "miniBoss";
     private const int BossStage3 = 3;
     private const int BossStage4 = 4;
+    private const float PostMachineGunObstacleProtectionDuration = 0.5f;
 
     [Header("Test Phase Prefabs")]
     public GameObject[] testPhasePrefabs;
 
     [Header("Stage 1 Phase Prefabs")]
     public GameObject[] stage1PhasePrefabs;
+    public SpecialPhaseEntry[] stage1SpecialPhasePrefabs;
 
     [Header("Stage 2 Phase Prefabs")]
     public GameObject[] stage2PhasePrefabs;
+    public SpecialPhaseEntry[] stage2SpecialPhasePrefabs;
 
     [Header("Stage 3 Phase Prefabs")]
     public GameObject[] stage3PhasePrefabs;
+    public SpecialPhaseEntry[] stage3SpecialPhasePrefabs;
 
     [Header("Stage 4 Phase Prefabs")]
     public GameObject[] stage4PhasePrefabs;
+    public SpecialPhaseEntry[] stage4SpecialPhasePrefabs;
 
     [Header("Rage Stage Prefabs")]
     [Tooltip("분노로 일반 스폰이 멈춘 동안 대신 스폰할 전용 페이즈")]
@@ -94,6 +107,7 @@ public class StageManager : MonoBehaviour
     private bool machineGunPhasePauseActive;
     private bool machineGunStagePrePauseActive;
     private bool phasePassedDuringMachineGunPause;
+    private bool miniBossPhasePauseActive;
 
     private const float rageSpawnPhaseMult = 1.8f;
 
@@ -169,6 +183,7 @@ public class StageManager : MonoBehaviour
     {
         GameData.OnRageStart += HandleRageStart;
         GameData.OnRageEnd += HandleRageEnd;
+        GameData.OnMachineGunTrigger += HandleMachineGunTrigger;
         GameData.OnMachineGunSequenceStart += HandleMachineGunSequenceStart;
         GameData.OnMachineGunSequenceEnd += HandleMachineGunSequenceEnd;
     }
@@ -177,6 +192,7 @@ public class StageManager : MonoBehaviour
     {
         GameData.OnRageStart -= HandleRageStart;
         GameData.OnRageEnd -= HandleRageEnd;
+        GameData.OnMachineGunTrigger -= HandleMachineGunTrigger;
         GameData.OnMachineGunSequenceStart -= HandleMachineGunSequenceStart;
         GameData.OnMachineGunSequenceEnd -= HandleMachineGunSequenceEnd;
     }
@@ -223,7 +239,12 @@ public class StageManager : MonoBehaviour
         if (prefab == null)
             return null;
 
-        var queue = poolDict[prefab];
+        if (!poolDict.TryGetValue(prefab, out var queue) || queue == null)
+        {
+            queue = new Queue<GameObject>(poolSizePerPrefab);
+            poolDict[prefab] = queue;
+        }
+
         GameObject go = null;
         while (queue.Count > 0 && go == null)
         {
@@ -281,13 +302,22 @@ public class StageManager : MonoBehaviour
         go.transform.position = new Vector3(-999f, -999f, 0f);
         activePhaseObjects.Remove(go);
 
-        poolDict[prefab].Enqueue(go);
+        if (!poolDict.TryGetValue(prefab, out var queue) || queue == null)
+        {
+            queue = new Queue<GameObject>(poolSizePerPrefab);
+            poolDict[prefab] = queue;
+        }
+
+        queue.Enqueue(go);
     }
 
     void Update()
     {
         if (gameplayPauseByTransform)
             return;
+
+        if (miniBossPhasePauseActive && !HasAliveMiniBoss())
+            ResolveMiniBossPhase();
 
         despawnCheckTimer += Time.deltaTime;
         if (despawnCheckTimer >= 0.05f)
@@ -398,6 +428,9 @@ public class StageManager : MonoBehaviour
 
         if (spawnPaused)
         {
+            if (miniBossPhasePauseActive)
+                return;
+
             if (machineGunPhasePauseActive)
             {
                 phasePassedDuringMachineGunPause = true;
@@ -469,6 +502,7 @@ public class StageManager : MonoBehaviour
         machineGunPhasePauseActive = false;
         machineGunStagePrePauseActive = false;
         phasePassedDuringMachineGunPause = false;
+        miniBossPhasePauseActive = false;
         phaseShuffleByStage.Clear();
         testPhaseSequenceCompleted = false;
         isDelayActive = false;
@@ -1107,6 +1141,11 @@ public class StageManager : MonoBehaviour
         spawnPaused = true;
     }
 
+    private void HandleMachineGunTrigger()
+    {
+        ProtectActivePostMachineGunPhases();
+    }
+
     private void HandleMachineGunSequenceEnd()
     {
         machineGunStagePrePauseActive = false;
@@ -1472,12 +1511,13 @@ public class StageManager : MonoBehaviour
     private GameObject GetNextPhasePrefabForStage(int stage, bool allowMachineGunStage)
     {
         GameObject[] source = GetPhasePrefabsForStage(stage);
-        if (source == null || source.Length == 0)
+        SpecialPhaseEntry[] specialEntries = GetSpecialPhaseEntriesForStage(stage);
+        if (!HasConfiguredPhasePrefabs(source) && !HasConfiguredSpecialPhasePrefabs(specialEntries))
             return null;
 
         if (!phaseShuffleByStage.TryGetValue(stage, out var shuffleList) || shuffleList == null)
         {
-            shuffleList = new List<GameObject>(source.Length);
+            shuffleList = new List<GameObject>(GetPhaseCycleCountForStage(stage));
             phaseShuffleByStage[stage] = shuffleList;
         }
 
@@ -1487,11 +1527,7 @@ public class StageManager : MonoBehaviour
                 return null;
 
             shuffleList.Clear();
-            for (int i = 0; i < source.Length; i++)
-            {
-                if (source[i] != null)
-                    shuffleList.Add(source[i]);
-            }
+            BuildPhaseCycleForStage(shuffleList, stage, source, specialEntries, allowMachineGunStage);
 
             if (shuffleList.Count == 0)
                 return null;
@@ -1525,6 +1561,117 @@ public class StageManager : MonoBehaviour
         }
 
         return null;
+    }
+
+    private int GetPhaseCycleCountForStage(int stage)
+    {
+        switch (Mathf.Clamp(stage, MinPhaseStage, MaxPhaseStage))
+        {
+            case 4:
+                return Mathf.Max(1, speedUp4 - speedUp3);
+            case 3:
+                return Mathf.Max(1, speedUp3 - speedUp2);
+            case 2:
+                return Mathf.Max(1, speedUp2 - speedUp1);
+            default:
+                return Mathf.Max(1, speedUp1);
+        }
+    }
+
+    private SpecialPhaseEntry[] GetSpecialPhaseEntriesForStage(int stage)
+    {
+        if (stage < MinPhaseStage || stage > MaxPhaseStage)
+            return null;
+
+        switch (Mathf.Clamp(stage, MinPhaseStage, MaxPhaseStage))
+        {
+            case 4:
+                return stage4SpecialPhasePrefabs;
+            case 3:
+                return stage3SpecialPhasePrefabs;
+            case 2:
+                return stage2SpecialPhasePrefabs;
+            default:
+                return stage1SpecialPhasePrefabs;
+        }
+    }
+
+    private void BuildPhaseCycleForStage(List<GameObject> target, int stage, GameObject[] normalPrefabs, SpecialPhaseEntry[] specialEntries, bool allowMachineGunStage)
+    {
+        if (target == null)
+            return;
+
+        if (stage < MinPhaseStage || stage > MaxPhaseStage)
+        {
+            AddAvailableNormalPrefabs(target, normalPrefabs, allowMachineGunStage);
+            return;
+        }
+
+        List<GameObject> availableNormals = new List<GameObject>();
+        AddAvailableNormalPrefabs(availableNormals, normalPrefabs, allowMachineGunStage);
+        ShuffleList(availableNormals);
+
+        List<SpecialPhaseEntry> availableSpecials = new List<SpecialPhaseEntry>();
+        if (specialEntries != null)
+        {
+            for (int i = 0; i < specialEntries.Length; i++)
+            {
+                SpecialPhaseEntry entry = specialEntries[i];
+                if (entry == null || entry.prefab == null)
+                    continue;
+
+                if (!allowMachineGunStage && entry.prefab.CompareTag(MachineGunStageTag))
+                    continue;
+
+                availableSpecials.Add(entry);
+            }
+        }
+
+        int totalCycleCount = GetPhaseCycleCountForStage(stage);
+        int specialSlotCount = Mathf.Min(totalCycleCount, availableSpecials.Count);
+        int normalSlotCount = Mathf.Max(0, totalCycleCount - specialSlotCount);
+        int normalIndex = 0;
+
+        for (int i = 0; i < normalSlotCount && normalIndex < availableNormals.Count; i++)
+            target.Add(availableNormals[normalIndex++]);
+
+        for (int i = 0; i < specialSlotCount; i++)
+        {
+            SpecialPhaseEntry special = availableSpecials[i];
+            bool useSpecial = Random.value <= Mathf.Clamp01(special.spawnChance);
+
+            if (useSpecial)
+            {
+                target.Add(special.prefab);
+                continue;
+            }
+
+            if (normalIndex < availableNormals.Count)
+            {
+                target.Add(availableNormals[normalIndex++]);
+                continue;
+            }
+
+            target.Add(special.prefab);
+        }
+    }
+
+    private static void AddAvailableNormalPrefabs(List<GameObject> target, GameObject[] source, bool allowMachineGunStage)
+    {
+        if (target == null || source == null)
+            return;
+
+        for (int i = 0; i < source.Length; i++)
+        {
+            GameObject prefab = source[i];
+            if (prefab == null)
+                continue;
+
+            if (!allowMachineGunStage && prefab.CompareTag(MachineGunStageTag))
+                continue;
+
+            target.Add(prefab);
+        }
     }
 
     private void SpawnPhaseInternal(int stage, bool isRageSpawn, bool countTowardPhaseProgress, bool runPhaseRolls, string warnLabel)
@@ -1569,7 +1716,64 @@ public class StageManager : MonoBehaviour
         if (runPhaseRolls && GameData.Instance != null)
             GameData.Instance.CheckBossTriggerBeforeSpeedUp(this, phaseSpawnCount);
 
+        if (!isRageSpawn &&
+            !go.CompareTag(MachineGunStageTag) &&
+            GameData.Instance != null &&
+            GameData.Instance.ConsumeNextPostMachineGunPhaseObstacleProtection())
+        {
+            ApplyPostMachineGunObstacleProtection(go);
+        }
+
         TryPauseSpawnForMachineGunStage(go, isRageSpawn);
+        TryPauseSpawnForMiniBossPhase(go, cache, isRageSpawn);
+    }
+
+    private void ApplyPostMachineGunObstacleProtection(GameObject phaseObject)
+    {
+        if (phaseObject == null)
+            return;
+
+        Obstacle[] obstacles = phaseObject.GetComponentsInChildren<Obstacle>(true);
+        for (int i = 0; i < obstacles.Length; i++)
+        {
+            if (obstacles[i] != null)
+                obstacles[i].ActivateTemporarySpawnProtection(PostMachineGunObstacleProtectionDuration);
+        }
+
+        BulletObstacle[] bulletObstacles = phaseObject.GetComponentsInChildren<BulletObstacle>(true);
+        for (int i = 0; i < bulletObstacles.Length; i++)
+        {
+            if (bulletObstacles[i] != null)
+                bulletObstacles[i].ActivateTemporarySpawnProtection(PostMachineGunObstacleProtectionDuration);
+        }
+    }
+
+    private void ProtectActivePostMachineGunPhases()
+    {
+        float minimumX = float.NegativeInfinity;
+        MachineGunObstacle source = MachineGunObstacle.CurrentSource;
+        if (source != null)
+        {
+            PhaseLayoutSnapshot sourcePhase = source.GetComponentInParent<PhaseLayoutSnapshot>(true);
+            if (sourcePhase != null)
+                minimumX = sourcePhase.transform.position.x - 0.01f;
+        }
+
+        for (int i = 0; i < activePhases.Count; i++)
+        {
+            PhaseInfo phaseInfo = activePhases[i];
+            if (phaseInfo == null || phaseInfo.obj == null || phaseInfo.isRageSpawn)
+                continue;
+
+            GameObject phaseObject = phaseInfo.obj;
+            if (phaseObject.CompareTag(MachineGunStageTag))
+                continue;
+
+            if (phaseObject.transform.position.x < minimumX)
+                continue;
+
+            ApplyPostMachineGunObstacleProtection(phaseObject);
+        }
     }
 
     private void TryPauseSpawnForMachineGunStage(GameObject phaseObject, bool isRageSpawn)
@@ -1588,6 +1792,60 @@ public class StageManager : MonoBehaviour
         machineGunPhasePauseActive = false;
         phasePassedDuringMachineGunPause = false;
         spawnPaused = true;
+    }
+
+    private void TryPauseSpawnForMiniBossPhase(GameObject phaseObject, PhaseCache cache, bool isRageSpawn)
+    {
+        if (phaseObject == null || isRageSpawn || bossRunning || bossTriggered)
+            return;
+
+        if (miniBossPhasePauseActive || machineGunPhasePauseActive || machineGunStagePrePauseActive)
+            return;
+
+        if (!phaseObject.CompareTag(MiniBossStageTag))
+            return;
+
+        MiniBossSpawner[] spawners = phaseObject.GetComponentsInChildren<MiniBossSpawner>(true);
+        for (int i = 0; i < spawners.Length; i++)
+            spawners[i]?.SpawnIfNeeded();
+
+        miniBossPhasePauseActive = true;
+        spawnPaused = true;
+
+        if (cache != null && cache.phaseEndTrigger != null)
+            cache.phaseEndTrigger.SuppressFuturePasses();
+    }
+
+    private void ResolveMiniBossPhase()
+    {
+        if (!miniBossPhasePauseActive)
+            return;
+
+        miniBossPhasePauseActive = false;
+
+        if (bossRunning || bossTriggered)
+            return;
+
+        if (machineGunPhasePauseActive || machineGunStagePrePauseActive)
+        {
+            spawnPaused = true;
+            return;
+        }
+
+        if (currentSpawnMode == SpawnMode.Cooldown || gameplayPauseByTransform)
+        {
+            spawnPaused = true;
+            return;
+        }
+
+        spawnPaused = false;
+        SpawnPhase();
+    }
+
+    private static bool HasAliveMiniBoss()
+    {
+        MiniBoss[] activeMiniBosses = FindObjectsByType<MiniBoss>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+        return activeMiniBosses != null && activeMiniBosses.Length > 0;
     }
 
     private bool ShouldInsertExtraNormalPhaseBeforeBoss(PhaseInfo sourcePhase)
@@ -1637,6 +1895,20 @@ public class StageManager : MonoBehaviour
         return false;
     }
 
+    private static bool HasConfiguredSpecialPhasePrefabs(SpecialPhaseEntry[] source)
+    {
+        if (source == null)
+            return false;
+
+        for (int i = 0; i < source.Length; i++)
+        {
+            if (source[i] != null && source[i].prefab != null)
+                return true;
+        }
+
+        return false;
+    }
+
     private static void AddUniquePrefabs(List<GameObject> target, GameObject[] source)
     {
         if (source == null || target == null)
@@ -1645,6 +1917,21 @@ public class StageManager : MonoBehaviour
         for (int i = 0; i < source.Length; i++)
         {
             GameObject prefab = source[i];
+            if (prefab == null || target.Contains(prefab))
+                continue;
+
+            target.Add(prefab);
+        }
+    }
+
+    private static void AddUniquePrefabs(List<GameObject> target, SpecialPhaseEntry[] source)
+    {
+        if (source == null || target == null)
+            return;
+
+        for (int i = 0; i < source.Length; i++)
+        {
+            GameObject prefab = source[i] != null ? source[i].prefab : null;
             if (prefab == null || target.Contains(prefab))
                 continue;
 

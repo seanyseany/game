@@ -1276,7 +1276,6 @@ MonoBehaviour:
   monsterSpawnCount: 13
   monsterSpawnInterval: 0.3
   missileSpeed: 8.5
-  rageMoveSpeed: 9
   bossRageMissilePrefab: {fileID: 8579907553907674968, guid: 44b95ad74f38642ba84a75696a0c461d, type: 3}
   bossRageMissileLocalOffset: {x: -1.47, y: -0.59, z: 0}
   bossRageFirePrefab: {fileID: 8378490850483826176, guid: 5ea943efde389433d86ea8ca76ea54ac, type: 3}
@@ -1289,23 +1288,22 @@ MonoBehaviour:
   rageBurstShiftSpeed: 2
   rageBurstRoamDuration: 1.3
   rageLaserInterval: 0.1
-  rageMissileSpeed: 12
+  rageMissileSpeed: 14
   rageOffAnimEventFallbackTime: 4
   bossAnimator: {fileID: 0}
   triggerBossRage: BossRage
   triggerBossRageOff: BossRageOff
   triggerBossRageFly: BossRageFly
   triggerBossNormal: BossNormal
+  triggerBossDestroy: BossDestroy
   rageOffStateName: BossRageOff
   usePool: 1
   bossMissilePoolTag: BossMissile
-  bossDestroyPoolTag: BossDestroy
   bossCapRightPoolTag: BossCapRight
   bossCapLeftPoolTag: BossCapLeft
   bossRageMissilePoolTag: BossRageMissile
   bossRageFirePoolTag: 
   bossMissilePrefab: {fileID: 2138515272002722746, guid: 428ab485d1ad842309e6eb6b9851420e, type: 3}
-  bossDestroyPrefab: {fileID: 6487309876808420306, guid: cbf19a81ace5146f98f401b20baa01f9, type: 3}
   bossCapRightPrefab: {fileID: 6244982353558447776, guid: 3c18ea6e7ec484a6c8f2e6b83701be32, type: 3}
   bossCapLeftPrefab: {fileID: 6235373037444041652, guid: 9167ab1203e944c8a9e0b7e88323b6eb, type: 3}
   hitColor: {r: 1, g: 0, b: 0, a: 1}
@@ -1324,6 +1322,10 @@ MonoBehaviour:
   breakAnimPoolTag: BossDamaged
   hp60AnimPoolTag: BossSmoke
   hp20AnimPoolTag: BossFire
+  destroyPartObjects:
+  - {fileID: 8298099531041404384}
+  - {fileID: 6478804464102308261}
+  - {fileID: 5801431285100542918}
 --- !u!58 &1552974664192305020
 CircleCollider2D:
   m_ObjectHideFlags: 0

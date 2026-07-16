@@ -292,6 +292,20 @@ public class ProjectileBall : MonoBehaviour, IRageTransformPauseHandler
     {
         if (other == null) return false;
 
+        var miniBoss = other.GetComponent<MiniBoss>() ?? other.GetComponentInParent<MiniBoss>();
+        if (miniBoss == null)
+        {
+            Transform root = other.transform.root;
+            if (root != null)
+                miniBoss = root.GetComponent<MiniBoss>() ?? root.GetComponentInChildren<MiniBoss>(true);
+        }
+
+        if (miniBoss != null)
+        {
+            miniBoss.RegisterHitFromPlayerAttack(2);
+            return true;
+        }
+
         var enemyRoot = ResolveEnemyRoot(other.transform);
         if (enemyRoot == null) return false;
 

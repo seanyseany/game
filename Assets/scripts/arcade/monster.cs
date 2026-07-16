@@ -147,6 +147,9 @@ public class Monster : MonoBehaviour, IReinitializable
         if (dead)
             return;
 
+        if (!CanReactToHits())
+            return;
+
         StartDie(byPlayerKill: countAsPlayerKill);
     }
 

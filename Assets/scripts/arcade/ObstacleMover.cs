@@ -24,8 +24,17 @@ public class ObstacleMover : MonoBehaviour, IReinitializable
     public float pooledDespawnX = -25f;
     [SerializeField] private float collisionSkin = 0.02f;
 
+    [Header("Gate Collision")]
+    [SerializeField] private string gateTag = "Gate";
+    [SerializeField] private string floorTag = "floor";
+    [SerializeField] private string platformTag = "platform";
+    [SerializeField] private string ceilingTag = "ceiling";
+    [Min(0)] [SerializeField] private int gateOxygenPenalty = 1;
+
     private Rigidbody2D rb;
     private Collider2D cachedCollider;
+    private Obstacle obstacle;
+    private BulletObstacle bulletObstacle;
     private Vector2 moveDir;
     private bool ignoringPlayer = false;
     private float spawnTime;
@@ -38,12 +47,15 @@ public class ObstacleMover : MonoBehaviour, IReinitializable
     private Color[] initialSpriteColors;
     private Coroutine stretchRoutine;
     private bool deathSequenceActive;
+    private bool destroySequenceRequested;
     private readonly RaycastHit2D[] castHits = new RaycastHit2D[8];
 
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
         cachedCollider = GetComponent<Collider2D>();
+        obstacle = GetComponent<Obstacle>();
+        bulletObstacle = GetComponent<BulletObstacle>();
         rb.gravityScale = 0;
         rb.bodyType = RigidbodyType2D.Kinematic;
         rb.freezeRotation = true;
@@ -63,6 +75,7 @@ public class ObstacleMover : MonoBehaviour, IReinitializable
     {
         spawnTime = Time.time;
         deathSequenceActive = false;
+        destroySequenceRequested = false;
         ResetMoveDirection();
 
         transform.localRotation = initialLocalRotation;
@@ -97,7 +110,7 @@ public class ObstacleMover : MonoBehaviour, IReinitializable
         transform.Rotate(0f, 0f, rotationSpeed * Time.deltaTime);
 
         if (ShouldReturnToPool())
-            TryReturnToObjectPool();
+            TriggerDestroyOrDespawn();
     }
 
     private bool ShouldReturnToPool()
@@ -116,6 +129,15 @@ public class ObstacleMover : MonoBehaviour, IReinitializable
 
     private void OnTriggerEnter2D(Collider2D other)
     {
+        if (TryHandleGateCollision(other))
+            return;
+
+        if (!ShouldBounceFrom(other))
+        {
+            IgnoreCollisionWith(other);
+            return;
+        }
+
         HandleBounceCollision(other);
     }
 
@@ -123,6 +145,15 @@ public class ObstacleMover : MonoBehaviour, IReinitializable
     {
         if (collision == null)
             return;
+
+        if (TryHandleGateCollision(collision.collider))
+            return;
+
+        if (!ShouldBounceFrom(collision.collider))
+        {
+            IgnoreCollisionWith(collision.collider);
+            return;
+        }
 
         HandleBounceCollision(collision.collider);
     }
@@ -192,6 +223,37 @@ public class ObstacleMover : MonoBehaviour, IReinitializable
             return false;
 
         return ObjectPool.Instance.TryReturnActive(gameObject);
+    }
+
+    private void TriggerDestroyOrDespawn()
+    {
+        if (destroySequenceRequested)
+            return;
+
+        destroySequenceRequested = true;
+
+        if (obstacle == null)
+            obstacle = GetComponent<Obstacle>();
+
+        if (obstacle != null)
+        {
+            obstacle.TriggerDestroySequence();
+            return;
+        }
+
+        if (bulletObstacle == null)
+            bulletObstacle = GetComponent<BulletObstacle>();
+
+        if (bulletObstacle != null)
+        {
+            bulletObstacle.TriggerDestroySequence();
+            return;
+        }
+
+        if (TryReturnToObjectPool())
+            return;
+
+        gameObject.SetActive(false);
     }
 
     private void StopStretchRoutine(bool resetScale)
@@ -275,13 +337,44 @@ public class ObstacleMover : MonoBehaviour, IReinitializable
             StartCoroutine(TemporarilyIgnorePlayer(other));
     }
 
-    private static bool ShouldBounceFrom(Collider2D other)
+    private bool ShouldBounceFrom(Collider2D other)
     {
         if (other == null)
             return false;
 
         string tag = other.tag;
-        return tag == "floor" || tag == "ceiling" || tag == "platform" || tag == "Obstacle" || tag == "player";
+        return tag == floorTag || tag == platformTag || tag == ceilingTag;
+    }
+
+    private bool TryHandleGateCollision(Collider2D other)
+    {
+        if (!IsGate(other))
+            return false;
+
+        if (destroySequenceRequested)
+            return true;
+
+        if (GameData.Instance != null && gateOxygenPenalty > 0)
+            GameData.Instance.SpendO2(gateOxygenPenalty);
+
+        TriggerDestroyOrDespawn();
+        return true;
+    }
+
+    private bool IsGate(Collider2D other)
+    {
+        if (other == null)
+            return false;
+
+        return other.CompareTag(gateTag) || other.GetComponent<GateHealth>() != null || other.GetComponentInParent<GateHealth>() != null;
+    }
+
+    private void IgnoreCollisionWith(Collider2D other)
+    {
+        if (other == null || cachedCollider == null)
+            return;
+
+        Physics2D.IgnoreCollision(cachedCollider, other, true);
     }
 
     private void CacheSpriteRenderers()

@@ -37,6 +37,7 @@ public class BackgroundScrollerException: MonoBehaviour
         // 일반 배경보다 감속 영향을 절반만 받고, 기준 속도의 절반 아래로는 내려가지 않음
         Vector2 ofs = mr.material.mainTextureOffset;
         ofs.x += baseScrollSpeed * mult * Time.deltaTime;
+        ofs.x = Mathf.Repeat(ofs.x, 1f);
         mr.material.mainTextureOffset = ofs;
     }
 }

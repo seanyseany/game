@@ -14,6 +14,7 @@ public class BulletObstacle : MonoBehaviour, IReinitializable
     private bool destroyed;
     private bool halvedTriggered;
     private Coroutine destroyRoutine;
+    private float spawnProtectionUntil;
 
     private const string HalvedTriggerName = "halved";
     private const string DieTriggerName = "Die";
@@ -35,6 +36,7 @@ public class BulletObstacle : MonoBehaviour, IReinitializable
         currentHitCount = 0;
         destroyed = false;
         halvedTriggered = false;
+        spawnProtectionUntil = 0f;
 
         if (destroyRoutine != null)
         {
@@ -61,7 +63,7 @@ public class BulletObstacle : MonoBehaviour, IReinitializable
 
     public void RegisterBulletHit()
     {
-        if (destroyed)
+        if (destroyed || HasTemporarySpawnProtection())
             return;
 
         currentHitCount++;
@@ -74,6 +76,28 @@ public class BulletObstacle : MonoBehaviour, IReinitializable
 
         destroyed = true;
         TriggerDestroy();
+    }
+
+    public void ForceDestroyImmediate()
+    {
+        if (destroyed || HasTemporarySpawnProtection())
+            return;
+
+        destroyed = true;
+        TriggerDestroy();
+    }
+
+    public void TriggerDestroySequence()
+    {
+        ForceDestroyImmediate();
+    }
+
+    public void ActivateTemporarySpawnProtection(float duration)
+    {
+        if (duration <= 0f)
+            return;
+
+        spawnProtectionUntil = Mathf.Max(spawnProtectionUntil, Time.time + duration);
     }
 
     private bool ShouldTriggerHalved()
@@ -95,6 +119,10 @@ public class BulletObstacle : MonoBehaviour, IReinitializable
 
     private void TriggerDestroy()
     {
+        MachineGunLastSpawnNotifier machineGunNotifier = GetComponent<MachineGunLastSpawnNotifier>() ?? GetComponentInParent<MachineGunLastSpawnNotifier>();
+        if (machineGunNotifier != null)
+            machineGunNotifier.NotifyDestroyTriggered();
+
         Obstacle obstacle = GetComponent<Obstacle>() ?? GetComponentInParent<Obstacle>();
         if (obstacle != null)
         {
@@ -176,5 +204,10 @@ public class BulletObstacle : MonoBehaviour, IReinitializable
         }
 
         return false;
+    }
+
+    private bool HasTemporarySpawnProtection()
+    {
+        return spawnProtectionUntil > Time.time;
     }
 }

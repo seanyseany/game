@@ -78,7 +78,7 @@ PrefabInstance:
       objectReference: {fileID: 6578444500445179163, guid: a7cf6f92caaaa448ba9311d7bb32c538, type: 3}
     - target: {fileID: 3852537909265614834, guid: e6e8e0f47b823467d85917a89f84c769, type: 3}
       propertyPath: m_SortingOrder
-      value: 3
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 6122296207878514924, guid: e6e8e0f47b823467d85917a89f84c769, type: 3}
       propertyPath: poolTag
@@ -143,9 +143,14 @@ MonoBehaviour:
   stretchAmountY: 0.1
   stretchSpeed: 4
   stretchDuration: 0.2
-  pooledLifetime: 14
+  pooledLifetime: 16
   pooledDespawnX: -25
   collisionSkin: 0.02
+  gateTag: Gate
+  floorTag: floor
+  platformTag: platform
+  ceilingTag: ceiling
+  gateOxygenPenalty: 1
 --- !u!114 &6176947184907798364
 MonoBehaviour:
   m_ObjectHideFlags: 0

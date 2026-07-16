@@ -88,6 +88,7 @@ public class Boss : MonoBehaviour, IReinitializable
     public string triggerBossRageOff = "BossRageOff";
     public string triggerBossRageFly = "BossRageFly";
     public string triggerBossNormal = "BossNormal";
+    public string triggerBossDestroy = "BossDestroy";
     public string rageOffStateName = "BossRageOff";
 
     // ===================== POOL / PREFABS =====================
@@ -96,7 +97,6 @@ public class Boss : MonoBehaviour, IReinitializable
 
     [Header("Pool Tags")]
     public string bossMissilePoolTag = "BossMissile";
-    public string bossDestroyPoolTag = "BossDestroy";
     public string bossCapRightPoolTag = "BossCapRight";
     public string bossCapLeftPoolTag = "BossCapLeft";
     public string bossRageMissilePoolTag = "BossRageMissile";
@@ -104,7 +104,6 @@ public class Boss : MonoBehaviour, IReinitializable
 
     [Header("Fallback Prefabs")]
     public GameObject bossMissilePrefab;
-    public GameObject bossDestroyPrefab;
     public GameObject bossCapRightPrefab;
     public GameObject bossCapLeftPrefab;
 
@@ -142,6 +141,9 @@ public class Boss : MonoBehaviour, IReinitializable
     public string hp60AnimPoolTag = "";
     public string hp20AnimPoolTag = "";
 
+    [Header("Destroy Parts")]
+    public List<GameObject> destroyPartObjects = new List<GameObject>();
+
     private int hp;
     private float spawnTime;
     private float shootDisabledUntil = -999f;
@@ -165,6 +167,7 @@ public class Boss : MonoBehaviour, IReinitializable
     private GameObject leftCapObj;
     private GameObject hp60AnimObj;
     private GameObject hp20AnimObj;
+    private Collider2D[] bossColliders;
 
     private Renderer[] allRenderers;
     private List<Color[]> originalColors = new List<Color[]>();
@@ -205,6 +208,8 @@ public class Boss : MonoBehaviour, IReinitializable
         spawnedHp20Anim = false;
         lastRageStopIndex = -1;
         pendingDamage = 0f;
+        SetBossCollidersEnabled(true);
+        SetDestroyPartObjectsActive(true);
 
         if (mainRoutine != null) { StopCoroutine(mainRoutine); mainRoutine = null; }
         if (flashRoutine != null) { StopCoroutine(flashRoutine); flashRoutine = null; }
@@ -227,6 +232,7 @@ public class Boss : MonoBehaviour, IReinitializable
     {
         CacheAllRenderers();
         hp = maxHp;
+        bossColliders = GetComponents<Collider2D>();
         initialParent = transform.parent;
         initialWorldPos = transform.position;
         initialWorldRot = transform.rotation;
@@ -746,6 +752,40 @@ public class Boss : MonoBehaviour, IReinitializable
         SetBossAnimTrigger(triggerBossNormal);
     }
 
+    private void SetBossCollidersEnabled(bool enabled)
+    {
+        if (bossColliders == null) return;
+
+        for (int i = 0; i < bossColliders.Length; i++)
+        {
+            if (bossColliders[i] != null)
+                bossColliders[i].enabled = enabled;
+        }
+    }
+
+    private void SetDestroyPartObjectsActive(bool active)
+    {
+        if (destroyPartObjects == null) return;
+
+        for (int i = 0; i < destroyPartObjects.Count; i++)
+        {
+            GameObject obj = destroyPartObjects[i];
+            if (obj != null)
+                obj.SetActive(active);
+        }
+    }
+
+    private void HideDestroyVisualParts()
+    {
+        SetDestroyPartObjectsActive(false);
+        ClearThresholdAnimObjects();
+    }
+
+    public void OnBossDestroyShakeEvent()
+    {
+        CameraShakeManager.ShakeDefault();
+    }
+
     private void SetBossAnimTrigger(string triggerName)
     {
         if (bossAnimator == null) return;
@@ -767,6 +807,76 @@ public class Boss : MonoBehaviour, IReinitializable
             bossAnimator.ResetTrigger(triggerBossRageFly);
         if (!string.IsNullOrEmpty(triggerBossNormal))
             bossAnimator.ResetTrigger(triggerBossNormal);
+        if (!string.IsNullOrEmpty(triggerBossDestroy))
+            bossAnimator.ResetTrigger(triggerBossDestroy);
+    }
+
+    private IEnumerator CoPlayDestroyAnimationAndDisable(float shakeDelay = -1f)
+    {
+        state = State.Dead;
+        SetBossUIVisible(false);
+        SetBossCollidersEnabled(false);
+        HideDestroyVisualParts();
+        SetBossAnimTrigger(triggerBossDestroy);
+
+        if (bossAnimator == null || string.IsNullOrEmpty(triggerBossDestroy))
+        {
+            gameObject.SetActive(false);
+            yield break;
+        }
+
+        const float maxWait = 5f;
+        float elapsed = 0f;
+        bool enteredDestroyState = false;
+        float destroyStateElapsed = 0f;
+        float destroyStateLength = 0f;
+
+        while (elapsed < maxWait)
+        {
+            if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            {
+                yield return null;
+                continue;
+            }
+
+            AnimatorStateInfo current = bossAnimator.GetCurrentAnimatorStateInfo(0);
+            AnimatorStateInfo next = bossAnimator.GetNextAnimatorStateInfo(0);
+
+            if (!enteredDestroyState)
+            {
+                if (current.IsName(triggerBossDestroy) || next.IsName(triggerBossDestroy))
+                {
+                    enteredDestroyState = true;
+                    destroyStateElapsed = 0f;
+                }
+            }
+            else if (!bossAnimator.IsInTransition(0) && current.IsName(triggerBossDestroy))
+            {
+                destroyStateElapsed += Time.deltaTime;
+
+                if (destroyStateLength <= 0f)
+                {
+                    AnimatorClipInfo[] clips = bossAnimator.GetCurrentAnimatorClipInfo(0);
+                    for (int i = 0; i < clips.Length; i++)
+                    {
+                        AnimationClip clip = clips[i].clip;
+                        if (clip != null)
+                            destroyStateLength = Mathf.Max(destroyStateLength, clip.length);
+                    }
+                }
+
+                if (current.normalizedTime >= 1f)
+                    break;
+
+                if (destroyStateLength > 0f && destroyStateElapsed >= destroyStateLength)
+                    break;
+            }
+
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        gameObject.SetActive(false);
     }
 
     private IEnumerator WaitForRageOffAnimToFinish()
@@ -921,18 +1031,14 @@ public class Boss : MonoBehaviour, IReinitializable
         if (canShakeVisual)
             visualRoot.localPosition = visualBaseLocal;
 
-        Spawn(bossDestroyPoolTag, bossDestroyPrefab, transform.position, Quaternion.identity);
-
         SpawnFollowLocal(breakAnimPoolTag, breakAnimPrefab, breakAnimLocalOffset);
-
-        EndRageModeImmediate();
 
         if (rightCapObj) SafeReturnOrDestroy(rightCapObj, bossCapRightPoolTag);
         if (leftCapObj) SafeReturnOrDestroy(leftCapObj, bossCapLeftPoolTag);
         rightCapObj = null;
         leftCapObj = null;
 
-        gameObject.SetActive(false);
+        yield return CoPlayDestroyAnimationAndDisable();
     }
 
     // ===================== TIMEOUT DASH =====================
@@ -962,10 +1068,7 @@ public class Boss : MonoBehaviour, IReinitializable
         }
         transform.position = end;
 
-        Spawn(bossDestroyPoolTag, bossDestroyPrefab, transform.position, Quaternion.identity);
-
         SpawnFollowLocal(breakAnimPoolTag, breakAnimPrefab, breakAnimLocalOffset);
-        EndRageModeImmediate();
 
         var gate = GateHealth.Instance;
         if (gate != null)
@@ -973,8 +1076,7 @@ public class Boss : MonoBehaviour, IReinitializable
         else if (GameData.Instance != null)
             GameData.Instance.TriggerGameOver();
 
-        state = State.Dead;
-        gameObject.SetActive(false);
+        yield return CoPlayDestroyAnimationAndDisable(0.3f);
     }
 
     // ===================== MOVE =====================

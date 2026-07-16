@@ -79,6 +79,7 @@ public class GameData : MonoBehaviour
     private bool arcadeRewardsGranted;
     private bool machineGunTriggerPending;
     private bool machineGunSequenceActive;
+    private bool protectNextPostMachineGunPhaseObstacles;
     private BombLauncher bombLauncherRef;
     private Train trainRef;
     private RageUIController rageUiRef;
@@ -219,7 +220,17 @@ public class GameData : MonoBehaviour
             return false;
 
         machineGunTriggerPending = true;
+        protectNextPostMachineGunPhaseObstacles = true;
         OnMachineGunTrigger?.Invoke();
+        return true;
+    }
+
+    public bool ConsumeNextPostMachineGunPhaseObstacleProtection()
+    {
+        if (!protectNextPostMachineGunPhaseObstacles)
+            return false;
+
+        protectNextPostMachineGunPhaseObstacles = false;
         return true;
     }
 
@@ -254,6 +265,7 @@ public class GameData : MonoBehaviour
 
     private void ForceStopMachineGunSequence()
     {
+        protectNextPostMachineGunPhaseObstacles = false;
         NotifyMachineGunSequenceEnded();
     }
 
@@ -440,11 +452,29 @@ public class GameData : MonoBehaviour
             yield return new WaitUntil(() => StageManager.Instance.IsStageLoopStopped());
 
             StageManager.Instance.ClearAllPhases();
+            ClearMiniBossEntities();
             MachineGunObstacle.ClearAllSpawnedObstacles();
 
             yield return new WaitForSeconds(0.1f);
 
             StageManager.Instance.StartStageLoop();
+        }
+    }
+
+    private void ClearMiniBossEntities()
+    {
+        MiniBoss[] activeMiniBosses = FindObjectsByType<MiniBoss>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+        for (int i = 0; i < activeMiniBosses.Length; i++)
+        {
+            if (activeMiniBosses[i] != null)
+                Destroy(activeMiniBosses[i].gameObject);
+        }
+
+        MiniBossBomb[] activeMiniBossBombs = FindObjectsByType<MiniBossBomb>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+        for (int i = 0; i < activeMiniBossBombs.Length; i++)
+        {
+            if (activeMiniBossBombs[i] != null)
+                Destroy(activeMiniBossBombs[i].gameObject);
         }
     }
 
@@ -644,8 +674,15 @@ public class GameData : MonoBehaviour
         gameOverUiRoutine = null;
     }
 
+    public void AddO2(int amount = 1) => o2Score = Mathf.Max(0, o2Score + amount);
 
-    public void AddO2(int amount = 1) => o2Score += amount;
+    public void SpendO2(int amount = 1)
+    {
+        if (amount <= 0)
+            return;
+
+        o2Score = Mathf.Max(0, o2Score - amount);
+    }
 
     public int GetCleanScore()
     {

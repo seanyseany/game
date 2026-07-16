@@ -5722,8 +5722,12 @@ PrefabInstance:
     m_TransformParent: {fileID: 6340716225815163468}
     m_Modifications:
     - target: {fileID: 5238461836741512567, guid: 4ccff1abe2d474c9cb30942c3414a322, type: 3}
+      propertyPath: cholesterolBombPrefab
+      value: 
+      objectReference: {fileID: 788702549776425233, guid: 8b29bbeeb2ab745a99c631f3a74bb187, type: 3}
+    - target: {fileID: 5238461836741512567, guid: 4ccff1abe2d474c9cb30942c3414a322, type: 3}
       propertyPath: machineGunSpawnInterval
-      value: 1.1
+      value: 0.78
       objectReference: {fileID: 0}
     - target: {fileID: 5238461836741512567, guid: 4ccff1abe2d474c9cb30942c3414a322, type: 3}
       propertyPath: machineGunSpawnStartDelay
@@ -5731,19 +5735,67 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5238461836741512567, guid: 4ccff1abe2d474c9cb30942c3414a322, type: 3}
       propertyPath: machineGunSpawnEndLeadTime
-      value: 8.2
+      value: 28
+      objectReference: {fileID: 0}
+    - target: {fileID: 5238461836741512567, guid: 4ccff1abe2d474c9cb30942c3414a322, type: 3}
+      propertyPath: lastMachineGunObstaclePoolTag
+      value: Obstacle-BigOsM
+      objectReference: {fileID: 0}
+    - target: {fileID: 5238461836741512567, guid: 4ccff1abe2d474c9cb30942c3414a322, type: 3}
+      propertyPath: cholesterolBombSpawnDelays.Array.size
+      value: 4
+      objectReference: {fileID: 0}
+    - target: {fileID: 5238461836741512567, guid: 4ccff1abe2d474c9cb30942c3414a322, type: 3}
+      propertyPath: 'cholesterolBombSpawnDelays.Array.data[0]'
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 5238461836741512567, guid: 4ccff1abe2d474c9cb30942c3414a322, type: 3}
+      propertyPath: 'cholesterolBombSpawnDelays.Array.data[1]'
+      value: 11
+      objectReference: {fileID: 0}
+    - target: {fileID: 5238461836741512567, guid: 4ccff1abe2d474c9cb30942c3414a322, type: 3}
+      propertyPath: 'cholesterolBombSpawnDelays.Array.data[2]'
+      value: 17
+      objectReference: {fileID: 0}
+    - target: {fileID: 5238461836741512567, guid: 4ccff1abe2d474c9cb30942c3414a322, type: 3}
+      propertyPath: 'cholesterolBombSpawnDelays.Array.data[3]'
+      value: 22
+      objectReference: {fileID: 0}
+    - target: {fileID: 5238461836741512567, guid: 4ccff1abe2d474c9cb30942c3414a322, type: 3}
+      propertyPath: 'cholesterolBombSpawnDelays.Array.data[4]'
+      value: 22
       objectReference: {fileID: 0}
     - target: {fileID: 5238461836741512567, guid: 4ccff1abe2d474c9cb30942c3414a322, type: 3}
       propertyPath: machineGunSpawnWorldPositions.Array.size
-      value: 3
+      value: 4
       objectReference: {fileID: 0}
     - target: {fileID: 5238461836741512567, guid: 4ccff1abe2d474c9cb30942c3414a322, type: 3}
       propertyPath: 'machineGunObstaclePoolTags66.Array.data[2]'
       value: Obstacle-BigOsM
       objectReference: {fileID: 0}
     - target: {fileID: 5238461836741512567, guid: 4ccff1abe2d474c9cb30942c3414a322, type: 3}
+      propertyPath: machineGunSpawnWorldPositions.Array.data[0].x
+      value: 12
+      objectReference: {fileID: 0}
+    - target: {fileID: 5238461836741512567, guid: 4ccff1abe2d474c9cb30942c3414a322, type: 3}
+      propertyPath: machineGunSpawnWorldPositions.Array.data[1].x
+      value: 12
+      objectReference: {fileID: 0}
+    - target: {fileID: 5238461836741512567, guid: 4ccff1abe2d474c9cb30942c3414a322, type: 3}
       propertyPath: machineGunSpawnWorldPositions.Array.data[1].y
-      value: 0
+      value: 0.7
+      objectReference: {fileID: 0}
+    - target: {fileID: 5238461836741512567, guid: 4ccff1abe2d474c9cb30942c3414a322, type: 3}
+      propertyPath: machineGunSpawnWorldPositions.Array.data[2].x
+      value: 12
+      objectReference: {fileID: 0}
+    - target: {fileID: 5238461836741512567, guid: 4ccff1abe2d474c9cb30942c3414a322, type: 3}
+      propertyPath: machineGunSpawnWorldPositions.Array.data[3].x
+      value: 12
+      objectReference: {fileID: 0}
+    - target: {fileID: 5238461836741512567, guid: 4ccff1abe2d474c9cb30942c3414a322, type: 3}
+      propertyPath: machineGunSpawnWorldPositions.Array.data[3].y
+      value: -1
       objectReference: {fileID: 0}
     - target: {fileID: 5497865425015623950, guid: 4ccff1abe2d474c9cb30942c3414a322, type: 3}
       propertyPath: m_LocalPosition.x

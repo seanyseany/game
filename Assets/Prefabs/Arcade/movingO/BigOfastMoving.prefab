@@ -102,7 +102,7 @@ PrefabInstance:
       objectReference: {fileID: -6294534776272657081, guid: a7cf6f92caaaa448ba9311d7bb32c538, type: 3}
     - target: {fileID: 5799759091200308146, guid: a7fb63eb5979149f7b5c004e7993bbd8, type: 3}
       propertyPath: m_SortingOrder
-      value: 3
+      value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents:
     - {fileID: 6053488587577537343, guid: a7fb63eb5979149f7b5c004e7993bbd8, type: 3}
@@ -139,17 +139,22 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: be9c87b3dad084e39835bee192f88b58, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  horizontalSpeed: -2
-  verticalSpeed: 2
+  horizontalSpeed: -2.2
+  verticalSpeed: 1
   bounceFactor: 1
   rotationSpeed: 90
   stretchAmountX: 0.1
   stretchAmountY: 0.1
   stretchSpeed: 4
   stretchDuration: 0.3
-  pooledLifetime: 14
+  pooledLifetime: 16
   pooledDespawnX: -25
   collisionSkin: 0.02
+  gateTag: Gate
+  floorTag: floor
+  platformTag: platform
+  ceilingTag: ceiling
+  gateOxygenPenalty: 1
 --- !u!114 &-5153460356748387767
 MonoBehaviour:
   m_ObjectHideFlags: 0

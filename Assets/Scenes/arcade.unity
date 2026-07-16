@@ -745,6 +745,11 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: ae16f2249eafc434385fd8b711d4e84f, type: 3}
+--- !u!1 &207145818 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 6478804464102308261, guid: e9b0a36386b6945d0a6d09b73e737dfa, type: 3}
+  m_PrefabInstance: {fileID: 1556104997}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &216501601
 GameObject:
   m_ObjectHideFlags: 0
@@ -1540,6 +1545,7 @@ GameObject:
   - component: {fileID: 519420031}
   - component: {fileID: 519420029}
   - component: {fileID: 519420030}
+  - component: {fileID: 519420033}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -1666,6 +1672,24 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &519420033
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 519420028}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e4543ae1e89f840abb46e9586137b21d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CameraShakeManager
+  defaultDuration: 0.35
+  defaultMagnitudeX: 0.4
+  defaultMagnitudeY: 0.26
+  defaultFrequency: 28
+  allowHorizontalShake: 0
+  allowVerticalShake: 1
 --- !u!1 &519891718
 GameObject:
   m_ObjectHideFlags: 0
@@ -2392,6 +2416,11 @@ PolygonCollider2D:
       - {x: 0.48404545, y: -0.21130812}
       - {x: 0.8359954, y: -0.13821527}
   m_UseDelaunayMesh: 0
+--- !u!1 &782192151 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 5801431285100542918, guid: e9b0a36386b6945d0a6d09b73e737dfa, type: 3}
+  m_PrefabInstance: {fileID: 1556104997}
+  m_PrefabAsset: {fileID: 0}
 --- !u!114 &856590532 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 4397233600530981603, guid: 3e1e212b6b28f491f9932e6674085407, type: 3}
@@ -3413,7 +3442,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2006843320572366924, guid: fae4c319019f9402eaeee6e7645d9498, type: 3}
       propertyPath: selectedPlayerType
-      value: 4
+      value: 2
       objectReference: {fileID: 0}
     - target: {fileID: 2006843320572366924, guid: fae4c319019f9402eaeee6e7645d9498, type: 3}
       propertyPath: holyLightSpawnPos.x
@@ -4131,7 +4160,7 @@ BoxCollider2D:
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: 0.11859876, y: -0.40232044}
+  m_Offset: {x: 0.30605033, y: -0.40232044}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0, y: 0}
@@ -4141,7 +4170,7 @@ BoxCollider2D:
     drawMode: 0
     adaptiveTiling: 0
   m_AutoTiling: 0
-  m_Size: {x: 1.8614012, y: 0.5664768}
+  m_Size: {x: 2.2363057, y: 0.5664768}
   m_EdgeRadius: 0
 --- !u!114 &1309666215
 MonoBehaviour:
@@ -5231,17 +5260,25 @@ PrefabInstance:
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8548843159647306672, guid: e9b0a36386b6945d0a6d09b73e737dfa, type: 3}
-      propertyPath: monsterPrefab
-      value: 
-      objectReference: {fileID: 6842220691773557582, guid: bb4d5096a531148c5a4d0ac6eed0bb5e, type: 3}
-    - target: {fileID: 8548843159647306672, guid: e9b0a36386b6945d0a6d09b73e737dfa, type: 3}
-      propertyPath: rageDoorOpenTime
-      value: 0.8
-      objectReference: {fileID: 0}
-    - target: {fileID: 8548843159647306672, guid: e9b0a36386b6945d0a6d09b73e737dfa, type: 3}
       propertyPath: rageMissileSpeed
       value: 14
       objectReference: {fileID: 0}
+    - target: {fileID: 8548843159647306672, guid: e9b0a36386b6945d0a6d09b73e737dfa, type: 3}
+      propertyPath: destroyPartObjects.Array.size
+      value: 3
+      objectReference: {fileID: 0}
+    - target: {fileID: 8548843159647306672, guid: e9b0a36386b6945d0a6d09b73e737dfa, type: 3}
+      propertyPath: 'destroyPartObjects.Array.data[0]'
+      value: 
+      objectReference: {fileID: 1760120111}
+    - target: {fileID: 8548843159647306672, guid: e9b0a36386b6945d0a6d09b73e737dfa, type: 3}
+      propertyPath: 'destroyPartObjects.Array.data[1]'
+      value: 
+      objectReference: {fileID: 207145818}
+    - target: {fileID: 8548843159647306672, guid: e9b0a36386b6945d0a6d09b73e737dfa, type: 3}
+      propertyPath: 'destroyPartObjects.Array.data[2]'
+      value: 
+      objectReference: {fileID: 782192151}
     - target: {fileID: 8567234407186357675, guid: e9b0a36386b6945d0a6d09b73e737dfa, type: 3}
       propertyPath: m_Name
       value: Boss
@@ -5622,7 +5659,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   testPhasePrefabs:
-  - {fileID: 2659614723417223950, guid: bac18af1ddfa44351a7f1056878d6a3e, type: 3}
+  - {fileID: 2659614723417223950, guid: 86a9e3ef495cc4ed09cafdfc02a26ec3, type: 3}
+  - {fileID: 2659614723417223950, guid: 86a9e3ef495cc4ed09cafdfc02a26ec3, type: 3}
   stage1PhasePrefabs:
   - {fileID: 2659614723417223950, guid: a72c1401e0d3543ceb8319395edbfd50, type: 3}
   - {fileID: 2659614723417223950, guid: f2580553c03134ef08bffc7fa9000e68, type: 3}
@@ -5642,7 +5680,7 @@ MonoBehaviour:
   - {fileID: 2659614723417223950, guid: 6678eb481175549efb6b5a8778cafbb2, type: 3}
   - {fileID: 2659614723417223950, guid: d4afd94230768400da94522327591a72, type: 3}
   - {fileID: 2659614723417223950, guid: 701c6a5c8df8541d88cf0e33f16e5734, type: 3}
-  - {fileID: 2659614723417223950, guid: f75fb91b6736b4d9c9cb1b3313cd658e, type: 3}
+  stage1SpecialPhasePrefabs: []
   stage2PhasePrefabs:
   - {fileID: 2659614723417223950, guid: 43e47fd73823e4310835e91494877cb6, type: 3}
   - {fileID: 2659614723417223950, guid: 2989d83a5039f4860b714b13400ab96c, type: 3}
@@ -5668,8 +5706,11 @@ MonoBehaviour:
   - {fileID: 2659614723417223950, guid: 4c3f10bfea32f4fdbafa3b34e3e9344e, type: 3}
   - {fileID: 2659614723417223950, guid: 2ab1a9c297bf94833a9be92eb81e1055, type: 3}
   - {fileID: 2659614723417223950, guid: 5d8bbe702003742a68bc520ae4c8f1e1, type: 3}
-  - {fileID: 2659614723417223950, guid: bf125dc3f5ad249b6b5cb3d3eab4c829, type: 3}
-  - {fileID: 2659614723417223950, guid: 3f47abeccb9894731bd6f32049ff2a9c, type: 3}
+  - {fileID: 2659614723417223950, guid: f75fb91b6736b4d9c9cb1b3313cd658e, type: 3}
+  - {fileID: 2659614723417223950, guid: 3521d33e4e5b34b7cab48caecb276cf7, type: 3}
+  stage2SpecialPhasePrefabs:
+  - prefab: {fileID: 2659614723417223950, guid: bac18af1ddfa44351a7f1056878d6a3e, type: 3}
+    spawnChance: 0.2
   stage3PhasePrefabs:
   - {fileID: 2659614723417223950, guid: 79dfeedf66ebd4565bf36e6af6e961bb, type: 3}
   - {fileID: 2659614723417223950, guid: 0c2b8fa46b57f41fd946fae608c4b25d, type: 3}
@@ -5701,10 +5742,14 @@ MonoBehaviour:
   - {fileID: 2659614723417223950, guid: ef58c83c7f7004fd090153d7a0edc8b3, type: 3}
   - {fileID: 2659614723417223950, guid: ef58c83c7f7004fd090153d7a0edc8b3, type: 3}
   - {fileID: 2659614723417223950, guid: ef58c83c7f7004fd090153d7a0edc8b3, type: 3}
-  - {fileID: 2659614723417223950, guid: bac18af1ddfa44351a7f1056878d6a3e, type: 3}
   - {fileID: 2659614723417223950, guid: 0c2b8fa46b57f41fd946fae608c4b25d, type: 3}
   - {fileID: 2659614723417223950, guid: a8effd724f21d41a389f39f6c1674cec, type: 3}
   - {fileID: 2659614723417223950, guid: 5465d4e2e24e1465f90fc36e79fb579c, type: 3}
+  - {fileID: 2659614723417223950, guid: 5465d4e2e24e1465f90fc36e79fb579c, type: 3}
+  - {fileID: 2659614723417223950, guid: 3f47abeccb9894731bd6f32049ff2a9c, type: 3}
+  stage3SpecialPhasePrefabs:
+  - prefab: {fileID: 2659614723417223950, guid: bd4db3ea86b324149b25206e765fddb9, type: 3}
+    spawnChance: 1
   stage4PhasePrefabs:
   - {fileID: 2659614723417223950, guid: 79dfeedf66ebd4565bf36e6af6e961bb, type: 3}
   - {fileID: 2659614723417223950, guid: 0c2b8fa46b57f41fd946fae608c4b25d, type: 3}
@@ -5741,7 +5786,7 @@ MonoBehaviour:
   - {fileID: 2659614723417223950, guid: 0c2b8fa46b57f41fd946fae608c4b25d, type: 3}
   - {fileID: 2659614723417223950, guid: a8effd724f21d41a389f39f6c1674cec, type: 3}
   - {fileID: 2659614723417223950, guid: 5e3c06b8d7dfe44e8b411b6f59819fd9, type: 3}
-  - {fileID: 2659614723417223950, guid: bf125dc3f5ad249b6b5cb3d3eab4c829, type: 3}
+  stage4SpecialPhasePrefabs: []
   rageStagePrefabs:
   - {fileID: 2659614723417223950, guid: 7a541cbf89cab4cdb8ae9351e48f8988, type: 3}
   - {fileID: 2659614723417223950, guid: c2b115a4006a244db9530ee7b62e828f, type: 3}
@@ -5765,10 +5810,10 @@ MonoBehaviour:
   ragePhaseSpawnX: 38
   recoverX: -16
   despawnX: -25
-  speedUp1: 7
-  speedUp2: 15
-  speedUp3: 31
-  speedUp4: 49
+  speedUp1: 6
+  speedUp2: 12
+  speedUp3: 25
+  speedUp4: 42
   speedMult1: 2.7
   speedMult2: 2.75
   speedMult3: 2.82
@@ -6328,6 +6373,11 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1679382500}
   m_CullTransparentMesh: 1
+--- !u!1 &1760120111 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 8298099531041404384, guid: e9b0a36386b6945d0a6d09b73e737dfa, type: 3}
+  m_PrefabInstance: {fileID: 1556104997}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &1778094741
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -6355,6 +6405,10 @@ PrefabInstance:
     - target: {fileID: 661559057523322911, guid: b645720f70c8a4a5294393b54ab54fb1, type: 3}
       propertyPath: m_Name
       value: TRAIN
+      objectReference: {fileID: 0}
+    - target: {fileID: 1603981878506666819, guid: b645720f70c8a4a5294393b54ab54fb1, type: 3}
+      propertyPath: m_SortingOrder
+      value: 4
       objectReference: {fileID: 0}
     - target: {fileID: 2460176668639277776, guid: b645720f70c8a4a5294393b54ab54fb1, type: 3}
       propertyPath: m_LocalPosition.x
@@ -6396,6 +6450,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 3179770912350716711, guid: b645720f70c8a4a5294393b54ab54fb1, type: 3}
+      propertyPath: m_SortingOrder
+      value: 3
+      objectReference: {fileID: 0}
     - target: {fileID: 3528224640946837458, guid: b645720f70c8a4a5294393b54ab54fb1, type: 3}
       propertyPath: lowerMaxAngle
       value: -27
@@ -6435,6 +6493,10 @@ PrefabInstance:
     - target: {fileID: 5619356494632623632, guid: b645720f70c8a4a5294393b54ab54fb1, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 8.198
+      objectReference: {fileID: 0}
+    - target: {fileID: 5665006610887502207, guid: b645720f70c8a4a5294393b54ab54fb1, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.61
       objectReference: {fileID: 0}
     - target: {fileID: 6525172685940875560, guid: b645720f70c8a4a5294393b54ab54fb1, type: 3}
       propertyPath: m_Size.x
@@ -7570,11 +7632,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5859194337017971802, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
       propertyPath: m_LocalPosition.x
-      value: -1.59
+      value: 6.42
       objectReference: {fileID: 0}
     - target: {fileID: 5859194337017971802, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 7.86
+      value: 8.04
       objectReference: {fileID: 0}
     - target: {fileID: 5859194337017971802, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
       propertyPath: m_LocalPosition.z
@@ -7614,7 +7676,7 @@ PrefabInstance:
       objectReference: {fileID: -3513733115348785796, guid: 24b907aba651e4e42a0ce08ceca90079, type: 3}
     - target: {fileID: 6015082372541791020, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
       propertyPath: m_SortingOrder
-      value: 11
+      value: 13
       objectReference: {fileID: 0}
     - target: {fileID: 7619116827110755597, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
       propertyPath: 'attackClips.Array.data[0]'

@@ -69,13 +69,21 @@ public class MachineGunBullet : MonoBehaviour
         if (despawning || other == null)
             return;
 
-        ObstacleMover obstacleMover = FindMatchingComponent<ObstacleMover>(other);
+        CholesterolBomb cholesterolBomb = FindMatchingComponent<CholesterolBomb>(other);
+        ObstacleMover obstacleMover = cholesterolBomb == null ? FindMatchingComponent<ObstacleMover>(other) : null;
         BulletObstacle bulletObstacle = FindMatchingComponent<BulletObstacle>(other);
 
-        bool reactedObstacleMover = obstacleMover != null && obstacleMover.ReactToMachineGunBullet();
+        bool reactedObstacleMover =
+            cholesterolBomb != null ? cholesterolBomb.ReactToMachineGunBullet() :
+            obstacleMover != null && obstacleMover.ReactToMachineGunBullet();
         bool triggeredDie = false;
 
-        if (bulletObstacle != null)
+        if (cholesterolBomb != null)
+        {
+            cholesterolBomb.RegisterBulletHit();
+            triggeredDie = true;
+        }
+        else if (bulletObstacle != null)
         {
             bulletObstacle.RegisterBulletHit();
             triggeredDie = true;

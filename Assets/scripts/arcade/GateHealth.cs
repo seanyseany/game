@@ -71,6 +71,7 @@ public class GateHealth : MonoBehaviour
     private void TakeHit()
     {
         hitCount++;
+        CameraShakeManager.ShakeDefaultHalf();
         SpawnGateDamageFx();
 
         if (hitCount == 1)

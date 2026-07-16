@@ -17,6 +17,7 @@ public class BackgroundScroller : MonoBehaviour
         // ✅ 분노 모드 포함해서 스크롤 속도 변경
         Vector2 ofs = mr.material.mainTextureOffset;
         ofs.x += baseScrollSpeed * mult * Time.deltaTime;
+        ofs.x = Mathf.Repeat(ofs.x, 1f);
         mr.material.mainTextureOffset = ofs;
     }
 }

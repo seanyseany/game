@@ -243,6 +243,7 @@ public class Player : MonoBehaviour
     private PlayerAnimOverride animOverride;
     private RigidbodyConstraints2D p3AttackOriginalConstraints;
     private bool p3AttackPhysicsLocked = false;
+    private float p3AttackHazardIgnoreUntil = -999f;
     public HealthBarUI bar;
 
     [Header("Obstacle Bump")]
@@ -347,6 +348,7 @@ public class Player : MonoBehaviour
                 RageTransformFreezeController.Instance.EndNow(this);
                 isRageMode = false;
                 rageWarningBlinkPlayed = false;
+                ClearP2RageLaserReference();
                 StopRageSpeedEffect();
                 SetAttachedRageSmokesActive(false);
                 ClearRageTransformSmokes();
@@ -427,6 +429,7 @@ public class Player : MonoBehaviour
     {
         SyncRunningSmoke();
         SyncRageTransformSmokes();
+        SyncP2RageLaser();
         UpdateRageSmokeAnimationState();
     }
 
@@ -911,6 +914,7 @@ public class Player : MonoBehaviour
 
         isAttacking = true;
         attackStateStartTime = Time.time;
+        UpdateP3AttackHazardIgnoreWindow(rageRangedAttackAnimDuration);
 
         if (groundedAttack)
             ForceAnimationState("Base Attack", "Attack");
@@ -1762,6 +1766,9 @@ public class Player : MonoBehaviour
         if (!prefab) return;
         Vector3 pos = new Vector3(transform.position.x, transform.position.y - 0.5f, -0.5f);
         SpawnSmokeFromPrefab(prefab, pos, tag, scale);
+
+        if (isRageMode && selectedType == T1 && prefab == rage1SmokePrefab)
+            TriggerReducedRageSmokeShake();
     }
 
     private IEnumerator MoveToWorldPosition(Vector3 worldStart, Vector3 worldTarget, float duration)
@@ -1805,6 +1812,7 @@ public class Player : MonoBehaviour
         if (isRageMode || isAttacking) yield break;
         p3NormalAttackQueued = false;
         isAttacking = true;
+        UpdateP3AttackHazardIgnoreWindow(p3NormalAttackDuration);
         BeginP3AttackPhysicsLock();
         isLanding = false;
         hasLanded = false;
@@ -1901,6 +1909,29 @@ public class Player : MonoBehaviour
         SpawnSmokeFromPrefab(prefab, pos, tag);
     }
 
+    private void TriggerReducedRageSmokeShake()
+    {
+        int selectedType = GameData.Instance != null ? GameData.Instance.selectedPlayerType : 0;
+        if (selectedType != T1 && selectedType != T3 && selectedType != T5)
+            return;
+
+        CameraShakeManager.ShakeDefaultHalf();
+    }
+
+    private void TriggerQuarterDefaultShake()
+    {
+        CameraShakeManager manager = CameraShakeManager.Instance;
+        if (manager == null)
+            return;
+
+        CameraShakeManager.Shake(
+            manager.defaultDuration,
+            manager.defaultMagnitudeX * 0.25f,
+            manager.defaultMagnitudeY * 0.25f,
+            manager.defaultFrequency,
+            decay: true);
+    }
+
 
     // ---------- Player1 전용: 착지 처리 ----------
     private IEnumerator P1_Land(bool spawnLandingSmoke = true)
@@ -1938,6 +1969,7 @@ public class Player : MonoBehaviour
                 if (landedOnFloor && rage1SmokePrefab != null)
                 {
                     SpawnSmokeFromPrefab(rage1SmokePrefab, pos, rage1SmokePoolTag);
+                    TriggerReducedRageSmokeShake();
                 }
                 else if (landedOnPlatform && smokeEffectPrefab != null)
                 {
@@ -2009,6 +2041,7 @@ public class Player : MonoBehaviour
             // Rage 전용 (floor에서만)
             Vector3 pos = new Vector3(transform.position.x, transform.position.y - 0.5f, -0.5f);
             SpawnP3RageSmokeInstance(pos);
+            TriggerReducedRageSmokeShake();
         }
         yield return new WaitForSeconds(landDuration * 1.5f);
         if (isTransformLock || currentAnim == "Transform")
@@ -2351,13 +2384,26 @@ public class Player : MonoBehaviour
     {
         return GameData.Instance != null &&
                GameData.Instance.selectedPlayerType == T3 &&
-               isAttacking;
+               isAttacking &&
+               Time.time <= p3AttackHazardIgnoreUntil;
+    }
+
+    private void UpdateP3AttackHazardIgnoreWindow(float totalAttackDuration)
+    {
+        if (GameData.Instance == null || GameData.Instance.selectedPlayerType != T3)
+        {
+            p3AttackHazardIgnoreUntil = -999f;
+            return;
+        }
+
+        p3AttackHazardIgnoreUntil = Time.time + Mathf.Max(0f, totalAttackDuration) * 0.5f;
     }
     private void Die()
     {
         if (isDead) return;
         isDead = true;
         EndP3AttackPhysicsLock();
+        ClearP2RageLaserReference();
         ClearRageTransformSmokes();
         SpawnBloodFx();
         
@@ -2501,8 +2547,20 @@ public class Player : MonoBehaviour
     // Player2 Rage 전용
     private IEnumerator P2_RageAttack()
     {
-        bool groundedAttack = ShouldUseRageRangedGroundAttack();
-        PlayRageRangedAttackAnimation(groundedAttack);
+        bool airborneAttack = !isGrounded;
+        isAttacking = true;
+        attackStateStartTime = Time.time;
+
+        // 공중 입력 흐름은 노멀 P2와 동일하게 유지한다.
+        if (airborneAttack)
+        {
+            StopRageRangedGroundAttackTimer();
+            ChangeAnimation("Flyattack");
+        }
+        else
+        {
+            PlayRageRangedAttackAnimation(true);
+        }
 
         bool spawnedLaser = false;
         if (p2RageLaserPrefab != null)
@@ -2516,7 +2574,7 @@ public class Player : MonoBehaviour
         }
 
         // ✅ 분노 상태 + 지면일 때 태그별로 연기 생성
-        if (groundedAttack && spawnedLaser)
+        if (!airborneAttack && spawnedLaser)
         {
             if (lastGroundTag == "floor" && rage24SmokePrefab != null)
             {
@@ -2528,6 +2586,15 @@ public class Player : MonoBehaviour
                 Vector3 pos = new Vector3(transform.position.x, transform.position.y - 0.5f, -0.5f);
                 SpawnSmokeFromPrefab(smokeEffectPrefab, pos, smokePoolTag);
             }
+        }
+
+        if (spawnedLaser)
+            TriggerQuarterDefaultShake();
+
+        if (airborneAttack)
+        {
+            BeginRangedFlyattackLatch();
+            yield break;
         }
 
         yield break;
@@ -2542,6 +2609,8 @@ public class Player : MonoBehaviour
         {
             Vector3 pos = new Vector3(transform.position.x, transform.position.y - 0.5f, -0.5f);
             var go = SpawnP3RageSmokeInstance(pos);
+            if (go != null)
+                TriggerQuarterDefaultShake();
             var zig = go != null ? go.GetComponent<ZigzagLightning>() : null;
             if (zig)
             {
@@ -2593,6 +2662,9 @@ public class Player : MonoBehaviour
                 SpawnSmokeFromPrefab(smokeEffectPrefab, pos, smokePoolTag);
             }
         }
+
+        if (spawnedLightning)
+            TriggerQuarterDefaultShake();
 
         yield break;
     }
@@ -2757,6 +2829,9 @@ public class Player : MonoBehaviour
             rageSmokeOffsetSecondary);
 
         ApplyRageSmokeDirectionToAll(force: true);
+
+        if (activeRageSmokePrimary != null || activeRageSmokeSecondary != null)
+            TriggerReducedRageSmokeShake();
     }
 
     private GameObject SpawnTrackedRageSmoke(GameObject prefab, string poolTag, Vector3 offset)
@@ -2771,6 +2846,22 @@ public class Player : MonoBehaviour
     {
         SyncTrackedRageSmoke(activeRageSmokePrimary, rageSmokeOffset);
         SyncTrackedRageSmoke(activeRageSmokeSecondary, rageSmokeOffsetSecondary);
+    }
+
+    private void SyncP2RageLaser()
+    {
+        if (activeP2RageLaser == null)
+            return;
+
+        if (!activeP2RageLaser.activeInHierarchy)
+        {
+            activeP2RageLaser = null;
+            return;
+        }
+
+        Vector3 anchorPosition = p2Muzzle != null ? p2Muzzle.position : transform.position;
+        Vector3 currentPosition = activeP2RageLaser.transform.position;
+        activeP2RageLaser.transform.position = new Vector3(anchorPosition.x, anchorPosition.y, currentPosition.z);
     }
 
     private void SyncTrackedRageSmoke(GameObject smoke, Vector3 offset)
@@ -2788,6 +2879,11 @@ public class Player : MonoBehaviour
         string secondaryTag = string.IsNullOrEmpty(rageSmokePoolTagSecondary) ? rageSmokePoolTag : rageSmokePoolTagSecondary;
         activeRageSmokeSecondary = ReturnRageTransformSmoke(activeRageSmokeSecondary, secondaryTag);
         currentRageSmokeDirection = RageSmokeDirection.None;
+    }
+
+    private void ClearP2RageLaserReference()
+    {
+        activeP2RageLaser = null;
     }
 
     private void SetAttachedRageSmokesActive(bool active)
@@ -2957,6 +3053,7 @@ public class Player : MonoBehaviour
         lives = 3;
         hp = maxHp;
         isRageMode = false;
+        ClearP2RageLaserReference();
         StopRageSpeedEffect();
         SetAttachedRageSmokesActive(false);
         ClearRageTransformSmokes();
@@ -3741,13 +3838,23 @@ public class Player : MonoBehaviour
 
     private void SpawnP5RageAttackSmokes(Vector3 pos, float scale = 4f)
     {
+        bool spawnedAny = false;
+
         if (rageAttackSmokePrefab != null)
+        {
             SpawnSmokeFromPrefab(rageAttackSmokePrefab, pos, rageAttackSmokePoolTag, scale);
+            spawnedAny = true;
+        }
 
         if (rageAttackSmokePrefabSecondary == null)
+        {
+            if (spawnedAny)
+                TriggerReducedRageSmokeShake();
             return;
+        }
 
         SpawnSmokeFromPrefab(rageAttackSmokePrefabSecondary, pos, rageAttackSmokePoolTagSecondary, scale);
+        TriggerReducedRageSmokeShake();
     }
 
     private GameObject SpawnSmokeFromPrefab(GameObject prefab, Vector3 pos, string poolTag, float scaleMult = 1f)

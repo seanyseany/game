@@ -8,6 +8,7 @@ public class Hitbox : MonoBehaviour
     {
         public Boss boss;
         public BossSlime bossSlime;
+        public MiniBoss miniBoss;
     }
 
     public int damage = 1;
@@ -80,13 +81,15 @@ public class Hitbox : MonoBehaviour
     private void OnTriggerEnter2D(Collider2D other)
     {
         ResolveBossTargets(other, out var boss, out var bossSlime);
+        MiniBoss miniBoss = ResolveMiniBossTarget(other);
 
         bool isEnemy = IsEnemyCollider(other);
         bool isBoss = (boss != null) || (bossSlime != null) || other.CompareTag("Boss");
-        if (!isEnemy && !isBoss) return;
+        bool isMiniBoss = miniBoss != null;
+        if (!isEnemy && !isBoss && !isMiniBoss) return;
 
-        GameObject hitRoot = (bossSlime != null || boss != null)
-            ? (bossSlime != null ? bossSlime.gameObject : boss.gameObject)
+        GameObject hitRoot = (miniBoss != null || bossSlime != null || boss != null)
+            ? (miniBoss != null ? miniBoss.gameObject : (bossSlime != null ? bossSlime.gameObject : boss.gameObject))
             : ResolveHitRoot(other);
 
         if (hitTargets.Contains(hitRoot)) return;
@@ -107,6 +110,13 @@ public class Hitbox : MonoBehaviour
             // "기본 1타 * 플레이어 배율"만 적용한다.
             float finalDamage = GetBossDamageMultiplier();
             boss.TakeDamage(finalDamage);
+            return;
+        }
+
+        if (miniBoss != null)
+        {
+            int sourcePlayerType = GameData.Instance != null ? Mathf.Clamp(GameData.Instance.selectedPlayerType, 1, 5) : 0;
+            miniBoss.RegisterHitFromPlayerAttack(sourcePlayerType);
             return;
         }
 
@@ -139,8 +149,34 @@ public class Hitbox : MonoBehaviour
         {
             if (boss == null) boss = root.GetComponent<Boss>() ?? root.GetComponentInChildren<Boss>(true);
             if (bossSlime == null) bossSlime = root.GetComponent<BossSlime>() ?? root.GetComponentInChildren<BossSlime>(true);
-            bossTargetCache[root.GetInstanceID()] = new BossTargetRefs { boss = boss, bossSlime = bossSlime };
+            MiniBoss miniBoss = root.GetComponent<MiniBoss>() ?? root.GetComponentInChildren<MiniBoss>(true);
+            bossTargetCache[root.GetInstanceID()] = new BossTargetRefs { boss = boss, bossSlime = bossSlime, miniBoss = miniBoss };
         }
+    }
+
+    private static MiniBoss ResolveMiniBossTarget(Collider2D other)
+    {
+        if (other == null) return null;
+
+        Transform root = other.transform.root;
+        if (root != null && bossTargetCache.TryGetValue(root.GetInstanceID(), out var cached))
+            return cached.miniBoss;
+
+        MiniBoss miniBoss = other.GetComponent<MiniBoss>() ?? other.GetComponentInParent<MiniBoss>();
+        if (miniBoss == null && root != null)
+            miniBoss = root.GetComponent<MiniBoss>() ?? root.GetComponentInChildren<MiniBoss>(true);
+
+        if (root != null)
+        {
+            bossTargetCache[root.GetInstanceID()] = new BossTargetRefs
+            {
+                boss = null,
+                bossSlime = null,
+                miniBoss = miniBoss
+            };
+        }
+
+        return miniBoss;
     }
 
 
@@ -203,11 +239,11 @@ public class Hitbox : MonoBehaviour
         int t = (GameData.Instance != null) ? GameData.Instance.selectedPlayerType : 2;
         switch (t)
         {
-            case 1: return 3.9f;
-            case 2: return 1.47f;
+            case 1: return 2.1f;
+            case 2: return 4.9f;
             case 3: return 1.53f;
-            case 4: return 1.58f;
-            case 5: return 5.7f;
+            case 4: return 5.5f;
+            case 5: return 3.5f;
             default: return 1f;
         }
     }

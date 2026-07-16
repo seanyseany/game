@@ -17,6 +17,9 @@ public class pandmackScroll : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        meshRenderer.material.mainTextureOffset -= new Vector2(scrollSpeed * Time.deltaTime, 0);
+        Vector2 offset = meshRenderer.material.mainTextureOffset;
+        offset.x -= scrollSpeed * Time.deltaTime;
+        offset.x = Mathf.Repeat(offset.x, 1f);
+        meshRenderer.material.mainTextureOffset = offset;
     }
 }

@@ -119,30 +119,14 @@ public class Train : MonoBehaviour, IReinitializable
             machineGunInstance.BeginPlayerControlImmediate();
         }
 
-        float firingDuration = Mathf.Max(0f, endDuration);
-        float stopLeadTime = MachineGunObstacle.GetCurrentSpawnEndLeadTime(3.8f);
-        float obstacleStopDelay = Mathf.Max(0f, firingDuration - stopLeadTime);
-
-        if (obstacleStopDelay > 0f)
-        {
-            yield return new WaitForSeconds(obstacleStopDelay);
-            activeMachineGunObstacle?.StopMachineGunSpawn();
-            GameData.Instance?.NotifyMachineGunObstacleSpawnStop();
-            yield return new WaitForSeconds(firingDuration - obstacleStopDelay);
-        }
-        else
-        {
-            activeMachineGunObstacle?.StopMachineGunSpawn();
-            GameData.Instance?.NotifyMachineGunObstacleSpawnStop();
-            yield return new WaitForSeconds(firingDuration);
-        }
+        if (activeMachineGunObstacle != null)
+            yield return new WaitUntil(activeMachineGunObstacle.IsSpawnSequenceResolved);
 
         if (machineGunInstance != null)
             machineGunInstance.BeginDeactivation();
 
         yield return MoveTrainBodyX(bodyShiftX, 0f, bodyShiftDuration, 1f);
         yield return MoveLocal(endLocalPos, startLocalPos, moveDuration);
-        activeMachineGunObstacle?.StopMachineGunSpawn();
         MachineGunObstacle.SetCurrentSource(null);
         EndMachineGunSequenceIfNeeded();
         routine = null;

@@ -32,6 +32,7 @@ public class fishbomb : MonoBehaviour, IReinitializable
     private readonly HashSet<int> hitPlayers = new HashSet<int>();
     private Coroutine explodeCo;
     private Coroutine obstacleSlowCo;
+    private Coroutine cameraShakeRoutine;
 
     private void Awake()
     {
@@ -128,6 +129,8 @@ public class fishbomb : MonoBehaviour, IReinitializable
         if (animator != null && !string.IsNullOrEmpty(destroyTriggerName))
             animator.SetTrigger(destroyTriggerName);
 
+        TriggerDelayedCameraShake(0.3f);
+
         explodeCo = StartCoroutine(CoExplode());
     }
 
@@ -221,5 +224,22 @@ public class fishbomb : MonoBehaviour, IReinitializable
             GameData.Instance.EndObstacleContact();
 
         obstacleSlowCo = null;
+    }
+
+    private void TriggerDelayedCameraShake(float delay)
+    {
+        if (cameraShakeRoutine != null)
+            StopCoroutine(cameraShakeRoutine);
+
+        cameraShakeRoutine = StartCoroutine(CoDelayedCameraShake(delay));
+    }
+
+    private IEnumerator CoDelayedCameraShake(float delay)
+    {
+        if (delay > 0f)
+            yield return new WaitForSeconds(delay);
+
+        CameraShakeManager.ShakeDefault();
+        cameraShakeRoutine = null;
     }
 }

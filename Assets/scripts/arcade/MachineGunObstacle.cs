@@ -16,6 +16,14 @@ public class MachineGunObstacle : MonoBehaviour, IReinitializable
     public string[] machineGunObstaclePoolTags66;
     [Tooltip("33% 확률 그룹에서 랜덤 선택할 장애물 풀 태그 목록")]
     public string[] machineGunObstaclePoolTags33;
+    [Tooltip("마지막 스폰에서만 강제로 사용할 장애물 풀 태그")]
+    public string lastMachineGunObstaclePoolTag;
+
+    [Header("Cholesterol Bomb Settings")]
+    [Tooltip("머신건 트리거 후 지연 스폰할 Cholesterol Bomb 프리팹")]
+    [SerializeField] private GameObject cholesterolBombPrefab;
+    [Tooltip("머신건 트리거 후 각 시간마다 spawn position 중 한 곳에서 Cholesterol Bomb를 1개씩 스폰")]
+    [SerializeField] private float[] cholesterolBombSpawnDelays;
 
     private static readonly HashSet<string> knownPoolTags = new HashSet<string>();
     private static MachineGunObstacle currentSettingsSource;
@@ -70,7 +78,15 @@ public class MachineGunObstacle : MonoBehaviour, IReinitializable
 
     public void StopMachineGunSpawn()
     {
-        StopActiveMachineGunSpawn();
+        if (activeRuntime == null)
+            return;
+
+        activeRuntime.RequestStopSpawning();
+    }
+
+    public bool IsSpawnSequenceResolved()
+    {
+        return activeRuntime == null || activeRuntime.IsSpawnSequenceResolved;
     }
 
     public static void StopActiveMachineGunSpawn()
@@ -105,8 +121,13 @@ public class MachineGunObstacle : MonoBehaviour, IReinitializable
             ownerName = name,
             machineGunSpawnStartDelay = machineGunSpawnStartDelay,
             machineGunSpawnInterval = machineGunSpawnInterval,
+            machineGunSpawnDuration = Mathf.Max(0f, machineGunSpawnEndLeadTime),
             machineGunObstaclesPerPoint = machineGunObstaclesPerPoint,
             spawnPositions = spawnPositions,
+            cholesterolBombPrefab = cholesterolBombPrefab,
+            cholesterolBombSpawnDelays = cholesterolBombSpawnDelays != null
+                ? (float[])cholesterolBombSpawnDelays.Clone()
+                : System.Array.Empty<float>(),
             poolTags66 = poolTags66,
             poolTags33 = poolTags33
         };
@@ -116,6 +137,7 @@ public class MachineGunObstacle : MonoBehaviour, IReinitializable
     {
         AddPoolTags(machineGunObstaclePoolTags66);
         AddPoolTags(machineGunObstaclePoolTags33);
+        AddPoolTags(new[] { lastMachineGunObstaclePoolTag });
     }
 
     private static void AddPoolTags(string[] source)
@@ -133,19 +155,31 @@ public class MachineGunObstacle : MonoBehaviour, IReinitializable
 
 internal sealed class MachineGunObstacleRuntime : MonoBehaviour
 {
+    private const float AllObstaclesClearedStopDelay = 1f;
+
     internal struct Config
     {
         public string ownerName;
         public float machineGunSpawnStartDelay;
         public float machineGunSpawnInterval;
+        public float machineGunSpawnDuration;
         public int machineGunObstaclesPerPoint;
         public Vector3[] spawnPositions;
+        public GameObject cholesterolBombPrefab;
+        public float[] cholesterolBombSpawnDelays;
         public string[] poolTags66;
         public string[] poolTags33;
     }
 
     private Coroutine spawnRoutine;
+    private Coroutine cholesterolBombRoutine;
+    private Coroutine delayedStopRoutine;
     private Config config;
+    private readonly HashSet<MachineGunLastSpawnNotifier> trackedObstacles = new HashSet<MachineGunLastSpawnNotifier>();
+    private bool spawnStopRequested;
+    private bool obstacleSpawnStopNotified;
+
+    internal bool IsSpawnSequenceResolved => obstacleSpawnStopNotified;
 
     internal static MachineGunObstacleRuntime Create(Config config)
     {
@@ -159,6 +193,13 @@ internal sealed class MachineGunObstacleRuntime : MonoBehaviour
     {
         config = runtimeConfig;
         spawnRoutine = StartCoroutine(CoSpawnObstacles());
+
+        if (config.cholesterolBombPrefab != null &&
+            config.cholesterolBombSpawnDelays != null &&
+            config.cholesterolBombSpawnDelays.Length > 0)
+        {
+            cholesterolBombRoutine = StartCoroutine(CoSpawnCholesterolBombs());
+        }
     }
 
     internal void StopSession()
@@ -169,7 +210,43 @@ internal sealed class MachineGunObstacleRuntime : MonoBehaviour
             spawnRoutine = null;
         }
 
+        if (cholesterolBombRoutine != null)
+        {
+            StopCoroutine(cholesterolBombRoutine);
+            cholesterolBombRoutine = null;
+        }
+
+        if (delayedStopRoutine != null)
+        {
+            StopCoroutine(delayedStopRoutine);
+            delayedStopRoutine = null;
+        }
+
+        ClearTrackedObstacleBindings();
+
         Destroy(gameObject);
+    }
+
+    internal void RequestStopSpawning()
+    {
+        if (spawnStopRequested)
+            return;
+
+        spawnStopRequested = true;
+
+        if (spawnRoutine != null)
+        {
+            StopCoroutine(spawnRoutine);
+            spawnRoutine = null;
+        }
+
+        if (cholesterolBombRoutine != null)
+        {
+            StopCoroutine(cholesterolBombRoutine);
+            cholesterolBombRoutine = null;
+        }
+
+        EvaluateStopCompletion();
     }
 
     private IEnumerator CoSpawnObstacles()
@@ -186,7 +263,10 @@ internal sealed class MachineGunObstacleRuntime : MonoBehaviour
         if (startDelay > 0f)
             yield return WaitForSecondsRespectingGameplayPause(startDelay);
 
-        while (true)
+        float elapsed = 0f;
+        bool spawnedAtLeastOnce = false;
+
+        while (!spawnStopRequested && (config.machineGunSpawnDuration <= 0f ? !spawnedAtLeastOnce : elapsed <= config.machineGunSpawnDuration))
         {
             if (IsGameplayTransformPaused())
             {
@@ -201,12 +281,52 @@ internal sealed class MachineGunObstacleRuntime : MonoBehaviour
                     SpawnObstacle(spawnPos);
             }
 
+            spawnedAtLeastOnce = true;
+
             float interval = Mathf.Max(0f, config.machineGunSpawnInterval);
             if (interval > 0f)
+            {
                 yield return WaitForSecondsRespectingGameplayPause(interval);
+                elapsed += interval;
+            }
             else
+            {
+                elapsed += Time.deltaTime;
                 yield return null;
+            }
         }
+
+        spawnRoutine = null;
+        RequestStopSpawning();
+    }
+
+    private IEnumerator CoSpawnCholesterolBombs()
+    {
+        if (config.spawnPositions == null || config.spawnPositions.Length == 0)
+        {
+            cholesterolBombRoutine = null;
+            yield break;
+        }
+
+        float previousDelay = 0f;
+        for (int i = 0; i < config.cholesterolBombSpawnDelays.Length; i++)
+        {
+            float targetDelay = Mathf.Max(0f, config.cholesterolBombSpawnDelays[i]);
+            float delay = Mathf.Max(0f, targetDelay - previousDelay);
+            if (delay > 0f)
+                yield return WaitForSecondsRespectingGameplayPause(delay);
+
+            if (IsGameplayTransformPaused())
+            {
+                while (IsGameplayTransformPaused())
+                    yield return null;
+            }
+
+            SpawnCholesterolBombAtRandomPosition();
+            previousDelay = Mathf.Max(previousDelay, targetDelay);
+        }
+
+        cholesterolBombRoutine = null;
     }
 
     private void SpawnObstacle(Vector3 spawnPos)
@@ -228,6 +348,8 @@ internal sealed class MachineGunObstacleRuntime : MonoBehaviour
             return;
         }
 
+        TrackSpawnedObstacle(spawned);
+
         Rigidbody2D rb = spawned.GetComponent<Rigidbody2D>();
         if (rb != null)
         {
@@ -239,6 +361,16 @@ internal sealed class MachineGunObstacleRuntime : MonoBehaviour
         Mover mover = spawned.GetComponent<Mover>();
         if (mover != null && StageManager.Instance != null)
             mover.baseSpeed = StageManager.Instance.phaseBaseSpeed;
+    }
+
+    private void SpawnCholesterolBombAtRandomPosition()
+    {
+        if (config.cholesterolBombPrefab == null || config.spawnPositions == null || config.spawnPositions.Length == 0)
+            return;
+
+        Vector3 spawnPos = config.spawnPositions[Random.Range(0, config.spawnPositions.Length)];
+        GameObject spawned = Instantiate(config.cholesterolBombPrefab, spawnPos, Quaternion.identity);
+        TrackSpawnedObstacle(spawned);
     }
 
     private string GetRandomMachineGunObstaclePoolTag()
@@ -263,6 +395,92 @@ internal sealed class MachineGunObstacleRuntime : MonoBehaviour
     private static bool IsGameplayTransformPaused()
     {
         return StageManager.Instance != null && StageManager.Instance.IsGameplayTransformPaused;
+    }
+
+    private void TrackSpawnedObstacle(GameObject spawned)
+    {
+        if (spawned == null)
+            return;
+
+        MachineGunLastSpawnNotifier notifier = spawned.GetComponent<MachineGunLastSpawnNotifier>();
+        if (notifier == null)
+            notifier = spawned.AddComponent<MachineGunLastSpawnNotifier>();
+
+        notifier.Bind(HandleTrackedObstacleDestroyTriggered, HandleTrackedObstacleDisabled);
+        trackedObstacles.Add(notifier);
+    }
+
+    private void ClearTrackedObstacleBindings()
+    {
+        foreach (MachineGunLastSpawnNotifier notifier in trackedObstacles)
+        {
+            if (notifier != null)
+                notifier.ClearBinding();
+        }
+
+        trackedObstacles.Clear();
+    }
+
+    private void HandleTrackedObstacleDestroyTriggered(MachineGunLastSpawnNotifier notifier)
+    {
+        if (notifier != null)
+            trackedObstacles.Remove(notifier);
+
+        EvaluateStopCompletion();
+    }
+
+    private void HandleTrackedObstacleDisabled(MachineGunLastSpawnNotifier notifier)
+    {
+        if (notifier != null)
+            trackedObstacles.Remove(notifier);
+
+        if (!spawnStopRequested)
+            return;
+
+        EvaluateStopCompletion();
+    }
+
+    private void EvaluateStopCompletion()
+    {
+        PruneInactiveTrackedObstacles();
+
+        if (trackedObstacles.Count > 0)
+            return;
+
+        if (delayedStopRoutine != null)
+            return;
+
+        delayedStopRoutine = StartCoroutine(CoNotifyObstacleSpawnStopDelayed());
+    }
+
+    private void PruneInactiveTrackedObstacles()
+    {
+        trackedObstacles.RemoveWhere(static notifier =>
+            notifier == null ||
+            !notifier.gameObject.activeInHierarchy);
+    }
+
+    private void NotifyObstacleSpawnStopIfNeeded()
+    {
+        if (obstacleSpawnStopNotified)
+            return;
+
+        obstacleSpawnStopNotified = true;
+        delayedStopRoutine = null;
+        GameData.Instance?.NotifyMachineGunObstacleSpawnStop();
+        ClearTrackedObstacleBindings();
+    }
+
+    private IEnumerator CoNotifyObstacleSpawnStopDelayed()
+    {
+        if (AllObstaclesClearedStopDelay > 0f)
+            yield return WaitForSecondsRespectingGameplayPause(AllObstaclesClearedStopDelay);
+
+        delayedStopRoutine = null;
+        PruneInactiveTrackedObstacles();
+
+        if (!obstacleSpawnStopNotified && trackedObstacles.Count == 0)
+            NotifyObstacleSpawnStopIfNeeded();
     }
 
     private static IEnumerator WaitForSecondsRespectingGameplayPause(float seconds)
