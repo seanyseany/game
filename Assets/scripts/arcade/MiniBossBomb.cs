@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 [DisallowMultipleComponent]
@@ -25,10 +26,10 @@ public class MiniBossBomb : MonoBehaviour
     private Coroutine selfDestroyRoutine;
     private Coroutine cleanupRoutine;
     private bool destroyTriggered;
-    private float horizontalDirection = -1f;
     private float spawnTime;
     private float currentYVelocity;
     private bool trackingStarted;
+    private readonly HashSet<int> hitPlayerIds = new HashSet<int>();
 
     private void Awake()
     {
@@ -57,22 +58,23 @@ public class MiniBossBomb : MonoBehaviour
             StopCoroutine(cleanupRoutine);
             cleanupRoutine = null;
         }
+
+        hitPlayerIds.Clear();
     }
 
     public void SetTarget(Transform playerTarget)
     {
         targetPlayer = playerTarget;
-        horizontalDirection = ResolveHorizontalDirection(playerTarget);
     }
 
     private void ResetRuntime()
     {
         destroyTriggered = false;
-        targetPlayer = FindFirstObjectByType<Player>()?.transform;
-        horizontalDirection = -1f;
+        targetPlayer = Player.Instance != null ? Player.Instance.transform : FindFirstObjectByType<Player>()?.transform;
         spawnTime = Time.time;
         currentYVelocity = -Mathf.Max(0f, initialYMoveSpeed);
         trackingStarted = false;
+        hitPlayerIds.Clear();
 
         if (cachedCollider != null)
             cachedCollider.enabled = true;
@@ -148,9 +150,15 @@ public class MiniBossBomb : MonoBehaviour
             return;
 
         if (player != null)
-            player.TakeDamage(damage);
+        {
+            int playerId = player.GetInstanceID();
+            if (hitPlayerIds.Contains(playerId))
+                return;
 
-        TriggerDestroy();
+            bool applied = player.TakeExternalObstacleDamage(damage, ObstacleType.Saw, other);
+            if (applied)
+                hitPlayerIds.Add(playerId);
+        }
     }
 
     private IEnumerator CoSelfDestruct()
@@ -194,13 +202,5 @@ public class MiniBossBomb : MonoBehaviour
 
         cleanupRoutine = null;
         Destroy(gameObject);
-    }
-
-    private float ResolveHorizontalDirection(Transform playerTarget)
-    {
-        if (playerTarget == null)
-            return -1f;
-
-        return playerTarget.position.x >= transform.position.x ? 1f : -1f;
     }
 }

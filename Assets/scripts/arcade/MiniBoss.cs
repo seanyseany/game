@@ -17,7 +17,6 @@ public class MiniBoss : MonoBehaviour
     private const string GateTag = "Gate";
     private const string FloorTag = "floor";
     private const string PlayerTag = "player";
-    private const string ExcavatorTag = "Excavator";
     private enum MiniBossState
     {
         Firing,
@@ -87,6 +86,7 @@ public class MiniBoss : MonoBehaviour
     [SerializeField] private float maxAttackTravelTime = 1.15f;
     [SerializeField] private float postImpactFallSpeed = 2.5f;
     [SerializeField] private float postImpactBounceX = 0.3f;
+    [SerializeField] private float postImpactBounceXOnPlayer = 0.1f;
     [SerializeField] private float postImpactBounceY = 1.2f;
     [SerializeField] private float postImpactBounceDuration = 0.18f;
     [SerializeField] private float minFallDistanceAfterImpact = 0.35f;
@@ -402,7 +402,7 @@ public class MiniBoss : MonoBehaviour
             Instantiate(fireSmokePrefab, fireWorldPosition, fireSmokePrefab.transform.rotation);
 
         GameObject spawnedBomb = Instantiate(miniBossBombPrefab, fireWorldPosition, miniBossBombPrefab.transform.rotation);
-        Transform playerTarget = FindFirstObjectByType<Player>()?.transform;
+        Transform playerTarget = Player.Instance != null ? Player.Instance.transform : FindFirstObjectByType<Player>()?.transform;
         if (spawnedBomb != null && playerTarget != null)
             spawnedBomb.SendMessage("SetTarget", playerTarget, SendMessageOptions.DontRequireReceiver);
     }
@@ -449,7 +449,8 @@ public class MiniBoss : MonoBehaviour
             return;
 
         float bounceDuration = Mathf.Max(0.01f, postImpactBounceDuration);
-        float bounceVelocityX = Mathf.Abs(postImpactBounceX) * GetWorldScaleFactorX() / bounceDuration;
+        float bounceDistanceX = player != null ? postImpactBounceXOnPlayer : postImpactBounceX;
+        float bounceVelocityX = Mathf.Abs(bounceDistanceX) * GetWorldScaleFactorX() / bounceDuration;
         float bounceVelocityY = Mathf.Max(0.1f, postImpactBounceY * GetWorldScaleFactorY());
         impactStartY = transform.position.y;
         body2D.linearVelocity = new Vector2(bounceVelocityX, bounceVelocityY);
@@ -813,19 +814,31 @@ public class MiniBoss : MonoBehaviour
 
     private float GetRandomFireInterval()
     {
-        float[] intervals = { fireInterval1, fireInterval2, fireInterval3 };
-        List<float> valid = new List<float>(3);
+        int validCount = 0;
+        if (fireInterval1 > 0f) validCount++;
+        if (fireInterval2 > 0f) validCount++;
+        if (fireInterval3 > 0f) validCount++;
 
-        for (int i = 0; i < intervals.Length; i++)
-        {
-            if (intervals[i] > 0f)
-                valid.Add(intervals[i]);
-        }
-
-        if (valid.Count == 0)
+        if (validCount == 0)
             return 0.5f;
 
-        return valid[Random.Range(0, valid.Count)];
+        int selectedIndex = Random.Range(0, validCount);
+
+        if (fireInterval1 > 0f)
+        {
+            if (selectedIndex == 0)
+                return fireInterval1;
+            selectedIndex--;
+        }
+
+        if (fireInterval2 > 0f)
+        {
+            if (selectedIndex == 0)
+                return fireInterval2;
+            selectedIndex--;
+        }
+
+        return fireInterval3 > 0f ? fireInterval3 : 0.5f;
     }
 
     private Vector2 GetRandomAttackTarget()

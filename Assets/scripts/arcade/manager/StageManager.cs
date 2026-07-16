@@ -605,7 +605,6 @@ public class StageManager : MonoBehaviour
         var cache = phase.GetComponent<PhaseCache>();
         if (cache != null)
         {
-            cache.RefreshCache();
             cache.SetActiveChildren(true);
             cache.ResetCached();
         }
@@ -639,7 +638,6 @@ public class StageManager : MonoBehaviour
 
         if (cache != null)
         {
-            cache.RefreshCache();
             cache.SetActiveChildren(true);
             cache.ResetCached();
         }

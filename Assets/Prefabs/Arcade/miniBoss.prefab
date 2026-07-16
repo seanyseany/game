@@ -234,11 +234,11 @@ MonoBehaviour:
   riseSpeed: 4
   moveSmoothTime: 0.18
   riseSmoothTime: 0.14
-  player1HitCount: 6
-  player2HitCount: 60
-  player3HitCount: 6
+  player1HitCount: 8
+  player2HitCount: 40
+  player3HitCount: 30
   player4HitCount: 60
-  player5HitCount: 6
+  player5HitCount: 25
   fireLocalPosition: {x: -0.487, y: 2.058}
   fireInterval1: 3.2
   fireInterval2: 3.85
@@ -259,7 +259,7 @@ MonoBehaviour:
   transformAnimationDuration: 0.4
   postDieDelay: 0.5
   blinkDuration: 1
-  blinkInterval: 0.1
+  blinkInterval: 0.03
   hitFlashDuration: 0.1
   shakeLeft: 0.1
   shakeRight: 0.1
@@ -272,8 +272,9 @@ MonoBehaviour:
   maxAttackTravelTime: 1.5
   postImpactFallSpeed: 2.5
   postImpactBounceX: 0.5
+  postImpactBounceXOnPlayer: 0.1
   postImpactBounceY: 0.3
   postImpactBounceDuration: 0.18
   minFallDistanceAfterImpact: 0.35
   postImpactGroundIgnoreTime: 0.12
-  landTriggerDistance: 1
+  landTriggerDistance: 2

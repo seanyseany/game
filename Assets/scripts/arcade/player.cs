@@ -2482,6 +2482,29 @@ public class Player : MonoBehaviour
         }
     }
 
+    public bool TakeExternalObstacleDamage(int dmg, ObstacleType obstacleType, Collider2D hazardCollider = null)
+    {
+        if (isSpawnIntroActive) return false;
+
+        lastHitObstacleType = obstacleType;
+
+        if (IsP3AttackInvulnerable())
+            return false;
+
+        if (hazardCollider != null && !(hazardCollider is PolygonCollider2D))
+            DoObstacleBump(hazardCollider.transform.position.y);
+
+        if (isInvincible || isRageMode)
+            return false;
+
+        TakeDamage(dmg);
+
+        if (isAttacking)
+            ForceLandFromHit();
+
+        return true;
+    }
+
     private void AdjustHitboxIfRage(GameObject hb)
     {
         if (!isRageMode || hb == null) return;
