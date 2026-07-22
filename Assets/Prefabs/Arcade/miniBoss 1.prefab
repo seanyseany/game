@@ -224,35 +224,35 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2dd67c351bc54b0e9f8354ae6166a8f9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MiniBoss
-  xSpeed: 3
-  returnSpeed: 4.2
+  xSpeed: 3.4
+  returnSpeed: 4.6
   fireRangeMinX: 5
   fireRangeMaxX: 8
-  fireDuration: 7
+  fireDuration: 3
   attackSpeed: 5
-  riseOffsetY: 0.5
+  riseOffsetY: 1
   riseSpeed: 4
   moveSmoothTime: 0.18
   riseSmoothTime: 0.14
   player1HitCount: 15
-  player2HitCount: 40
-  player3HitCount: 30
-  player4HitCount: 60
-  player5HitCount: 25
+  player2HitCount: 50
+  player3HitCount: 35
+  player4HitCount: 80
+  player5HitCount: 30
   fireLocalPosition: {x: -0.487, y: 2.058}
-  fireInterval1: 3
-  fireInterval2: 4
-  fireInterval3: 5
+  fireInterval1: 1.8
+  fireInterval2: 2
+  fireInterval3: 2.2
   attackTargetPositions:
-  - {x: -8, y: -2.4}
+  - {x: -8, y: -2.5}
   - {x: -8, y: -1.6}
   - {x: -8, y: -0.3}
   - {x: -8, y: 0.5}
   - {x: -8, y: 1.2}
   lifeBarSlider: {fileID: 0}
   legacyLifeBar: {fileID: 0}
-  fireSmokePrefab: {fileID: 0}
-  miniBossBombPrefab: {fileID: 1684974471160718448, guid: d750ddddb42a04058b998d47ff2d868e, type: 3}
+  fireSmokePrefab: {fileID: 2330367532151805870, guid: b793adca6fd4a4e0eaa26211869f21fd, type: 3}
+  miniBossBombPrefab: {fileID: 1684974471160718448, guid: 29e226df08a05412dbb8117e70e02b80, type: 3}
   hitEffectPrefab: {fileID: 3269626857475198658, guid: 03aa0efa317614cd49fdf7178b699b55, type: 3}
   targetAnimator: {fileID: 730001000000000003}
   visualRoot: {fileID: 730001000000000001}

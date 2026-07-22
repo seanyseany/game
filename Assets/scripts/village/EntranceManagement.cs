@@ -26,6 +26,7 @@ public class EntranceManagement : MonoBehaviour
 
     private readonly List<WayAllocation> activeAllocations = new List<WayAllocation>();
     private readonly List<CustomerBlood> activeCustomers = new List<CustomerBlood>();
+    private readonly Dictionary<int, Queue<CustomerBlood>> pooledCustomers = new Dictionary<int, Queue<CustomerBlood>>();
     private Coroutine spawnRoutine;
     private int readySpawnTokens;
     private int cooldownTokens;
@@ -52,6 +53,31 @@ public class EntranceManagement : MonoBehaviour
         activeAllocations.Clear();
         cooldownTokens++;
         StartCoroutine(ReturnSpawnTokenAfterCooldown());
+    }
+
+    public void RecycleCustomer(CustomerBlood customer)
+    {
+        if (customer == null)
+            return;
+
+        NotifyCustomerDespawned(customer);
+
+        CustomerBlood prefabSource = customer.SourcePrefab;
+        if (prefabSource == null)
+        {
+            Destroy(customer.gameObject);
+            return;
+        }
+
+        int key = prefabSource.GetInstanceID();
+        if (!pooledCustomers.TryGetValue(key, out Queue<CustomerBlood> pool))
+        {
+            pool = new Queue<CustomerBlood>();
+            pooledCustomers.Add(key, pool);
+        }
+
+        customer.gameObject.SetActive(false);
+        pool.Enqueue(customer);
     }
 
     public void NotifyBuildingTrafficChanged()
@@ -91,10 +117,10 @@ public class EntranceManagement : MonoBehaviour
                 continue;
             }
 
-            CustomerBlood customer = Instantiate(entry.prefab);
+            CustomerBlood customer = GetPooledCustomer(entry.prefab);
             string resolvedEntryId = customerBloodManagement.GetResolvedEntryId(entry.prefab);
             int routeSequenceIndex = allocation.way != null ? allocation.way.GetRandomRouteSequenceIndex() : int.MinValue;
-            customer.InitializeSpawn(resolvedEntryId, this, chosenEntrance, allocation.way, chosenPath, routeSequenceIndex);
+            customer.InitializeSpawn(resolvedEntryId, this, chosenEntrance, allocation.way, chosenPath, entry.prefab, routeSequenceIndex);
 
             activeCustomers.Add(customer);
             customerBloodManagement.RegisterSpawn(resolvedEntryId);
@@ -263,5 +289,28 @@ public class EntranceManagement : MonoBehaviour
             return allocation.way.TryGetAnyPath(out path);
 
         return allocation.way.TryGetActivePath(out path);
+    }
+
+    private CustomerBlood GetPooledCustomer(CustomerBlood prefab)
+    {
+        if (prefab == null)
+            return null;
+
+        int key = prefab.GetInstanceID();
+        if (!pooledCustomers.TryGetValue(key, out Queue<CustomerBlood> pool))
+        {
+            pool = new Queue<CustomerBlood>();
+            pooledCustomers.Add(key, pool);
+        }
+
+        CustomerBlood customer = null;
+        while (pool.Count > 0 && customer == null)
+            customer = pool.Dequeue();
+
+        if (customer == null)
+            customer = Instantiate(prefab);
+
+        customer.gameObject.SetActive(true);
+        return customer;
     }
 }

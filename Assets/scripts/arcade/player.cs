@@ -244,6 +244,7 @@ public class Player : MonoBehaviour
     private RigidbodyConstraints2D p3AttackOriginalConstraints;
     private bool p3AttackPhysicsLocked = false;
     private float p3AttackHazardIgnoreUntil = -999f;
+    private const float p3AttackInvulnerabilityPortion = 2f / 3f;
     public HealthBarUI bar;
 
     [Header("Obstacle Bump")]
@@ -919,7 +920,7 @@ public class Player : MonoBehaviour
         if (groundedAttack)
             ForceAnimationState("Base Attack", "Attack");
         else
-            ChangeAnimation("Flyattack");
+            ForceAnimationState("Base Flyattack", "Flyattack");
 
         rageRangedGroundAttackRoutine = StartCoroutine(FinishRageRangedAttackAnimation());
     }
@@ -2396,7 +2397,7 @@ public class Player : MonoBehaviour
             return;
         }
 
-        p3AttackHazardIgnoreUntil = Time.time + Mathf.Max(0f, totalAttackDuration) * 0.5f;
+        p3AttackHazardIgnoreUntil = Time.time + Mathf.Max(0f, totalAttackDuration) * p3AttackInvulnerabilityPortion;
     }
     private void Die()
     {

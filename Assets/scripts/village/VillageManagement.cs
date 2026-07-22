@@ -121,6 +121,13 @@ public class VillageManagement : MonoBehaviour
         public List<BloodDebugState> activeWhiteBloodCells = new List<BloodDebugState>();
     }
 
+    [Serializable]
+    public class ArcadePlayerEntry
+    {
+        [Range(1, 5)] public int playerType = 1;
+        public bool available = true;
+    }
+
     public static VillageManagement Instance { get; private set; }
     public static event Action<VillageManagement> InstanceReady;
 
@@ -136,6 +143,16 @@ public class VillageManagement : MonoBehaviour
     [Header("Arcade Reward Mapping")]
     [SerializeField] private bool awardArcadeOxygenToCurrentOxygen = true;
     [SerializeField] private bool awardArcadeEnergyToCurrentEnergy = true;
+
+    [Header("Arcade Players")]
+    [SerializeField] private List<ArcadePlayerEntry> arcadePlayers = new List<ArcadePlayerEntry>
+    {
+        new ArcadePlayerEntry { playerType = 1, available = true },
+        new ArcadePlayerEntry { playerType = 2, available = true },
+        new ArcadePlayerEntry { playerType = 3, available = true },
+        new ArcadePlayerEntry { playerType = 4, available = true },
+        new ArcadePlayerEntry { playerType = 5, available = true }
+    };
 
     [Header("Debug / Test")]
     [SerializeField] private VillageManagementTestControls debugControls = new VillageManagementTestControls();
@@ -162,6 +179,7 @@ public class VillageManagement : MonoBehaviour
     public IReadOnlyList<string> OwnedOxygenIds => saveData.ownedOxygenIds;
     public IReadOnlyList<string> OwnedCustomerBloodIds => saveData.ownedCustomerBloodIds;
     public IReadOnlyList<string> OwnedWhiteBloodCellIds => saveData.ownedWhiteBloodCellIds;
+    public IReadOnlyList<ArcadePlayerEntry> ArcadePlayers => arcadePlayers;
 
     public static VillageManagement EnsureInstance()
     {
@@ -533,6 +551,33 @@ public class VillageManagement : MonoBehaviour
         return !string.IsNullOrWhiteSpace(id) && saveData.ownedWhiteBloodCellIds.Contains(id);
     }
 
+    public bool IsArcadePlayerAvailable(int playerType)
+    {
+        ArcadePlayerEntry entry = FindArcadePlayerEntry(playerType);
+        return entry != null && entry.available;
+    }
+
+    public bool TryGetArcadePlayer(int playerType, out ArcadePlayerEntry entry)
+    {
+        entry = FindArcadePlayerEntry(playerType);
+        return entry != null;
+    }
+
+    public List<ArcadePlayerEntry> GetAvailableArcadePlayers()
+    {
+        List<ArcadePlayerEntry> results = new List<ArcadePlayerEntry>();
+        for (int i = 0; i < arcadePlayers.Count; i++)
+        {
+            ArcadePlayerEntry entry = arcadePlayers[i];
+            if (entry == null || !entry.available)
+                continue;
+
+            results.Add(entry);
+        }
+
+        return results;
+    }
+
     public void AddOwnedCustomerBlood(string id)
     {
         AddUniqueString(saveData.ownedCustomerBloodIds, id);
@@ -622,6 +667,8 @@ public class VillageManagement : MonoBehaviour
             saveData.ownedCustomerBloodIds = new List<string>();
         if (saveData.ownedWhiteBloodCellIds == null)
             saveData.ownedWhiteBloodCellIds = new List<string>();
+        if (arcadePlayers == null)
+            arcadePlayers = new List<ArcadePlayerEntry>();
 
         for (int i = 0; i < saveData.buildings.Count; i++)
         {
@@ -661,6 +708,7 @@ public class VillageManagement : MonoBehaviour
         RemoveInvalidStrings(saveData.ownedOxygenIds);
         RemoveInvalidStrings(saveData.ownedCustomerBloodIds);
         RemoveInvalidStrings(saveData.ownedWhiteBloodCellIds);
+        SanitizeArcadePlayers();
     }
 
     private void ProcessDebugControls()
@@ -815,6 +863,19 @@ public class VillageManagement : MonoBehaviour
         return null;
     }
 
+    private ArcadePlayerEntry FindArcadePlayerEntry(int playerType)
+    {
+        playerType = Mathf.Clamp(playerType, 1, 5);
+        for (int i = 0; i < arcadePlayers.Count; i++)
+        {
+            ArcadePlayerEntry entry = arcadePlayers[i];
+            if (entry != null && entry.playerType == playerType)
+                return entry;
+        }
+
+        return null;
+    }
+
     private static BuildingState CloneBuildingState(BuildingState source)
     {
         return new BuildingState
@@ -930,5 +991,41 @@ public class VillageManagement : MonoBehaviour
             if (string.IsNullOrWhiteSpace(list[i]))
                 list.RemoveAt(i);
         }
+    }
+
+    private void SanitizeArcadePlayers()
+    {
+        if (arcadePlayers == null)
+            arcadePlayers = new List<ArcadePlayerEntry>();
+
+        HashSet<int> usedPlayerTypes = new HashSet<int>();
+        for (int i = arcadePlayers.Count - 1; i >= 0; i--)
+        {
+            ArcadePlayerEntry entry = arcadePlayers[i];
+            if (entry == null)
+            {
+                arcadePlayers.RemoveAt(i);
+                continue;
+            }
+
+            entry.playerType = Mathf.Clamp(entry.playerType, 1, 5);
+
+            if (!usedPlayerTypes.Add(entry.playerType))
+                arcadePlayers.RemoveAt(i);
+        }
+
+        for (int playerType = 1; playerType <= 5; playerType++)
+        {
+            if (usedPlayerTypes.Contains(playerType))
+                continue;
+
+            arcadePlayers.Add(new ArcadePlayerEntry
+            {
+                playerType = playerType,
+                available = false
+            });
+        }
+
+        arcadePlayers.Sort((a, b) => a.playerType.CompareTo(b.playerType));
     }
 }

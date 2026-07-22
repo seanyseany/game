@@ -1,10 +1,14 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(Collider2D))]
 public class CustomerBlood : MonoBehaviour
 {
+    private static readonly System.Collections.Generic.HashSet<CustomerBlood> ActiveCustomers =
+        new System.Collections.Generic.HashSet<CustomerBlood>();
+
     private enum VisualState
     {
         Walking,
@@ -14,6 +18,8 @@ public class CustomerBlood : MonoBehaviour
 
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 2f;
+    private float walkStretchAmount = 0.03f;
+    [SerializeField] private float walkStretchFrequency = 6f;
     [SerializeField] private Vector2 heldItemLocalPosition = new Vector2(0.2f, 0.2f);
     [SerializeField] private Vector2 receiveItemLocalPosition = new Vector2(0.1f, 0.2f);
     [SerializeField] private float roamPauseMin = 0f;
@@ -24,42 +30,87 @@ public class CustomerBlood : MonoBehaviour
     [SerializeField] private Sprite receiveItemSprite;
     [SerializeField] private Sprite carryingWalkSprite;
     [SerializeField] private Sprite walkingSprite;
-    [SerializeField] private float receivingToCarryingDelay = 0.5f;
+    [SerializeField] private float receiveItemSpawnDelay = 0.2f;
+    [SerializeField] private float receiveToCarryDelay = 0.3f;
+    [SerializeField] private float purchasePassDistance = 0.35f;
+    [SerializeField] private int sortingBaseOrder = 145;
+    [SerializeField] private float sortingOrderScale = 10f;
+    [SerializeField] private int minimumBodySortingOrder = 100;
+    [SerializeField] private int maximumBodySortingOrder = 190;
 
     private Rigidbody2D body;
+    private SortingGroup sortingGroup;
     private Coroutine lifeRoutine;
     private Coroutine moveRoutine;
-    private Coroutine visualRoutine;
     private EntranceManagement ownerEntranceManagement;
     private Entrance sourceEntrance;
     private Way currentWay;
     private Path currentPath;
     private Building targetBuilding;
+    private Building pendingPurchaseBuilding;
+    private CustomerBlood sourcePrefab;
     private Building.QueueSlot currentQueueSlot = Building.QueueSlot.None;
     private GameObject heldItemInstance;
+    private SpriteRenderer heldItemSpriteRenderer;
+    private SpriteRenderer[] heldItemRenderers;
     private bool facingLeft = true;
     private bool waitingAtCounter;
     private bool purchaseFinished;
     private bool transitioningToCarry;
+    private bool purchaseSequenceRunning;
     private string spawnEntryId;
     private float fixedZ;
+    private float lifeEndTime;
     private int routeSequenceIndex = int.MinValue;
     private int currentRouteNodeIndex = -1;
     private int routeTravelDirection = 1;
+    private Vector3 visualBaseScale = Vector3.one;
     private readonly WaitForFixedUpdate waitForFixedUpdate = new WaitForFixedUpdate();
 
     public string SpawnEntryId => spawnEntryId;
+    public CustomerBlood SourcePrefab => sourcePrefab;
 
     private void Awake()
     {
         if (spriteRenderer == null)
             spriteRenderer = GetComponentInChildren<SpriteRenderer>();
 
+        EnsureSortingGroup();
+
         body = GetComponent<Rigidbody2D>();
         body.interpolation = RigidbodyInterpolation2D.Interpolate;
         body.gravityScale = 0f;
         body.linearVelocity = Vector2.zero;
         fixedZ = transform.position.z;
+
+        if (spriteRenderer != null)
+            visualBaseScale = spriteRenderer.transform.localScale;
+
+        UpdateSortingOrders();
+    }
+
+    private void OnEnable()
+    {
+        ActiveCustomers.Add(this);
+    }
+
+    private void OnDisable()
+    {
+        ActiveCustomers.Remove(this);
+    }
+
+    public static void CancelBuildingInteractions(Building building)
+    {
+        if (building == null || ActiveCustomers.Count == 0)
+            return;
+
+        CustomerBlood[] customers = new CustomerBlood[ActiveCustomers.Count];
+        ActiveCustomers.CopyTo(customers);
+        for (int i = 0; i < customers.Length; i++)
+        {
+            if (customers[i] != null)
+                customers[i].CancelBuildingWaitAndResumeWay(building);
+        }
     }
 
     public void InitializeSpawn(
@@ -68,6 +119,7 @@ public class CustomerBlood : MonoBehaviour
         Entrance entrance,
         Way way,
         Path path,
+        CustomerBlood prefabSource,
         int selectedRouteSequenceIndex)
     {
         ResetState();
@@ -77,6 +129,7 @@ public class CustomerBlood : MonoBehaviour
         sourceEntrance = entrance;
         currentWay = way;
         currentPath = path;
+        sourcePrefab = prefabSource;
         routeSequenceIndex = selectedRouteSequenceIndex;
         targetBuilding = path != null ? path.Building : null;
 
@@ -94,6 +147,49 @@ public class CustomerBlood : MonoBehaviour
         return building != null && targetBuilding == building && waitingAtCounter && currentQueueSlot == Building.QueueSlot.Counter;
     }
 
+    public bool IsReadyToReceiveAtCounter(Building building)
+    {
+        if (!IsWaitingAtCounter(building) || building == null)
+            return false;
+
+        Vector3 targetPosition = building.CustomerPoint.position;
+        targetPosition.z = transform.position.z;
+        return Vector3.Distance(transform.position, targetPosition) <= 0.05f;
+    }
+
+    public void CancelBuildingWaitAndResumeWay(Building building)
+    {
+        if (building == null || !IsInteractingWithBuilding(building))
+            return;
+
+        if (moveRoutine != null)
+        {
+            StopCoroutine(moveRoutine);
+            moveRoutine = null;
+        }
+
+        if (lifeRoutine != null)
+        {
+            StopCoroutine(lifeRoutine);
+            lifeRoutine = null;
+        }
+
+        waitingAtCounter = false;
+        currentQueueSlot = Building.QueueSlot.None;
+        targetBuilding = null;
+        pendingPurchaseBuilding = null;
+        purchaseSequenceRunning = false;
+        transitioningToCarry = false;
+
+        if (!purchaseFinished)
+            ApplyVisualState(VisualState.Walking);
+
+        if (!isActiveAndEnabled)
+            return;
+
+        lifeRoutine = StartCoroutine(ResumeAfterBuildingCancelRoutine());
+    }
+
     public void MoveToQueueSlot(Building building, Building.QueueSlot slot, Vector3 worldTarget)
     {
         if (moveRoutine != null)
@@ -101,57 +197,57 @@ public class CustomerBlood : MonoBehaviour
 
         targetBuilding = building;
         currentQueueSlot = slot;
-        moveRoutine = StartCoroutine(MoveToRoutine(worldTarget, slot == Building.QueueSlot.Counter, null));
+        moveRoutine = StartCoroutine(MoveToRoutine(worldTarget, slot == Building.QueueSlot.Counter, building));
     }
 
-    public void ReceivePurchasedItem(GameObject itemPrefab)
+    public IEnumerator ReceivePurchasedItemRoutine(GameObject itemPrefab, System.Action onItemSpawned = null)
     {
-        if (itemPrefab != null)
-        {
-            heldItemInstance = Instantiate(itemPrefab, transform);
-            heldItemInstance.transform.localPosition = receiveItemLocalPosition;
-            heldItemInstance.transform.localRotation = Quaternion.identity;
-        }
-
-        purchaseFinished = true;
         waitingAtCounter = false;
         transitioningToCarry = true;
+        ApplyVisualState(VisualState.ReceivingItem);
 
-        if (visualRoutine != null)
-            StopCoroutine(visualRoutine);
+        yield return new WaitForSeconds(receiveItemSpawnDelay);
 
-        visualRoutine = StartCoroutine(ReceiveThenCarryRoutine());
+        if (itemPrefab != null && heldItemInstance == null)
+        {
+            heldItemInstance = VillageItemPool.Spawn(itemPrefab, transform);
+            heldItemInstance.transform.localPosition = receiveItemLocalPosition;
+            heldItemInstance.transform.localRotation = Quaternion.identity;
+            heldItemSpriteRenderer = heldItemInstance.GetComponentInChildren<SpriteRenderer>(true);
+            heldItemRenderers = heldItemInstance.GetComponentsInChildren<SpriteRenderer>(true);
+        }
+
+        UpdateHeldItemPosition(receiveItemLocalPosition);
+        UpdateSortingOrders();
+        onItemSpawned?.Invoke();
+
+        yield return new WaitForSeconds(receiveToCarryDelay);
+
+        purchaseFinished = true;
+        transitioningToCarry = false;
+        ApplyVisualState(VisualState.CarryingItem);
+        UpdateHeldItemPosition(heldItemLocalPosition);
     }
 
     private IEnumerator LifeCycleRoutine()
     {
         float lifetime = Random.Range(15f, 20f);
-        float endTime = Time.time + lifetime;
+        lifeEndTime = Time.time + lifetime;
 
-        bool willAttemptPurchase = targetBuilding != null &&
-                                   targetBuilding.IsWorking &&
-                                   targetBuilding.HasPurchasableCustomerPoint() &&
-                                   Random.value <= targetBuilding.GetPurchaseChance();
+        ApplyVisualState(VisualState.Walking);
 
-        if (willAttemptPurchase && targetBuilding.TryEnterQueue(this, out Building.QueueSlot slot, out Transform target))
-        {
-            currentQueueSlot = slot;
-            yield return MoveToRoutine(target.position, slot == Building.QueueSlot.Counter, targetBuilding);
+        while (Time.time < lifeEndTime)
+            yield return RoamUntil(lifeEndTime);
 
-            while (!purchaseFinished && Time.time < endTime)
-                yield return null;
+        yield return ReturnToEntranceAndDespawn();
+    }
 
-            while (transitioningToCarry && Time.time < endTime)
-                yield return null;
-        }
-        else
-        {
-            ApplyVisualState(VisualState.Walking);
-            yield return RoamUntil(endTime);
-        }
+    private IEnumerator ResumeAfterBuildingCancelRoutine()
+    {
+        yield return ReturnToWayAndResumeRoutine();
 
-        while (Time.time < endTime)
-            yield return RoamUntil(endTime);
+        while (Time.time < lifeEndTime)
+            yield return RoamUntil(lifeEndTime);
 
         yield return ReturnToEntranceAndDespawn();
     }
@@ -173,7 +269,7 @@ public class CustomerBlood : MonoBehaviour
             if (nextRouteNodeIndex >= 0)
                 yield return MoveToRouteNodeRoutine(nextRouteNodeIndex);
             else
-                yield return MoveToRoutine(currentWay.GetRandomRoamWorldPoint(), false, null);
+                yield return TravelWaySegmentRoutine(currentWay.GetRandomRoamWorldPoint());
         }
         else
         {
@@ -198,21 +294,54 @@ public class CustomerBlood : MonoBehaviour
         Vector3 targetPosition = sourceEntrance != null ? sourceEntrance.DespawnWorldPosition : transform.position;
         yield return MoveToRoutine(targetPosition, false, null);
 
-        ownerEntranceManagement?.NotifyCustomerDespawned(this);
-        gameObject.SetActive(false);
+        ownerEntranceManagement?.RecycleCustomer(this);
     }
 
-    private IEnumerator MoveToRoutine(Vector3 targetPosition, bool idleAtEnd, Building notifyBuilding)
+    private IEnumerator ReturnToWayAndResumeRoutine()
+    {
+        if (currentWay != null && routeSequenceIndex != int.MinValue)
+        {
+            int closestNodeIndex = currentWay.GetClosestRouteNodeIndex(routeSequenceIndex, transform.position);
+            if (closestNodeIndex >= 0 && currentWay.TryGetRouteNode(routeSequenceIndex, closestNodeIndex, out Vector3 worldPoint))
+            {
+                yield return MoveToRoutine(worldPoint, false, null);
+                currentRouteNodeIndex = closestNodeIndex;
+            }
+        }
+        else if (currentPath != null)
+        {
+            yield return MoveToRoutine(currentPath.GetRandomWorldPointOnPath(), false, null);
+        }
+
+        moveRoutine = null;
+    }
+
+    private IEnumerator MoveToRoutine(
+        Vector3 targetPosition,
+        bool idleAtEnd,
+        Building notifyBuilding,
+        Building expectedBuilding = null,
+        Building.QueueSlot expectedSlot = Building.QueueSlot.None)
     {
         waitingAtCounter = false;
         targetPosition = WithFixedZ(targetPosition);
 
         while (Vector3.Distance(transform.position, targetPosition) > 0.03f)
         {
+            if (expectedBuilding != null &&
+                (targetBuilding != expectedBuilding || currentQueueSlot != expectedSlot))
+            {
+                ResetWalkStretch();
+                UpdateSortingOrders();
+                yield break;
+            }
+
             Vector3 next = Vector3.MoveTowards(transform.position, targetPosition, moveSpeed * Time.fixedDeltaTime);
             next.z = fixedZ;
             UpdateFacing(next.x - transform.position.x);
             body.MovePosition(next);
+            ApplyWalkStretch();
+            UpdateSortingOrders();
             if (!purchaseFinished)
                 ApplyVisualState(VisualState.Walking);
             else if (transitioningToCarry)
@@ -223,10 +352,17 @@ public class CustomerBlood : MonoBehaviour
         }
 
         body.MovePosition(WithFixedZ(targetPosition));
+        ResetWalkStretch();
+        UpdateSortingOrders();
+
+        if (expectedBuilding != null &&
+            (targetBuilding != expectedBuilding || currentQueueSlot != expectedSlot))
+            yield break;
 
         if (idleAtEnd)
         {
             waitingAtCounter = true;
+            ApplyBuildingFacingPreference();
             if (!purchaseFinished)
                 ApplyVisualState(VisualState.Walking);
         }
@@ -249,19 +385,19 @@ public class CustomerBlood : MonoBehaviour
             lifeRoutine = null;
         }
 
-        if (visualRoutine != null)
-        {
-            StopCoroutine(visualRoutine);
-            visualRoutine = null;
-        }
-
         if (heldItemInstance != null)
-            Destroy(heldItemInstance);
+        {
+            VillageItemPool.Release(heldItemInstance);
+            heldItemInstance = null;
+            heldItemSpriteRenderer = null;
+            heldItemRenderers = null;
+        }
 
         if (targetBuilding != null)
             targetBuilding.NotifyCustomerLeaving(this);
 
         targetBuilding = null;
+        pendingPurchaseBuilding = null;
         currentWay = null;
         currentPath = null;
         sourceEntrance = null;
@@ -270,15 +406,19 @@ public class CustomerBlood : MonoBehaviour
         waitingAtCounter = false;
         purchaseFinished = false;
         transitioningToCarry = false;
+        purchaseSequenceRunning = false;
         spawnEntryId = string.Empty;
         routeSequenceIndex = int.MinValue;
         currentRouteNodeIndex = -1;
         routeTravelDirection = 1;
+        lifeEndTime = 0f;
         body.linearVelocity = Vector2.zero;
         facingLeft = true;
         Vector3 angles = transform.localEulerAngles;
         angles.y = 0f;
         transform.localEulerAngles = angles;
+        ResetWalkStretch();
+        UpdateSortingOrders();
         ApplyVisualState(VisualState.Walking);
     }
 
@@ -351,7 +491,7 @@ public class CustomerBlood : MonoBehaviour
         if (!currentWay.TryGetRouteNode(routeSequenceIndex, routeNodeIndex, out Vector3 worldPoint))
             yield break;
 
-        yield return MoveToRoutine(worldPoint, false, null);
+        yield return TravelWaySegmentRoutine(worldPoint);
         currentRouteNodeIndex = routeNodeIndex;
     }
 
@@ -370,17 +510,15 @@ public class CustomerBlood : MonoBehaviour
         transform.localEulerAngles = angles;
     }
 
-    private IEnumerator ReceiveThenCarryRoutine()
+    private void ApplyBuildingFacingPreference()
     {
-        ApplyVisualState(VisualState.ReceivingItem);
-        UpdateHeldItemPosition(receiveItemLocalPosition);
+        if (targetBuilding == null || currentQueueSlot != Building.QueueSlot.Counter)
+            return;
 
-        yield return new WaitForSeconds(receivingToCarryingDelay);
-
-        transitioningToCarry = false;
-        ApplyVisualState(VisualState.CarryingItem);
-        UpdateHeldItemPosition(heldItemLocalPosition);
-        visualRoutine = null;
+        facingLeft = !targetBuilding.CustomerDefaultFacesRight;
+        Vector3 angles = transform.localEulerAngles;
+        angles.y = facingLeft ? 0f : 180f;
+        transform.localEulerAngles = angles;
     }
 
     private void UpdateHeldItemPosition(Vector2 localPosition)
@@ -389,6 +527,7 @@ public class CustomerBlood : MonoBehaviour
             return;
 
         heldItemInstance.transform.localPosition = localPosition;
+        UpdateSortingOrders();
     }
 
     private void ApplyVisualState(VisualState state)
@@ -413,10 +552,311 @@ public class CustomerBlood : MonoBehaviour
         }
     }
 
+    private void ApplyWalkStretch()
+    {
+        if (spriteRenderer == null)
+            return;
+
+        float stretch = Mathf.Sin(Time.time * walkStretchFrequency) * walkStretchAmount;
+        spriteRenderer.transform.localScale = new Vector3(
+            visualBaseScale.x * (1f - stretch),
+            visualBaseScale.y * (1f + stretch),
+            visualBaseScale.z);
+    }
+
+    private void ResetWalkStretch()
+    {
+        if (spriteRenderer == null)
+            return;
+
+        spriteRenderer.transform.localScale = visualBaseScale;
+    }
+
+    private void UpdateSortingOrders()
+    {
+        int bodyOrder = sortingBaseOrder - Mathf.RoundToInt(transform.position.y * sortingOrderScale);
+        bodyOrder = Mathf.Clamp(bodyOrder, minimumBodySortingOrder, maximumBodySortingOrder);
+
+        if (sortingGroup != null)
+        {
+            if (spriteRenderer != null)
+            {
+                sortingGroup.sortingLayerID = spriteRenderer.sortingLayerID;
+                sortingGroup.sortingLayerName = spriteRenderer.sortingLayerName;
+            }
+
+            sortingGroup.sortingOrder = bodyOrder;
+        }
+
+        if (spriteRenderer != null)
+            spriteRenderer.sortingOrder = 0;
+
+        if (heldItemRenderers != null)
+        {
+            for (int i = 0; i < heldItemRenderers.Length; i++)
+            {
+                if (heldItemRenderers[i] != null)
+                    heldItemRenderers[i].sortingOrder = 1;
+            }
+        }
+        else if (heldItemSpriteRenderer != null)
+        {
+            heldItemSpriteRenderer.sortingOrder = 1;
+        }
+    }
+
+    private void EnsureSortingGroup()
+    {
+        if (sortingGroup == null)
+            sortingGroup = GetComponent<SortingGroup>();
+
+        if (sortingGroup == null)
+            sortingGroup = gameObject.AddComponent<SortingGroup>();
+
+        if (spriteRenderer != null)
+            sortingGroup.sortingLayerID = spriteRenderer.sortingLayerID;
+    }
+
     private float GetRoamPauseDuration()
     {
         float minPause = Mathf.Max(0f, roamPauseMin);
         float maxPause = Mathf.Max(minPause, roamPauseMax);
         return maxPause <= 0f ? 0f : Random.Range(minPause, maxPause);
+    }
+
+    private IEnumerator TravelWaySegmentRoutine(Vector3 targetPoint)
+    {
+        Vector3 segmentStart = transform.position;
+        targetPoint = WithFixedZ(targetPoint);
+
+        if (!purchaseFinished &&
+            !transitioningToCarry &&
+            !purchaseSequenceRunning &&
+            TryChoosePurchaseTargetAlongSegment(segmentStart, targetPoint, out Building building, out Path path, out Vector3 branchPoint))
+        {
+            pendingPurchaseBuilding = building;
+            yield return MoveToRoutine(branchPoint, false, null);
+
+            if (pendingPurchaseBuilding != building)
+            {
+                yield return MoveToRoutine(targetPoint, false, null);
+                yield break;
+            }
+
+            if (building != null && building.TryEnterQueue(this, out Building.QueueSlot slot, out Transform queueTarget))
+            {
+                purchaseSequenceRunning = true;
+                targetBuilding = building;
+                pendingPurchaseBuilding = null;
+                currentPath = path;
+                currentQueueSlot = slot;
+
+                while (targetBuilding == building && !purchaseFinished)
+                {
+                    Vector3 queueTargetPosition = GetQueueSlotWorldPosition(building, currentQueueSlot);
+                    bool isCounterSlot = currentQueueSlot == Building.QueueSlot.Counter;
+
+                    yield return MoveToRoutine(
+                        queueTargetPosition,
+                        isCounterSlot,
+                        isCounterSlot ? building : null,
+                        building,
+                        currentQueueSlot);
+
+                    if (targetBuilding != building || purchaseFinished)
+                        break;
+
+                    if (currentQueueSlot != Building.QueueSlot.Counter)
+                    {
+                        while (targetBuilding == building &&
+                               currentQueueSlot != Building.QueueSlot.Counter &&
+                               !purchaseFinished)
+                            yield return null;
+
+                        continue;
+                    }
+
+                    while (targetBuilding == building &&
+                           currentQueueSlot == Building.QueueSlot.Counter &&
+                           !purchaseFinished)
+                        yield return null;
+                }
+
+                while (transitioningToCarry)
+                    yield return null;
+
+                if (targetBuilding == building && currentQueueSlot == Building.QueueSlot.Counter)
+                    building.CompleteService(this);
+
+                currentQueueSlot = Building.QueueSlot.None;
+
+                yield return MoveToRoutine(branchPoint, false, null);
+
+                if (targetBuilding == building)
+                    targetBuilding = null;
+                if (pendingPurchaseBuilding == building)
+                    pendingPurchaseBuilding = null;
+                purchaseSequenceRunning = false;
+            }
+            else if (pendingPurchaseBuilding == building)
+            {
+                pendingPurchaseBuilding = null;
+            }
+        }
+
+        yield return MoveToRoutine(targetPoint, false, null);
+    }
+
+    private bool IsInteractingWithBuilding(Building building)
+    {
+        return targetBuilding == building || pendingPurchaseBuilding == building;
+    }
+
+    private Vector3 GetQueueSlotWorldPosition(Building building, Building.QueueSlot slot)
+    {
+        if (building == null)
+            return transform.position;
+
+        switch (slot)
+        {
+            case Building.QueueSlot.Counter:
+                return building.CustomerPoint.position;
+            case Building.QueueSlot.Line1:
+                return building.Line1Point.position;
+            case Building.QueueSlot.Line2:
+                return building.Line2Point.position;
+            default:
+                return transform.position;
+        }
+    }
+
+    private bool TryChoosePurchaseTargetAlongSegment(Vector3 start, Vector3 end, out Building building, out Path path, out Vector3 branchPoint)
+    {
+        building = null;
+        path = null;
+        branchPoint = end;
+
+        if (currentWay == null)
+            return false;
+
+        float detectionSqrDistance = purchasePassDistance * purchasePassDistance;
+        float bestT = float.MaxValue;
+        var connectedPaths = currentWay.ConnectedPaths;
+        for (int i = 0; i < connectedPaths.Count; i++)
+        {
+            Path candidatePath = connectedPaths[i];
+            if (!IsValidPurchasePath(candidatePath))
+                continue;
+
+            Building candidateBuilding = candidatePath.Building;
+            if (candidateBuilding == null || Random.value > candidateBuilding.GetPurchaseChance())
+                continue;
+
+            Vector3 candidatePoint = WithFixedZ(candidateBuilding.CustomerPoint.position);
+            Vector3 projectedPoint = GetClosestPointOnSegment(start, end, candidatePoint, out float t);
+            if ((candidatePoint - projectedPoint).sqrMagnitude > detectionSqrDistance)
+                continue;
+
+            if (t >= bestT)
+                continue;
+
+            bestT = t;
+            building = candidateBuilding;
+            path = candidatePath;
+            branchPoint = projectedPoint;
+        }
+
+        return building != null && path != null;
+    }
+
+    private static bool IsValidPurchasePath(Path path)
+    {
+        if (path == null || path.Building == null)
+            return false;
+
+        Building building = path.Building;
+        return building.IsWorking && building.HasPurchasableCustomerPoint();
+    }
+
+    private static Vector3 GetClosestPointOnSegment(Vector3 start, Vector3 end, Vector3 point, out float t)
+    {
+        Vector3 segment = end - start;
+        float lengthSqr = segment.sqrMagnitude;
+        if (lengthSqr <= Mathf.Epsilon)
+        {
+            t = 0f;
+            return start;
+        }
+
+        t = Mathf.Clamp01(Vector3.Dot(point - start, segment) / lengthSqr);
+        return start + segment * t;
+    }
+}
+
+public static class VillageItemPool
+{
+    private sealed class PoolMarker : MonoBehaviour
+    {
+        public GameObject sourcePrefab;
+    }
+
+    private static readonly System.Collections.Generic.Dictionary<int, System.Collections.Generic.Queue<GameObject>> Pools =
+        new System.Collections.Generic.Dictionary<int, System.Collections.Generic.Queue<GameObject>>();
+
+    public static GameObject Spawn(GameObject prefab, Transform parent)
+    {
+        if (prefab == null)
+            return null;
+
+        int key = prefab.GetInstanceID();
+        if (!Pools.TryGetValue(key, out System.Collections.Generic.Queue<GameObject> pool))
+        {
+            pool = new System.Collections.Generic.Queue<GameObject>();
+            Pools.Add(key, pool);
+        }
+
+        GameObject instance = null;
+        while (pool.Count > 0 && instance == null)
+            instance = pool.Dequeue();
+
+        if (instance == null)
+        {
+            instance = Object.Instantiate(prefab);
+            PoolMarker marker = instance.GetComponent<PoolMarker>();
+            if (marker == null)
+                marker = instance.AddComponent<PoolMarker>();
+
+            marker.sourcePrefab = prefab;
+        }
+
+        instance.transform.SetParent(parent, false);
+        instance.transform.localPosition = Vector3.zero;
+        instance.transform.localRotation = Quaternion.identity;
+        instance.SetActive(true);
+        return instance;
+    }
+
+    public static void Release(GameObject instance)
+    {
+        if (instance == null)
+            return;
+
+        PoolMarker marker = instance.GetComponent<PoolMarker>();
+        if (marker == null || marker.sourcePrefab == null)
+        {
+            Object.Destroy(instance);
+            return;
+        }
+
+        int key = marker.sourcePrefab.GetInstanceID();
+        if (!Pools.TryGetValue(key, out System.Collections.Generic.Queue<GameObject> pool))
+        {
+            pool = new System.Collections.Generic.Queue<GameObject>();
+            Pools.Add(key, pool);
+        }
+
+        instance.SetActive(false);
+        instance.transform.SetParent(null, false);
+        pool.Enqueue(instance);
     }
 }

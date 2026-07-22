@@ -4,40 +4,48 @@ using UnityEngine;
 
 [DisallowMultipleComponent]
 [RequireComponent(typeof(Collider2D))]
+[RequireComponent(typeof(ObstacleInfo))]
 public class MiniBossBomb : MonoBehaviour
 {
     private const string DestroyTriggerName = "destroy";
+    private const string ObstacleTag = "Obstacle";
+    private const float PreTrackingCenterY = 0f;
 
     [Header("Mini Boss Bomb")]
     [SerializeField] private float selfDestructionTime = 3f;
     [SerializeField] private float xMoveSpeed = 4f;
-    [SerializeField] private float initialYMoveSpeed = 6f;
     [SerializeField] private float finalYMoveSpeed = 3f;
-    [SerializeField] private float launchDuration = 0.45f;
+    [SerializeField] private float trackingStartWorldX = 7f;
+    [SerializeField] private float preTrackingYOffset = 3f;
+    [SerializeField] private float preTrackingOscillationSpeed = 2f;
     [SerializeField] private float followResponseTime = 0.18f;
     [SerializeField] private float yTurnDuration = 0.35f;
-    [SerializeField] private int damage = 1;
     [SerializeField] private float destroyCleanupDelay = 0.5f;
-    [SerializeField] private string playerTag = "player";
 
     private Animator cachedAnimator;
     private Collider2D cachedCollider;
+    private ObstacleInfo cachedObstacleInfo;
     private Transform targetPlayer;
     private Coroutine selfDestroyRoutine;
     private Coroutine cleanupRoutine;
     private bool destroyTriggered;
-    private float spawnTime;
     private float currentYVelocity;
-    private bool trackingStarted;
-    private readonly HashSet<int> hitPlayerIds = new HashSet<int>();
+    private float preTrackingOscillationTime;
 
     private void Awake()
     {
         cachedAnimator = GetComponent<Animator>() ?? GetComponentInChildren<Animator>(true);
         cachedCollider = GetComponent<Collider2D>();
+        cachedObstacleInfo = GetComponent<ObstacleInfo>();
 
         if (cachedCollider != null)
             cachedCollider.isTrigger = true;
+
+        if (cachedObstacleInfo != null)
+            cachedObstacleInfo.type = ObstacleType.Saw;
+
+        if (gameObject.tag != ObstacleTag)
+            gameObject.tag = ObstacleTag;
     }
 
     private void OnEnable()
@@ -59,7 +67,6 @@ public class MiniBossBomb : MonoBehaviour
             cleanupRoutine = null;
         }
 
-        hitPlayerIds.Clear();
     }
 
     public void SetTarget(Transform playerTarget)
@@ -71,11 +78,8 @@ public class MiniBossBomb : MonoBehaviour
     {
         destroyTriggered = false;
         targetPlayer = Player.Instance != null ? Player.Instance.transform : FindFirstObjectByType<Player>()?.transform;
-        spawnTime = Time.time;
-        currentYVelocity = -Mathf.Max(0f, initialYMoveSpeed);
-        trackingStarted = false;
-        hitPlayerIds.Clear();
-
+        currentYVelocity = 0f;
+        preTrackingOscillationTime = 0f;
         if (cachedCollider != null)
             cachedCollider.enabled = true;
 
@@ -101,64 +105,41 @@ public class MiniBossBomb : MonoBehaviour
         float horizontalSpeed = Mathf.Max(0f, xMoveSpeed);
         position.x += -horizontalSpeed * Time.deltaTime;
 
-        if (!trackingStarted)
-        {
-            position.y += currentYVelocity * Time.deltaTime;
-
-            float launchDeceleration = Mathf.Max(0.01f, Mathf.Abs(initialYMoveSpeed)) / Mathf.Max(0.01f, launchDuration);
-            currentYVelocity = Mathf.MoveTowards(currentYVelocity, 0f, launchDeceleration * Time.deltaTime);
-
-            if (Mathf.Abs(currentYVelocity) <= 0.01f || Time.time - spawnTime >= Mathf.Max(0.01f, launchDuration))
-            {
-                currentYVelocity = 0f;
-                trackingStarted = true;
-            }
-        }
-        else
-        {
-            float targetY = targetPlayer != null ? targetPlayer.position.y : position.y;
-            float deltaY = targetY - position.y;
-            float desiredVelocity = 0f;
-
-            if (Mathf.Abs(deltaY) > 0.02f)
-            {
-                float responseTime = Mathf.Max(0.01f, followResponseTime);
-                desiredVelocity = Mathf.Clamp(
-                    deltaY / responseTime,
-                    -Mathf.Max(0f, finalYMoveSpeed),
-                    Mathf.Max(0f, finalYMoveSpeed));
-            }
-
-            currentYVelocity = Mathf.MoveTowards(
-                currentYVelocity,
-                desiredVelocity,
-                (Mathf.Max(0.01f, finalYMoveSpeed) / Mathf.Max(0.01f, yTurnDuration)) * Time.deltaTime);
-
-            position.y += currentYVelocity * Time.deltaTime;
-        }
+        bool shouldTrackPlayerY = position.x <= trackingStartWorldX;
+        float targetY = GetTargetY(position.y, shouldTrackPlayerY);
+        UpdateVerticalVelocityToward(targetY, position.y);
+        position.y += currentYVelocity * Time.deltaTime;
 
         transform.position = position;
     }
 
-    private void OnTriggerEnter2D(Collider2D other)
+    private float GetTargetY(float currentY, bool shouldTrackPlayerY)
     {
-        if (destroyTriggered || other == null)
-            return;
+        if (shouldTrackPlayerY)
+            return targetPlayer != null ? targetPlayer.position.y : currentY;
 
-        Player player = other.GetComponent<Player>() ?? other.GetComponentInParent<Player>();
-        if (player == null && !other.CompareTag(playerTag))
-            return;
+        preTrackingOscillationTime += Time.deltaTime * Mathf.Max(0f, preTrackingOscillationSpeed);
+        return PreTrackingCenterY + Mathf.Sin(preTrackingOscillationTime) * Mathf.Abs(preTrackingYOffset);
+    }
 
-        if (player != null)
+    private void UpdateVerticalVelocityToward(float targetY, float currentY)
+    {
+        float deltaY = targetY - currentY;
+        float desiredVelocity = 0f;
+
+        if (Mathf.Abs(deltaY) > 0.02f)
         {
-            int playerId = player.GetInstanceID();
-            if (hitPlayerIds.Contains(playerId))
-                return;
-
-            bool applied = player.TakeExternalObstacleDamage(damage, ObstacleType.Saw, other);
-            if (applied)
-                hitPlayerIds.Add(playerId);
+            float responseTime = Mathf.Max(0.01f, followResponseTime);
+            desiredVelocity = Mathf.Clamp(
+                deltaY / responseTime,
+                -Mathf.Max(0f, finalYMoveSpeed),
+                Mathf.Max(0f, finalYMoveSpeed));
         }
+
+        currentYVelocity = Mathf.MoveTowards(
+            currentYVelocity,
+            desiredVelocity,
+            (Mathf.Max(0.01f, finalYMoveSpeed) / Mathf.Max(0.01f, yTurnDuration)) * Time.deltaTime);
     }
 
     private IEnumerator CoSelfDestruct()

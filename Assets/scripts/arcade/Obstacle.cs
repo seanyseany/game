@@ -3,6 +3,8 @@ using System.Collections;
 
 public class Obstacle : MonoBehaviour, IReinitializable
 {
+    private static readonly int DieTrigger = Animator.StringToHash("Die");
+
     public Animator anim;   // Animator (Idle/Move + Die 포함)
     private const float DestroyAnimationDuration = 0.5f;
     private const float OffscreenHitProtectionMargin = 0.25f;
@@ -14,6 +16,9 @@ public class Obstacle : MonoBehaviour, IReinitializable
     private Collider2D col;
     private Rigidbody2D rb;
     private ObstacleMover obstacleMover;
+    private ObstacleRageMover obstacleRageMover;
+    private MachineGunLastSpawnNotifier machineGunNotifier;
+    private CholesterolBomb cholesterolBomb;
     private Coroutine destroyRoutine;
     private Transform[] cachedTransforms;
     private Vector3[] cachedLocalPositions;
@@ -38,6 +43,9 @@ public class Obstacle : MonoBehaviour, IReinitializable
         col = GetComponent<Collider2D>();
         rb = GetComponent<Rigidbody2D>();
         obstacleMover = GetComponent<ObstacleMover>();
+        obstacleRageMover = GetComponent<ObstacleRageMover>();
+        machineGunNotifier = GetComponent<MachineGunLastSpawnNotifier>() ?? GetComponentInParent<MachineGunLastSpawnNotifier>();
+        cholesterolBomb = GetComponent<CholesterolBomb>() ?? GetComponentInParent<CholesterolBomb>();
         initialParent = transform.parent;
         runtimeSpawned = false;
         CacheLocalPose();
@@ -62,35 +70,37 @@ public class Obstacle : MonoBehaviour, IReinitializable
 
     public void Reinit()
     {
-        if (destroyRoutine != null)
-        {
-            StopCoroutine(destroyRoutine);
-            destroyRoutine = null;
-        }
+        StopDestroyRoutine();
 
         ResetRuntimePose();
         destroyed = false;
         spawnProtectionUntil = 0f;
 
-        if (col)
-        {
+        if (col != null)
             col.enabled = true;
-        }
 
-        if (rb != null)
-        {
-            ResetRigidbody(rb, true);
-        }
-
-        if (obstacleMover == null)
-            obstacleMover = GetComponent<ObstacleMover>();
+        ResetRigidbody(rb, true);
 
         if (obstacleMover != null)
             obstacleMover.Reinit();
 
+        if (obstacleRageMover != null)
+        {
+            if (IsPhaseOwnedObstacle())
+            {
+                obstacleRageMover.ResumeMovement();
+                obstacleRageMover.enabled = true;
+                obstacleRageMover.Reinit();
+            }
+            else
+            {
+                obstacleRageMover.enabled = false;
+            }
+        }
+
         if (anim != null)
         {
-            anim.ResetTrigger("Die");
+            anim.ResetTrigger(DieTrigger);
             anim.Rebind();
             anim.Update(0f);
         }
@@ -98,80 +108,43 @@ public class Obstacle : MonoBehaviour, IReinitializable
 
     private void OnDisable()
     {
-        if (destroyRoutine != null)
-        {
-            StopCoroutine(destroyRoutine);
-            destroyRoutine = null;
-        }
+        StopDestroyRoutine();
     }
 
     private void OnTriggerEnter2D(Collider2D other)
     {
-        if (destroyed) return;
+        if (destroyed || other == null)
+            return;
+
         if (!CanReactToHit())
             return;
-        
 
-        if (other.GetComponent<BombHitBox>() != null || other.GetComponentInParent<BombHitBox>() != null)
-        {
-            CholesterolBomb cholesterolBomb = GetComponent<CholesterolBomb>() ?? GetComponentInParent<CholesterolBomb>();
-            if (cholesterolBomb != null)
-            {
-                cholesterolBomb.TriggerExplosionFromExternalHit();
-                return;
-            }
-
-            Die();
+        if (TryHandleBombHit(other))
             return;
-        }
 
-        // 1) 플레이어 충돌
-        var player = other.GetComponent<Player>();
+        Player player = other.GetComponent<Player>();
         if (player != null)
         {
             if (player.IsRageModeActive())
-            {
                 Die();
-            }
             return;
         }
 
-        // 2) Rage 공격 Hitbox (Hitbox 컴포넌트가 owner를 갖는 경우 owner에서 체크하는게 더 안정적)
-        var hitbox = other.GetComponent<Hitbox>();
-        if (hitbox != null)
-        {
-            var owner = GetCachedPlayer();
-            if (owner != null && owner.IsRageModeActive())
-            {
-                Die();
-            }
-            return;
-        }
-
-        // 3) Rage Projectile (번개, 공)
-        if (other.GetComponent<ZigzagLightning>() != null ||
-            other.GetComponent<ProjectileBall>() != null)
-        {
-            var owner = GetCachedPlayer();
-            if (owner != null && owner.IsRageModeActive())
-            {
-                Die();
-            }
-            return;
-        }
+        if (IsRageAttackCollider(other))
+            Die();
     }
 
     private void OnCollisionEnter2D(Collision2D colInfo)
     {
-        if (destroyed) return;
+        if (destroyed || colInfo == null)
+            return;
+
         if (!CanReactToHit())
             return;
 
-        var player = colInfo.gameObject.GetComponent<Player>();
+        Player player = colInfo.gameObject.GetComponent<Player>();
         if (player != null && player.IsRageModeActive())
-        {
             Die();
-        }
     }
 
     public void Hit(int damage)
@@ -192,32 +165,26 @@ public class Obstacle : MonoBehaviour, IReinitializable
 
     private void Die()
     {
-        if (destroyed) return;
+        if (destroyed)
+            return;
+
         destroyed = true;
 
-        MachineGunLastSpawnNotifier machineGunNotifier = GetComponent<MachineGunLastSpawnNotifier>() ?? GetComponentInParent<MachineGunLastSpawnNotifier>();
         if (machineGunNotifier != null)
             machineGunNotifier.NotifyDestroyTriggered();
-
-        if (obstacleMover == null)
-            obstacleMover = GetComponent<ObstacleMover>();
 
         if (obstacleMover != null)
             obstacleMover.NotifyDeathStarted();
 
-        if (col != null) col.enabled = false;
+        if (col != null)
+            col.enabled = false;
 
-        if (rb != null)
-        {
-            ResetRigidbody(rb, true);
-        }
+        ResetRigidbody(rb, true);
 
         if (anim != null)
         {
-            anim.SetTrigger("Die");
-            if (destroyRoutine != null)
-                StopCoroutine(destroyRoutine);
-
+            anim.SetTrigger(DieTrigger);
+            StopDestroyRoutine();
             destroyRoutine = StartCoroutine(CoDeactivateAfterDeath());
         }
         else
@@ -237,19 +204,13 @@ public class Obstacle : MonoBehaviour, IReinitializable
 
     private void FinishDeath()
     {
-        // Rigidbody 초기화
-        if (rb != null)
-        {
-            ResetRigidbody(rb, true);
-        }
+        ResetRigidbody(rb, true);
 
-        // 콜라이더 끄기(풀에 들어가기 전에)
         if (col != null)
             col.enabled = false;
 
-        // 애니 초기화(다음에 OnEnable에서 다시 초기화됨)
         if (anim != null)
-            anim.ResetTrigger("Die");
+            anim.ResetTrigger(DieTrigger);
 
         if (IsPhaseOwnedObstacle())
         {
@@ -293,6 +254,43 @@ public class Obstacle : MonoBehaviour, IReinitializable
     private bool HasTemporarySpawnProtection()
     {
         return spawnProtectionUntil > Time.time;
+    }
+
+    private void StopDestroyRoutine()
+    {
+        if (destroyRoutine == null)
+            return;
+
+        StopCoroutine(destroyRoutine);
+        destroyRoutine = null;
+    }
+
+    private bool TryHandleBombHit(Collider2D other)
+    {
+        if (other.GetComponent<BombHitBox>() == null && other.GetComponentInParent<BombHitBox>() == null)
+            return false;
+
+        if (cholesterolBomb != null)
+        {
+            cholesterolBomb.TriggerExplosionFromExternalHit();
+            return true;
+        }
+
+        Die();
+        return true;
+    }
+
+    private static bool IsRageAttackCollider(Collider2D other)
+    {
+        if (other.GetComponent<Hitbox>() == null &&
+            other.GetComponent<ZigzagLightning>() == null &&
+            other.GetComponent<ProjectileBall>() == null)
+        {
+            return false;
+        }
+
+        Player owner = GetCachedPlayer();
+        return owner != null && owner.IsRageModeActive();
     }
 
     private void CacheLocalPose()

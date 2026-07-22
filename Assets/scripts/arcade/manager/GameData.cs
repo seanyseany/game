@@ -1,8 +1,14 @@
 using UnityEngine;
 using System.Collections;
+using UnityEngine.SceneManagement;
 
 public class GameData : MonoBehaviour
 {
+    private const string ArcadeScenePrefix = "arcade";
+    private static int pendingSelectedPlayerType = 1;
+    private static int pendingSelectedPlayerLevel = 1;
+    private static bool hasPendingSelectedPlayer;
+
     public static GameData Instance;
 
     [Header("References")]
@@ -97,19 +103,40 @@ public class GameData : MonoBehaviour
 
     private bool bossStage3Triggered = false;
     private bool bossStage4Triggered = false;
+    private bool arcadeSceneActive;
 
     void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
         DontDestroyOnLoad(gameObject);
+        ApplyPendingSelectedPlayer();
+        SceneManager.sceneLoaded += HandleSceneLoaded;
         gameOver = false;
     }
 
-    void Start() => ResetGame();
+    void Start()
+    {
+        Scene activeScene = SceneManager.GetActiveScene();
+        arcadeSceneActive = IsArcadeScene(activeScene);
+
+        if (arcadeSceneActive)
+            ResetGame();
+        else
+            SuspendForNonArcadeScene();
+    }
+
+    void OnDestroy()
+    {
+        if (Instance == this)
+            SceneManager.sceneLoaded -= HandleSceneLoaded;
+    }
 
     void Update()
     {
+        if (!arcadeSceneActive)
+            return;
+
         if (gameOver) return;
 
         survivalTime += Time.deltaTime;
@@ -151,6 +178,18 @@ public class GameData : MonoBehaviour
 
             OnRageEnd?.Invoke();
         }
+    }
+
+    private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        arcadeSceneActive = IsArcadeScene(scene);
+        ClearSceneReferences();
+        ApplyPendingSelectedPlayer();
+
+        if (arcadeSceneActive)
+            ResetGame();
+        else
+            SuspendForNonArcadeScene();
     }
 
     // ✅ StageManager가 마지막 페이즈를 스폰한 직후 호출하는 훅
@@ -284,6 +323,28 @@ public class GameData : MonoBehaviour
         return stageSpeedMult;
     }
 
+    public void ConfigureSelectedPlayer(int playerType, int playerLevel)
+    {
+        playerType = Mathf.Clamp(playerType, 1, 5);
+        playerLevel = Mathf.Max(1, playerLevel);
+        selectedPlayerType = playerType;
+
+        if (playerLevels == null || playerLevels.Length < 6)
+            playerLevels = new int[6];
+
+        playerLevels[playerType] = playerLevel;
+    }
+
+    public static void SetPendingSelectedPlayer(int playerType, int playerLevel)
+    {
+        pendingSelectedPlayerType = Mathf.Clamp(playerType, 1, 5);
+        pendingSelectedPlayerLevel = Mathf.Max(1, playerLevel);
+        hasPendingSelectedPlayer = true;
+
+        if (Instance != null)
+            Instance.ApplyPendingSelectedPlayer();
+    }
+
     // ===== Obstacle contact control =====
     public void BeginObstacleContact()
     {
@@ -357,6 +418,7 @@ public class GameData : MonoBehaviour
     public void ResetGame()
     {
         Debug.Log("[GameData] ResetGame called");
+        arcadeSceneActive = true;
         arcadeRewardsGranted = false;
         ForceStopRage();
         Hitbox.ClearBossTargetCache();
@@ -434,6 +496,11 @@ public class GameData : MonoBehaviour
 
         if (StageManager.Instance != null)
             StartCoroutine(RestartStageLoopSafe());
+    }
+
+    public void PrepareForSceneTransition()
+    {
+        SuspendForNonArcadeScene();
     }
 
     private IEnumerator RestartStageLoopSafe()
@@ -809,5 +876,75 @@ public class GameData : MonoBehaviour
             gameOverUiRef = Object.FindFirstObjectByType<GameOverUI>();
 
         return gameOverUiRef;
+    }
+
+    private void SuspendForNonArcadeScene()
+    {
+        arcadeSceneActive = false;
+        gameOver = true;
+        ForceStopMachineGunSequence();
+        StopRuntimeCoroutines();
+        ClearSceneReferences();
+    }
+
+    private void ApplyPendingSelectedPlayer()
+    {
+        if (!hasPendingSelectedPlayer)
+            return;
+
+        ConfigureSelectedPlayer(pendingSelectedPlayerType, pendingSelectedPlayerLevel);
+        hasPendingSelectedPlayer = false;
+    }
+
+    private void StopRuntimeCoroutines()
+    {
+        if (restartRoutine != null)
+        {
+            StopCoroutine(restartRoutine);
+            restartRoutine = null;
+        }
+
+        if (speedTween != null)
+        {
+            StopCoroutine(speedTween);
+            speedTween = null;
+        }
+
+        if (obstacleRoutine != null)
+        {
+            StopCoroutine(obstacleRoutine);
+            obstacleRoutine = null;
+        }
+
+        if (gameOverSpeedRoutine != null)
+        {
+            StopCoroutine(gameOverSpeedRoutine);
+            gameOverSpeedRoutine = null;
+        }
+
+        if (gameOverUiRoutine != null)
+        {
+            StopCoroutine(gameOverUiRoutine);
+            gameOverUiRoutine = null;
+        }
+    }
+
+    private void ClearSceneReferences()
+    {
+        playerRef = null;
+        bombLauncherRef = null;
+        trainRef = null;
+        rageUiRef = null;
+        gateHealthRef = null;
+        scoreUiRef = null;
+        gameOverUiRef = null;
+    }
+
+    private static bool IsArcadeScene(Scene scene)
+    {
+        if (!scene.IsValid() || string.IsNullOrEmpty(scene.name))
+            return false;
+
+        return scene.name.ToLowerInvariant().StartsWith(ArcadeScenePrefix);
     }
 }

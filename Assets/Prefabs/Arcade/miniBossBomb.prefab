@@ -113,15 +113,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MiniBossBomb
   selfDestructionTime: 10
-  xMoveSpeed: 4
-  initialYMoveSpeed: 0
-  finalYMoveSpeed: 2.75
-  launchDuration: 0.45
+  xMoveSpeed: 3.3
+  finalYMoveSpeed: 3.8
+  trackingStartWorldX: 4
+  preTrackingYOffset: 1
   followResponseTime: 0.18
-  yTurnDuration: 0.3
-  damage: 1
+  yTurnDuration: 0.5
   destroyCleanupDelay: 0.5
-  playerTag: player
 --- !u!212 &855448487757792540
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -168,7 +166,7 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 2
+  m_SortingOrder: 1
   m_Sprite: {fileID: 2163623708045806054, guid: 6fc1d432d5bf444939b4190036cd6284, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0

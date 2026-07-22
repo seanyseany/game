@@ -3,28 +3,46 @@ using UnityEngine;
 
 public class OwnerBlood : MonoBehaviour
 {
+    private enum VisualState
+    {
+        Walking,
+        Package
+    }
+
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 2f;
 
-    [Header("Serving")]
-    [SerializeField] private GameObject itemPrefab;
-    [SerializeField] private EnergyUI energyUI;
-    [SerializeField] private Transform handPoint;
     [SerializeField] private float itemPickupPause = 0.2f;
-    [SerializeField] private float itemGivePause = 0.25f;
 
-    [Header("Animation")]
-    [SerializeField] private Animator animator;
-    [SerializeField] private string walkTrigger = "Walk";
-    [SerializeField] private string liftTrigger = "Lift";
+    [Header("Sprites")]
+    [SerializeField] private SpriteRenderer spriteRenderer;
+    [SerializeField] private Sprite walkingSprite;
+    [SerializeField] private Sprite packageSprite;
 
     private Building building;
     private Coroutine behaviourRoutine;
+    private CustomerBlood servingCustomer;
     private bool facingRight = true;
+    private bool dragLocked;
+    private bool servingActive;
+    private bool atServicePoint;
+    private VisualState visualState = VisualState.Walking;
+
+    private void Awake()
+    {
+        if (spriteRenderer == null)
+            spriteRenderer = GetComponentInChildren<SpriteRenderer>();
+
+        ApplyVisualState(VisualState.Walking);
+    }
 
     public void BindBuilding(Building targetBuilding)
     {
         building = targetBuilding;
+        facingRight = building == null || building.OwnerDefaultFacesRight;
+        ApplyFacingRotation();
+        ApplyVisualState(VisualState.Walking);
+        RestartPatrolFromAnchor();
     }
 
     private void OnEnable()
@@ -44,7 +62,7 @@ public class OwnerBlood : MonoBehaviour
 
     public void ServeCustomer(CustomerBlood customer)
     {
-        if (customer == null || building == null)
+        if (customer == null || building == null || dragLocked)
             return;
 
         if (behaviourRoutine != null)
@@ -53,11 +71,29 @@ public class OwnerBlood : MonoBehaviour
         behaviourRoutine = StartCoroutine(ServeRoutine(customer));
     }
 
+    public void CancelCurrentService(bool resumePatrol)
+    {
+        servingCustomer = null;
+        servingActive = false;
+        atServicePoint = false;
+
+        if (behaviourRoutine != null)
+        {
+            StopCoroutine(behaviourRoutine);
+            behaviourRoutine = null;
+        }
+
+        ApplyVisualState(VisualState.Walking);
+
+        if (resumePatrol && isActiveAndEnabled && !dragLocked)
+            behaviourRoutine = StartCoroutine(PatrolLoop());
+    }
+
     private IEnumerator PatrolLoop()
     {
         while (true)
         {
-            if (building == null)
+            if (building == null || dragLocked)
             {
                 yield return null;
                 continue;
@@ -75,45 +111,56 @@ public class OwnerBlood : MonoBehaviour
 
     private IEnumerator ServeRoutine(CustomerBlood customer)
     {
-        GameObject spawnedItem = null;
+        servingCustomer = customer;
+        servingActive = true;
+        atServicePoint = false;
 
-        yield return MoveTo(building.ItemPoint.position);
-        PlayTrigger(liftTrigger);
+        yield return MoveTo(building.OwnerPoint.position, true);
+
+        if (customer != servingCustomer || !servingActive)
+            yield break;
+
+        atServicePoint = true;
+        ApplyServicePointFacing();
+        ApplyVisualState(VisualState.Package);
         yield return new WaitForSeconds(itemPickupPause);
 
-        if (itemPrefab != null)
+        while (customer != null &&
+               building != null &&
+               customer.IsWaitingAtCounter(building) &&
+               !customer.IsReadyToReceiveAtCounter(building))
+            yield return null;
+
+        if (customer == null || building == null || !customer.IsReadyToReceiveAtCounter(building))
         {
-            Transform origin = handPoint != null ? handPoint : transform;
-            spawnedItem = Instantiate(itemPrefab, origin.position, origin.rotation, origin);
+            if (building != null)
+                building.AbortService(customer);
+
+            CancelCurrentService(true);
+            yield break;
         }
 
-        yield return MoveTo(building.OwnerPoint.position);
-        PlayTrigger(liftTrigger);
-        yield return new WaitForSeconds(itemGivePause);
-
-        if (spawnedItem != null)
-            Destroy(spawnedItem);
-
-        customer.ReceivePurchasedItem(itemPrefab);
+        yield return customer.ReceivePurchasedItemRoutine(building.ItemPrefab, () => ApplyVisualState(VisualState.Walking));
 
         VillageManagement villageManagement = VillageManagement.EnsureInstance();
         if (villageManagement != null)
             villageManagement.AddEnergy(building.EnergyValue);
 
-        building.CompleteService(customer);
-        behaviourRoutine = StartCoroutine(PatrolLoop());
+        CancelCurrentService(true);
     }
 
-    private IEnumerator MoveTo(Vector3 targetPosition)
+    private IEnumerator MoveTo(Vector3 targetPosition, bool snapToTarget = false)
     {
         while (Vector3.Distance(transform.position, targetPosition) > 0.025f)
         {
             Vector3 next = Vector3.MoveTowards(transform.position, targetPosition, moveSpeed * Time.deltaTime);
             UpdateFacing(next.x - transform.position.x);
-            PlayTrigger(walkTrigger);
             transform.position = next;
             yield return null;
         }
+
+        if (snapToTarget)
+            transform.position = targetPosition;
     }
 
     private void UpdateFacing(float deltaX)
@@ -126,16 +173,92 @@ public class OwnerBlood : MonoBehaviour
             return;
 
         facingRight = shouldFaceRight;
+        ApplyFacingRotation();
+    }
+
+    private void ApplyFacingRotation()
+    {
+        bool defaultFacesRight = building == null || building.OwnerDefaultFacesRight;
         Vector3 angles = transform.localEulerAngles;
-        angles.y = facingRight ? 0f : 180f;
+        angles.y = facingRight == defaultFacesRight ? 0f : 180f;
         transform.localEulerAngles = angles;
     }
 
-    private void PlayTrigger(string triggerName)
+    private void ApplyServicePointFacing()
     {
-        if (animator == null || string.IsNullOrWhiteSpace(triggerName))
+        facingRight = building == null || building.OwnerDefaultFacesRight;
+        ApplyFacingRotation();
+    }
+
+    private void ApplyVisualState(VisualState nextState)
+    {
+        visualState = nextState;
+
+        if (spriteRenderer == null)
             return;
 
-        animator.SetTrigger(triggerName);
+        switch (visualState)
+        {
+            case VisualState.Package:
+                if (packageSprite != null)
+                    spriteRenderer.sprite = packageSprite;
+                break;
+            default:
+                if (walkingSprite != null)
+                    spriteRenderer.sprite = walkingSprite;
+                break;
+        }
+    }
+
+    private void SnapToOwnerPosition()
+    {
+        if (building == null)
+            return;
+
+        Vector3 ownerWorldPosition = building.transform.TransformPoint(new Vector3(
+            building.OwnerLocalPosition.x,
+            building.OwnerLocalPosition.y,
+            0f));
+
+        transform.position = ownerWorldPosition;
+    }
+
+    public void LockToBuildingForDrag()
+    {
+        dragLocked = true;
+        CancelCurrentService(false);
+        SnapToOwnerPosition();
+    }
+
+    public void FollowBuildingWhileDragging()
+    {
+        if (!dragLocked)
+            return;
+
+        SnapToOwnerPosition();
+    }
+
+    public void UnlockAfterDrag()
+    {
+        dragLocked = false;
+        ApplyVisualState(VisualState.Walking);
+        RestartPatrolFromAnchor();
+    }
+
+    public void RestartPatrolFromAnchor()
+    {
+        SnapToOwnerPosition();
+        ApplyVisualState(VisualState.Walking);
+        servingCustomer = null;
+        servingActive = false;
+        atServicePoint = false;
+
+        if (!isActiveAndEnabled)
+            return;
+
+        if (behaviourRoutine != null)
+            StopCoroutine(behaviourRoutine);
+
+        behaviourRoutine = StartCoroutine(PatrolLoop());
     }
 }

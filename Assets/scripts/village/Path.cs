@@ -1,26 +1,52 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
+using System.Collections;
 
 [RequireComponent(typeof(Collider2D))]
 public class Path : MonoBehaviour
 {
-    [SerializeField] private string pathId;
-    [SerializeField] private Building buildingInstance;
-    [SerializeField] private Transform[] roamPoints;
-    [SerializeField] private Construction constructionPrefab;
-    [SerializeField] private BuildingListUI buildingListUI;
-    [SerializeField] private BuildingUI buildingUI;
+    private static readonly System.Collections.Generic.List<Path> AllPaths = new System.Collections.Generic.List<Path>();
+    private const float DropSnapPadding = 0.75f;
 
     private Collider2D cachedCollider;
-    private Construction activeConstruction;
+    private Building buildingInstance;
+    private string pathId;
+    private Coroutine constructionRoutine;
+    private string activeConstructionBuildingId;
+    private int activeConstructionTargetLevel;
+    private float activeConstructionRemainingSeconds;
+    private bool activeConstructionUpgrading;
 
     public string PathId => pathId;
     public Building Building => buildingInstance;
-    public Transform[] RoamPoints => roamPoints;
+    public bool IsEmpty => buildingInstance == null && constructionRoutine == null;
+    public bool HasActiveConstruction => constructionRoutine != null;
+    public string ActiveConstructionBuildingId => activeConstructionBuildingId;
+    public int ActiveConstructionTargetLevel => constructionRoutine != null ? activeConstructionTargetLevel : 0;
 
     private void Awake()
     {
         cachedCollider = GetComponent<Collider2D>();
+        pathId = BuildPathId();
+        SyncBuildingReferenceFromChildren();
+        RefreshInteractionCollider();
+    }
+
+    private void OnTransformChildrenChanged()
+    {
+        SyncBuildingReferenceFromChildren();
+        RefreshInteractionCollider();
+    }
+
+    private void OnEnable()
+    {
+        if (!AllPaths.Contains(this))
+            AllPaths.Add(this);
+    }
+
+    private void OnDisable()
+    {
+        AllPaths.Remove(this);
     }
 
     public float GetActivationScore()
@@ -33,13 +59,6 @@ public class Path : MonoBehaviour
 
     public Vector3 GetRandomWorldPointOnPath()
     {
-        if (roamPoints != null && roamPoints.Length > 0)
-        {
-            Transform point = roamPoints[Random.Range(0, roamPoints.Length)];
-            if (point != null)
-                return point.position;
-        }
-
         Bounds bounds = cachedCollider != null ? cachedCollider.bounds : new Bounds(transform.position, Vector3.one);
         return new Vector3(
             Random.Range(bounds.min.x, bounds.max.x),
@@ -49,49 +68,95 @@ public class Path : MonoBehaviour
 
     private void OnMouseUpAsButton()
     {
-        if (activeConstruction != null)
+        if (constructionRoutine != null)
             return;
 
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
             return;
 
-        if (buildingInstance == null)
-            OpenBuildingList();
-        else
+        if (buildingInstance != null)
             OpenBuildingUI();
+    }
+
+    public static Path FindFirstEmpty()
+    {
+        for (int i = 0; i < AllPaths.Count; i++)
+        {
+            Path path = AllPaths[i];
+            if (path != null && path.IsEmpty)
+                return path;
+        }
+
+        return null;
+    }
+
+    public static Path FindRandomEmpty()
+    {
+        System.Collections.Generic.List<Path> emptyPaths = new System.Collections.Generic.List<Path>();
+        for (int i = 0; i < AllPaths.Count; i++)
+        {
+            Path path = AllPaths[i];
+            if (path != null && path.IsEmpty)
+                emptyPaths.Add(path);
+        }
+
+        if (emptyPaths.Count == 0)
+            return null;
+
+        return emptyPaths[Random.Range(0, emptyPaths.Count)];
+    }
+
+    public static Path FindBestDropTarget(Vector3 bottomAnchorWorldPosition, Path originalPath)
+    {
+        Path bestPath = null;
+        float bestDistance = float.MaxValue;
+
+        for (int i = 0; i < AllPaths.Count; i++)
+        {
+            Path candidate = AllPaths[i];
+            if (candidate == null || candidate == originalPath || !candidate.IsEmpty)
+                continue;
+
+            if (!candidate.IsWithinDropRange(bottomAnchorWorldPosition, out float distance))
+                continue;
+
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestPath = candidate;
+            }
+        }
+
+        return bestPath;
     }
 
     public void TryBuildSelected(Building selectedPrefab)
     {
-        if (selectedPrefab == null || activeConstruction != null || buildingInstance != null)
+        if (selectedPrefab == null || constructionRoutine != null || buildingInstance != null)
             return;
 
         VillageManagement villageManagement = VillageManagement.EnsureInstance();
         if (villageManagement == null)
             return;
 
-        bool alreadyOwned = villageManagement.HasOwnedBuilding(selectedPrefab.BuildingId);
         int targetLevel = 1;
-        int price = alreadyOwned ? 0 : selectedPrefab.GetPurchasePriceForLevel(targetLevel);
-        float constructionTime = alreadyOwned ? 0f : selectedPrefab.GetConstructionTimeForLevel(targetLevel);
+        int price = selectedPrefab.GetPurchasePriceForLevel(targetLevel);
+        float constructionTime = selectedPrefab.GetConstructionTimeForLevel(targetLevel);
 
         if (price > 0 && !villageManagement.TrySpendOxygen(price))
             return;
 
-        if (!alreadyOwned)
-            villageManagement.AddOwnedBuilding(selectedPrefab.BuildingId);
-
-        if (constructionTime > 0f && constructionPrefab != null)
+        if (constructionTime > 0f)
             BeginConstruction(selectedPrefab, targetLevel, constructionTime, false);
         else
             PlaceBuildingImmediately(selectedPrefab, targetLevel, false);
 
-        buildingListUI?.Close();
+        Shop.CloseAllShops();
     }
 
     public void TryUpgradeCurrentBuilding()
     {
-        if (buildingInstance == null || buildingInstance.Level >= 2 || activeConstruction != null)
+        if (buildingInstance == null || buildingInstance.Level >= 2 || constructionRoutine != null)
             return;
 
         VillageManagement villageManagement = VillageManagement.EnsureInstance();
@@ -104,12 +169,12 @@ public class Path : MonoBehaviour
             return;
 
         float constructionTime = buildingInstance.GetConstructionTimeForLevel(targetLevel);
-        if (constructionTime > 0f && constructionPrefab != null)
+        if (constructionTime > 0f)
             BeginConstruction(buildingInstance, targetLevel, constructionTime, true);
         else
             buildingInstance.SetLevel(targetLevel);
 
-        buildingUI?.Refresh();
+        FindBuildingUi()?.Refresh();
     }
 
     public void RemoveCurrentBuilding()
@@ -119,6 +184,7 @@ public class Path : MonoBehaviour
 
         Destroy(buildingInstance.gameObject);
         buildingInstance = null;
+        RefreshInteractionCollider();
 
         VillageManagement villageManagement = VillageManagement.EnsureInstance();
         if (villageManagement != null)
@@ -127,24 +193,14 @@ public class Path : MonoBehaviour
             villageManagement.SetEnergyCapacity(Mathf.Max(0, Mathf.RoundToInt(villageManagement.EnergyCapacity / 1.2f)));
         }
 
+        BuildingUI buildingUI = FindBuildingUi();
         if (buildingUI != null)
             buildingUI.Close();
     }
 
-    private void OpenBuildingList()
-    {
-        if (buildingListUI == null)
-            buildingListUI = FindFirstObjectByType<BuildingListUI>();
-
-        if (buildingListUI != null)
-            buildingListUI.Open(this);
-    }
-
     private void OpenBuildingUI()
     {
-        if (buildingUI == null)
-            buildingUI = FindFirstObjectByType<BuildingUI>();
-
+        BuildingUI buildingUI = FindBuildingUi();
         if (buildingUI != null)
             buildingUI.Open(this, buildingInstance);
     }
@@ -152,6 +208,11 @@ public class Path : MonoBehaviour
     private void BeginConstruction(Building buildingPrefab, int targetLevel, float duration, bool upgrading)
     {
         VillageManagement villageManagement = VillageManagement.EnsureInstance();
+        activeConstructionBuildingId = buildingPrefab != null ? buildingPrefab.BuildingId : string.Empty;
+        activeConstructionTargetLevel = targetLevel;
+        activeConstructionRemainingSeconds = duration;
+        activeConstructionUpgrading = upgrading;
+        RefreshInteractionCollider();
         if (!upgrading && villageManagement != null && buildingPrefab != null)
         {
             villageManagement.UpsertBuildingState(new VillageManagement.BuildingState
@@ -164,18 +225,16 @@ public class Path : MonoBehaviour
                 isPlaced = false,
                 isWorking = false,
                 underConstruction = true,
-                constructionRemainingSeconds = duration
+                constructionRemainingSeconds = activeConstructionRemainingSeconds
             });
         }
 
-        if (activeConstruction != null)
-            Destroy(activeConstruction.gameObject);
+        if (constructionRoutine != null)
+            StopCoroutine(constructionRoutine);
 
-        activeConstruction = Instantiate(constructionPrefab, transform);
-        activeConstruction.transform.localPosition = Vector3.zero;
-        activeConstruction.Begin(duration, targetLevel, () =>
+        constructionRoutine = StartCoroutine(RunConstruction(duration, targetLevel, buildingPrefab, upgrading, () =>
         {
-            activeConstruction = null;
+            constructionRoutine = null;
             if (upgrading && buildingInstance != null)
             {
                 buildingInstance.SetLevel(targetLevel);
@@ -185,9 +244,15 @@ public class Path : MonoBehaviour
                 PlaceBuildingImmediately(buildingPrefab, targetLevel, false);
             }
 
+            activeConstructionBuildingId = string.Empty;
+            activeConstructionTargetLevel = 0;
+            activeConstructionRemainingSeconds = 0f;
+            activeConstructionUpgrading = false;
+
+            BuildingUI buildingUI = FindBuildingUi();
             if (buildingUI != null && buildingInstance != null)
                 buildingUI.Open(this, buildingInstance);
-        });
+        }));
     }
 
     private void PlaceBuildingImmediately(Building buildingPrefab, int level, bool skipCapacityBonus)
@@ -198,14 +263,14 @@ public class Path : MonoBehaviour
         if (buildingInstance != null)
             Destroy(buildingInstance.gameObject);
 
-        buildingInstance = Instantiate(buildingPrefab, transform);
+        buildingInstance = Instantiate(buildingPrefab, transform, false);
         buildingInstance.AssignSlot(pathId);
-        buildingInstance.transform.localPosition = new Vector3(
-            -buildingInstance.BottomLocalPosition.x,
-            -buildingInstance.BottomLocalPosition.y,
-            0f);
         buildingInstance.SetLevel(level);
         buildingInstance.MarkPlaced(true);
+        SnapBuildingToPath(buildingInstance);
+        buildingInstance.RestartOwnerPatrolFromAnchor();
+        RefreshInteractionCollider();
+        StartCoroutine(FinalizePlacedBuildingNextFrame(buildingInstance));
 
         if (!skipCapacityBonus)
         {
@@ -215,5 +280,175 @@ public class Path : MonoBehaviour
         }
 
         buildingInstance.PushStateToVillageManagement();
+    }
+
+    public void ReleaseBuildingReference(Building building)
+    {
+        if (buildingInstance == building)
+        {
+            buildingInstance = null;
+            RefreshInteractionCollider();
+        }
+    }
+
+    public void AcceptMovedBuilding(Building building)
+    {
+        if (building == null)
+            return;
+
+        buildingInstance = building;
+        building.transform.SetParent(transform, false);
+        building.AssignSlot(pathId);
+        building.MarkPlaced(true);
+        SnapBuildingToPath(building);
+        building.RestartOwnerPatrolFromAnchor();
+        RefreshInteractionCollider();
+        StartCoroutine(FinalizePlacedBuildingNextFrame(building));
+        building.PushStateToVillageManagement();
+    }
+
+    public void TransferActiveUpgradeTo(Path targetPath, Building movingBuilding)
+    {
+        if (targetPath == null ||
+            movingBuilding == null ||
+            targetPath == this ||
+            constructionRoutine == null ||
+            !activeConstructionUpgrading ||
+            activeConstructionTargetLevel <= movingBuilding.Level)
+            return;
+
+        float remaining = Mathf.Max(0.01f, activeConstructionRemainingSeconds);
+        int targetLevel = activeConstructionTargetLevel;
+        string buildingId = activeConstructionBuildingId;
+
+        StopCoroutine(constructionRoutine);
+        constructionRoutine = null;
+        activeConstructionBuildingId = string.Empty;
+        activeConstructionTargetLevel = 0;
+        activeConstructionRemainingSeconds = 0f;
+        activeConstructionUpgrading = false;
+        RefreshInteractionCollider();
+
+        targetPath.ReceiveTransferredUpgrade(movingBuilding, targetLevel, remaining, buildingId);
+    }
+
+    private IEnumerator RunConstruction(float duration, int targetLevel, Building buildingPrefab, bool upgrading, System.Action onCompleted)
+    {
+        float remaining = Mathf.Max(0.01f, duration);
+        while (remaining > 0f)
+        {
+            remaining -= Time.deltaTime;
+            activeConstructionRemainingSeconds = Mathf.Max(0f, remaining);
+            yield return null;
+        }
+
+        onCompleted?.Invoke();
+    }
+
+    private IEnumerator FinalizePlacedBuildingNextFrame(Building building)
+    {
+        yield return null;
+
+        if (building == null || building.transform.parent != transform)
+            yield break;
+
+        SnapBuildingToPath(building);
+        building.RestartOwnerPatrolFromAnchor();
+    }
+
+    private void SyncBuildingReferenceFromChildren()
+    {
+        Building[] children = GetComponentsInChildren<Building>(true);
+        buildingInstance = children.Length > 0 ? children[0] : null;
+    }
+
+    private void RefreshInteractionCollider()
+    {
+        if (cachedCollider == null)
+            cachedCollider = GetComponent<Collider2D>();
+
+        if (cachedCollider == null)
+            return;
+
+        cachedCollider.enabled = buildingInstance == null && constructionRoutine == null;
+    }
+
+    private BuildingUI FindBuildingUi()
+    {
+        return FindFirstObjectByType<BuildingUI>();
+    }
+
+    private string BuildPathId()
+    {
+        System.Text.StringBuilder builder = new System.Text.StringBuilder();
+        Transform current = transform;
+        while (current != null)
+        {
+            if (builder.Length > 0)
+                builder.Insert(0, "/");
+
+            builder.Insert(0, $"{current.name}[{current.GetSiblingIndex()}]");
+            current = current.parent;
+        }
+
+        return builder.ToString();
+    }
+
+    private void SnapBuildingToPath(Building building)
+    {
+        if (building == null)
+            return;
+
+        building.SnapBottomAnchorToWorld(transform.position);
+    }
+
+    private bool IsWithinDropRange(Vector3 worldPoint, out float distance)
+    {
+        if (cachedCollider == null)
+        {
+            distance = Vector2.Distance(transform.position, worldPoint);
+            return distance <= DropSnapPadding;
+        }
+
+        Vector2 closestPoint = cachedCollider.ClosestPoint(worldPoint);
+        distance = Vector2.Distance(worldPoint, closestPoint);
+        if (cachedCollider.OverlapPoint(worldPoint))
+            distance = 0f;
+
+        Bounds bounds = cachedCollider.bounds;
+        float pathReach = Mathf.Max(bounds.extents.x, bounds.extents.y) + DropSnapPadding;
+        return distance <= pathReach;
+    }
+
+    private void ReceiveTransferredUpgrade(Building movingBuilding, int targetLevel, float remainingDuration, string buildingId)
+    {
+        if (movingBuilding == null)
+            return;
+
+        buildingInstance = movingBuilding;
+        activeConstructionBuildingId = string.IsNullOrWhiteSpace(buildingId) ? movingBuilding.BuildingId : buildingId;
+        activeConstructionTargetLevel = targetLevel;
+        activeConstructionRemainingSeconds = Mathf.Max(0.01f, remainingDuration);
+        activeConstructionUpgrading = true;
+        RefreshInteractionCollider();
+
+        if (constructionRoutine != null)
+            StopCoroutine(constructionRoutine);
+
+        constructionRoutine = StartCoroutine(RunConstruction(activeConstructionRemainingSeconds, targetLevel, movingBuilding, true, () =>
+        {
+            constructionRoutine = null;
+            if (buildingInstance != null)
+                buildingInstance.SetLevel(targetLevel);
+
+            activeConstructionBuildingId = string.Empty;
+            activeConstructionTargetLevel = 0;
+            activeConstructionRemainingSeconds = 0f;
+            activeConstructionUpgrading = false;
+
+            BuildingUI buildingUI = FindBuildingUi();
+            if (buildingUI != null && buildingInstance != null)
+                buildingUI.Open(this, buildingInstance);
+        }));
     }
 }

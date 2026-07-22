@@ -670,7 +670,7 @@ MonoBehaviour:
   entryFxWorldPos: {x: 5.3, y: 0.05, z: 0}
   entryFxDuration: 2
   entranceStartDelay: 2
-  bossAppearDelayAfterEntrance: 0.5
+  bossAppearDelayAfterEntrance: 1
   enterFromWorldPos: {x: 14, y: -10, z: 0}
   forceEnterFromWorldPos: 1
   entryFxPoolTag: BossSlimeEntry
@@ -703,16 +703,16 @@ MonoBehaviour:
   - -6
   - -9
   - -12
-  canonShotInterval: 0.15
+  canonShotInterval: 1
   canonShotsPerSelection: 5
   canonSelectionsPerCycle: 4
   canonReAimDelay: 1
   canonCycleCount: 1
-  monsterPrefab: {fileID: 6842220691773557582, guid: 782105d95692d4550a7d27ec6fbb6f67, type: 3}
+  monsterPrefab: {fileID: 6842220691773557582, guid: d9010360614484cc3b42a691cec5c126, type: 3}
   monsterSpawnWorldPos: {x: 16, y: -3.1, z: 0}
   monsterSpawnCount: 13
   monsterSpawnInterval: 0.3
-  loopDelayAfterEnemy: 2
+  loopDelayAfterEnemy: 4
   slimeDestroyPoolTag: BossSlimeDestroy
   slimeDestroyPrefab: {fileID: 8747714252901101205, guid: 1a6812fb2aab645a9b9cf48fd5cc0b4b, type: 3}
   deathShakeDuration: 1.5
@@ -730,6 +730,7 @@ MonoBehaviour:
   slimeDamagingPoolTag: BossSlimeDamaging
   slimeDamagingPrefab: {fileID: 3119888496616540080, guid: af810575079a7419c9b0b3e8dae21919, type: 3}
   slimeDamagingLocalOffset: {x: 1.057187, y: -0.5, z: 0}
+  slimeDamagingFxLifeTime: 0.6
   hp60TriggerName: 60
   hp30TriggerName: 30
   usePool: 1

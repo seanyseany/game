@@ -5,6 +5,9 @@ using UnityEngine.SceneManagement;
 
 public class GameOverUI : MonoBehaviour
 {
+    private const string DefaultQuitSceneName = "Village";
+    private const string DefaultQuitScenePath = "Assets/Scenes/Village";
+
     [Header("UI")]
     public GameObject panel;
     public TMP_Text gameOverText;  
@@ -14,6 +17,9 @@ public class GameOverUI : MonoBehaviour
     [Header("Score Texts")]
     public TMP_Text cleanScoreText;   // SCORE
     public TMP_Text o2ScoreText;      // O2
+
+    [Header("Scene")]
+    [SerializeField] private string quitSceneName = DefaultQuitSceneName;
 
     void Awake()
     {
@@ -57,6 +63,25 @@ public class GameOverUI : MonoBehaviour
 
     void OnQuit()
     {
-        Application.Quit();
+        Time.timeScale = 1f;
+        panel.SetActive(false);
+
+        if (GameData.Instance != null)
+            GameData.Instance.PrepareForSceneTransition();
+
+        string sceneToLoad = string.IsNullOrWhiteSpace(quitSceneName) ? DefaultQuitSceneName : quitSceneName;
+        if (Application.CanStreamedLevelBeLoaded(sceneToLoad))
+        {
+            SceneManager.LoadScene(sceneToLoad, LoadSceneMode.Single);
+            return;
+        }
+
+        if (Application.CanStreamedLevelBeLoaded(DefaultQuitScenePath))
+        {
+            SceneManager.LoadScene(DefaultQuitScenePath, LoadSceneMode.Single);
+            return;
+        }
+
+        Debug.LogError($"[GameOverUI] Quit target scene could not be loaded. Check Build Settings. name={sceneToLoad}, path={DefaultQuitScenePath}");
     }
 }

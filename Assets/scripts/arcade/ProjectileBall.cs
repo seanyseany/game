@@ -302,7 +302,13 @@ public class ProjectileBall : MonoBehaviour, IRageTransformPauseHandler
 
         if (miniBoss != null)
         {
-            miniBoss.RegisterHitFromPlayerAttack(2);
+            if (damage <= 0)
+                return true;
+
+            int sourcePlayerType = GameData.Instance != null
+                ? Mathf.Clamp(GameData.Instance.selectedPlayerType, 1, 5)
+                : 2;
+            miniBoss.RegisterHitFromPlayerAttack(sourcePlayerType);
             return true;
         }
 

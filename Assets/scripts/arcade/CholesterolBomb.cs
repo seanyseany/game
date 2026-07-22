@@ -26,8 +26,10 @@ public class CholesterolBomb : MonoBehaviour, IReinitializable
     [SerializeField] private float stretchSpeed = 4f;
     [SerializeField] private float stretchDuration = 1f;
 
+    [Header("Lifetime")]
+    [Min(0f)] [SerializeField] private float lifetime = 30f;
+
     [Header("Pooled Rage Obstacle Return")]
-    public float pooledLifetime = 5f;
     public float pooledDespawnX = -25f;
     [SerializeField] private float collisionSkin = 0.02f;
 
@@ -144,6 +146,12 @@ public class CholesterolBomb : MonoBehaviour, IReinitializable
     {
         if (deathSequenceActive)
             return;
+
+        if (HasLifetimeExpired())
+        {
+            DespawnWithoutExplosion();
+            return;
+        }
 
         MoveWithCollision(moveDir * Time.deltaTime);
         transform.Rotate(0f, 0f, rotationSpeed * Time.deltaTime);
@@ -307,6 +315,26 @@ public class CholesterolBomb : MonoBehaviour, IReinitializable
         stretchRoutine = null;
     }
 
+    private void DespawnWithoutExplosion()
+    {
+        if (exploded)
+            return;
+
+        exploded = true;
+        NotifyDeathStarted();
+
+        if (cachedRigidbody != null)
+        {
+            cachedRigidbody.linearVelocity = Vector2.zero;
+            cachedRigidbody.angularVelocity = 0f;
+        }
+
+        if (TryReturnToObjectPool())
+            return;
+
+        gameObject.SetActive(false);
+    }
+
     private IEnumerator TemporarilyIgnorePlayer(Collider2D playerCol)
     {
         ignoringPlayer = true;
@@ -338,7 +366,12 @@ public class CholesterolBomb : MonoBehaviour, IReinitializable
         if (transform.position.x <= pooledDespawnX)
             return true;
 
-        return pooledLifetime > 0f && Time.time - spawnTime >= pooledLifetime;
+        return false;
+    }
+
+    private bool HasLifetimeExpired()
+    {
+        return lifetime > 0f && Time.time - spawnTime >= lifetime;
     }
 
     private void StopStretchRoutine(bool resetScale)
@@ -428,7 +461,7 @@ public class CholesterolBomb : MonoBehaviour, IReinitializable
             return false;
 
         string tag = other.tag;
-        return tag == "floor" || tag == "ceiling" || tag == "platform" || tag == "Obstacle" || tag == "player";
+        return tag == "floor" || tag == "ceiling" || tag == "platform" || tag == "player";
     }
 
     private void IgnoreGateCollisions()

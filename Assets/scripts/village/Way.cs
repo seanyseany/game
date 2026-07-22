@@ -12,7 +12,6 @@ public class Way : MonoBehaviour
     [Header("Route")]
     [SerializeField] private List<RouteSequence> routeSequences = new List<RouteSequence>();
     [SerializeField] private bool loopRoute = true;
-    [SerializeField] private Collider2D roamCollider;
 
     [Header("Connections")]
     [SerializeField] private List<Path> connectedPaths = new List<Path>();
@@ -22,12 +21,6 @@ public class Way : MonoBehaviour
     public IReadOnlyList<Entrance> ConnectedEntrances => connectedEntrances;
     public IReadOnlyList<RouteSequence> RouteSequences => routeSequences;
     public bool LoopRoute => loopRoute;
-
-    private void Awake()
-    {
-        if (roamCollider == null)
-            roamCollider = GetComponent<Collider2D>();
-    }
 
     public float GetTrafficScore()
     {
@@ -125,6 +118,7 @@ public class Way : MonoBehaviour
 
     public Vector3 GetRandomRoamWorldPoint()
     {
+        Collider2D roamCollider = GetComponent<Collider2D>();
         if (roamCollider != null)
         {
             Bounds bounds = roamCollider.bounds;

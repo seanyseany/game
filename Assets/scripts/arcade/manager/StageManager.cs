@@ -20,6 +20,7 @@ public class StageManager : MonoBehaviour
     private const int RagePhaseStage = -1;
     private const int MinPhaseStage = 1;
     private const int MaxPhaseStage = 4;
+    private const int PostBossSlimeMixedStage = 104;
     private const string MachineGunStageTag = "MachineGunStage";
     private const string MiniBossStageTag = "miniBoss";
     private const int BossStage3 = 3;
@@ -140,6 +141,7 @@ public class StageManager : MonoBehaviour
     private int bossTriggerStage = 0;
     private int pendingMachineGunBossStage = 0;
     private bool pendingBossExtraNormalPhase = false;
+    private bool postBossSlimeMixedPhaseUnlocked = false;
     private GameObject activeBoss;
     private bool activeBossIsSceneObject = false;
     private Coroutine bossFlowRoutine;
@@ -818,6 +820,7 @@ public class StageManager : MonoBehaviour
         }
         else if (completedBossStage >= 4)
         {
+            postBossSlimeMixedPhaseUnlocked = true;
             yield return CoCaveBackgroundTransition(
                 fromBackground: background2Prefab,
                 toBackground: background1Prefab,
@@ -839,6 +842,7 @@ public class StageManager : MonoBehaviour
         bossAwaitingFinalPass = false;
         bossTriggerStage = 0;
         pendingBossExtraNormalPhase = false;
+        postBossSlimeMixedPhaseUnlocked = false;
 
         spawnPaused = false;
 
@@ -868,6 +872,7 @@ public class StageManager : MonoBehaviour
         bossTriggerStage = 0;
         pendingMachineGunBossStage = 0;
         pendingBossExtraNormalPhase = false;
+        postBossSlimeMixedPhaseUnlocked = false;
 
         if (bossFlowRoutine != null)
         {
@@ -1445,7 +1450,11 @@ public class StageManager : MonoBehaviour
         if (!testPhaseSequenceCompleted && HasConfiguredPhasePrefabs(testPhasePrefabs))
             return TestPhaseStage;
 
-        return GetSpeedStage();
+        int speedStage = GetSpeedStage();
+        if (postBossSlimeMixedPhaseUnlocked && speedStage >= BossStage4)
+            return PostBossSlimeMixedStage;
+
+        return speedStage;
     }
 
     private List<GameObject> CollectAllPhasePrefabs()
@@ -1477,6 +1486,9 @@ public class StageManager : MonoBehaviour
 
             return null;
         }
+
+        if (stage == PostBossSlimeMixedStage)
+            return CombinePhasePrefabs(stage3PhasePrefabs, stage4PhasePrefabs);
 
         switch (Mathf.Clamp(stage, MinPhaseStage, MaxPhaseStage))
         {
@@ -1563,6 +1575,9 @@ public class StageManager : MonoBehaviour
 
     private int GetPhaseCycleCountForStage(int stage)
     {
+        if (stage == PostBossSlimeMixedStage)
+            return Mathf.Max(1, speedUp4 - speedUp3);
+
         switch (Mathf.Clamp(stage, MinPhaseStage, MaxPhaseStage))
         {
             case 4:
@@ -1578,6 +1593,9 @@ public class StageManager : MonoBehaviour
 
     private SpecialPhaseEntry[] GetSpecialPhaseEntriesForStage(int stage)
     {
+        if (stage == PostBossSlimeMixedStage)
+            return CombineSpecialPhaseEntries(stage3SpecialPhasePrefabs, stage4SpecialPhasePrefabs);
+
         if (stage < MinPhaseStage || stage > MaxPhaseStage)
             return null;
 
@@ -1599,7 +1617,7 @@ public class StageManager : MonoBehaviour
         if (target == null)
             return;
 
-        if (stage < MinPhaseStage || stage > MaxPhaseStage)
+        if (stage != PostBossSlimeMixedStage && (stage < MinPhaseStage || stage > MaxPhaseStage))
         {
             AddAvailableNormalPrefabs(target, normalPrefabs, allowMachineGunStage);
             return;
@@ -1652,6 +1670,46 @@ public class StageManager : MonoBehaviour
 
             target.Add(special.prefab);
         }
+    }
+
+    private static GameObject[] CombinePhasePrefabs(params GameObject[][] sources)
+    {
+        List<GameObject> merged = new List<GameObject>();
+        if (sources == null)
+            return merged.ToArray();
+
+        for (int i = 0; i < sources.Length; i++)
+            AddUniquePrefabs(merged, sources[i]);
+
+        return merged.ToArray();
+    }
+
+    private static SpecialPhaseEntry[] CombineSpecialPhaseEntries(params SpecialPhaseEntry[][] sources)
+    {
+        List<SpecialPhaseEntry> merged = new List<SpecialPhaseEntry>();
+        HashSet<GameObject> seenPrefabs = new HashSet<GameObject>();
+
+        if (sources == null)
+            return merged.ToArray();
+
+        for (int i = 0; i < sources.Length; i++)
+        {
+            SpecialPhaseEntry[] source = sources[i];
+            if (source == null)
+                continue;
+
+            for (int j = 0; j < source.Length; j++)
+            {
+                SpecialPhaseEntry entry = source[j];
+                GameObject prefab = entry != null ? entry.prefab : null;
+                if (prefab == null || !seenPrefabs.Add(prefab))
+                    continue;
+
+                merged.Add(entry);
+            }
+        }
+
+        return merged.ToArray();
     }
 
     private static void AddAvailableNormalPrefabs(List<GameObject> target, GameObject[] source, bool allowMachineGunStage)
