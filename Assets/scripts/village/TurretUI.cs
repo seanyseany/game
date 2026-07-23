@@ -4,6 +4,8 @@ using UnityEngine.UI;
 
 public class TurretUI : MonoBehaviour
 {
+    public static TurretUI Instance { get; private set; }
+
     [SerializeField] private GameObject panel;
     [SerializeField] private Image turretImage;
     [SerializeField] private Image ammoFill;
@@ -23,6 +25,8 @@ public class TurretUI : MonoBehaviour
 
     private void Awake()
     {
+        Instance = this;
+
         if (panel != null)
             panel.SetActive(false);
         if (ammo30Button != null)
@@ -37,6 +41,12 @@ public class TurretUI : MonoBehaviour
             upgradeButton.onClick.AddListener(() => boundImplementation?.TryUpgrade());
         if (closeButton != null)
             closeButton.onClick.AddListener(Close);
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
     }
 
     private void Update()

@@ -4,6 +4,8 @@ using UnityEngine;
 
 public class EntranceManagement : MonoBehaviour
 {
+    public static EntranceManagement Instance { get; private set; }
+
     private class WayAllocation
     {
         public Way way;
@@ -31,6 +33,11 @@ public class EntranceManagement : MonoBehaviour
     private int readySpawnTokens;
     private int cooldownTokens;
 
+    private void Awake()
+    {
+        Instance = this;
+    }
+
     private void Start()
     {
         if (customerBloodManagement == null)
@@ -38,6 +45,12 @@ public class EntranceManagement : MonoBehaviour
 
         readySpawnTokens = customerBloodManagement != null ? customerBloodManagement.GetMaxActiveCustomerCount() : 0;
         spawnRoutine = StartCoroutine(SpawnLoop());
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
     }
 
     public void NotifyCustomerDespawned(CustomerBlood customer)

@@ -6,6 +6,8 @@ using UnityEngine.UI;
 
 public class TurretListUI : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
+    public static TurretListUI Instance { get; private set; }
+
     [System.Serializable]
     public class TurretEntry
     {
@@ -41,6 +43,8 @@ public class TurretListUI : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
 
     private void Awake()
     {
+        Instance = this;
+
         if (panel != null)
             panel.SetActive(false);
 
@@ -56,6 +60,12 @@ public class TurretListUI : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
             rightArrowButton.onClick.AddListener(() => Shift(1));
 
         RebuildVisuals();
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
     }
 
     private void Update()

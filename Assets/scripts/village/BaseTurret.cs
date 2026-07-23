@@ -42,6 +42,7 @@ public abstract class BaseTurret : MonoBehaviour
     protected GameObject reloadVisualInstance;
 
     public string TurretId => turretId;
+    public string CatalogId => ShopIdentityUtility.GetStableId(turretId, this);
     public string SlotId => slotId;
     public int Level => level;
     public int AmmoCurrent => ammoCurrent;
@@ -79,6 +80,14 @@ public abstract class BaseTurret : MonoBehaviour
         RebuildReloadVisual();
         UpdateEmptyIndicator();
         PushState();
+    }
+
+    public void SetPlacementMirrored(bool mirrored)
+    {
+        Vector3 scale = transform.localScale;
+        float absX = Mathf.Abs(scale.x);
+        scale.x = mirrored ? -absX : absX;
+        transform.localScale = scale;
     }
 
     public bool CanRefillPercent(int percent)
@@ -144,7 +153,7 @@ public abstract class BaseTurret : MonoBehaviour
         villageManagement.UpsertTurretState(new VillageManagement.TurretState
         {
             slotId = slotId,
-            turretId = turretId,
+            turretId = CatalogId,
             level = level,
             currentAmmo = ammoCurrent,
             maxAmmo = ammoCapacity,

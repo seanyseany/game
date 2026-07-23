@@ -64,6 +64,13 @@ public class VillageManagement : MonoBehaviour
     }
 
     [Serializable]
+    public class PurchaseLevelState
+    {
+        public string id;
+        public int level;
+    }
+
+    [Serializable]
     public class VillageSaveData
     {
         public int bankLevel = 1;
@@ -76,6 +83,8 @@ public class VillageManagement : MonoBehaviour
         public List<BuildingState> buildings = new List<BuildingState>();
         public List<TurretState> turrets = new List<TurretState>();
         public List<OxygenGeneratorState> oxygenGenerators = new List<OxygenGeneratorState>();
+        public List<PurchaseLevelState> turretPurchaseLevels = new List<PurchaseLevelState>();
+        public List<PurchaseLevelState> oxygenPurchaseLevels = new List<PurchaseLevelState>();
         public List<string> ownedBuildingIds = new List<string>();
         public List<string> ownedTurretIds = new List<string>();
         public List<string> ownedOxygenIds = new List<string>();
@@ -177,6 +186,8 @@ public class VillageManagement : MonoBehaviour
     public IReadOnlyList<string> OwnedBuildingIds => saveData.ownedBuildingIds;
     public IReadOnlyList<string> OwnedTurretIds => saveData.ownedTurretIds;
     public IReadOnlyList<string> OwnedOxygenIds => saveData.ownedOxygenIds;
+    public IReadOnlyList<PurchaseLevelState> TurretPurchaseLevels => saveData.turretPurchaseLevels;
+    public IReadOnlyList<PurchaseLevelState> OxygenPurchaseLevels => saveData.oxygenPurchaseLevels;
     public IReadOnlyList<string> OwnedCustomerBloodIds => saveData.ownedCustomerBloodIds;
     public IReadOnlyList<string> OwnedWhiteBloodCellIds => saveData.ownedWhiteBloodCellIds;
     public IReadOnlyList<ArcadePlayerEntry> ArcadePlayers => arcadePlayers;
@@ -551,6 +562,28 @@ public class VillageManagement : MonoBehaviour
         return !string.IsNullOrWhiteSpace(id) && saveData.ownedWhiteBloodCellIds.Contains(id);
     }
 
+    public int GetPurchasedTurretLevel(string id)
+    {
+        return GetPurchaseLevel(saveData.turretPurchaseLevels, id);
+    }
+
+    public int GetPurchasedOxygenLevel(string id)
+    {
+        return GetPurchaseLevel(saveData.oxygenPurchaseLevels, id);
+    }
+
+    public void SetPurchasedTurretLevel(string id, int level)
+    {
+        SetPurchaseLevel(saveData.turretPurchaseLevels, id, level);
+        SaveAndBroadcast();
+    }
+
+    public void SetPurchasedOxygenLevel(string id, int level)
+    {
+        SetPurchaseLevel(saveData.oxygenPurchaseLevels, id, level);
+        SaveAndBroadcast();
+    }
+
     public bool IsArcadePlayerAvailable(int playerType)
     {
         ArcadePlayerEntry entry = FindArcadePlayerEntry(playerType);
@@ -657,6 +690,10 @@ public class VillageManagement : MonoBehaviour
             saveData.turrets = new List<TurretState>();
         if (saveData.oxygenGenerators == null)
             saveData.oxygenGenerators = new List<OxygenGeneratorState>();
+        if (saveData.turretPurchaseLevels == null)
+            saveData.turretPurchaseLevels = new List<PurchaseLevelState>();
+        if (saveData.oxygenPurchaseLevels == null)
+            saveData.oxygenPurchaseLevels = new List<PurchaseLevelState>();
         if (saveData.ownedBuildingIds == null)
             saveData.ownedBuildingIds = new List<string>();
         if (saveData.ownedTurretIds == null)
@@ -708,6 +745,8 @@ public class VillageManagement : MonoBehaviour
         RemoveInvalidStrings(saveData.ownedOxygenIds);
         RemoveInvalidStrings(saveData.ownedCustomerBloodIds);
         RemoveInvalidStrings(saveData.ownedWhiteBloodCellIds);
+        SanitizePurchaseLevels(saveData.turretPurchaseLevels);
+        SanitizePurchaseLevels(saveData.oxygenPurchaseLevels);
         SanitizeArcadePlayers();
     }
 
@@ -981,6 +1020,62 @@ public class VillageManagement : MonoBehaviour
                 continue;
 
             target.Add(value);
+        }
+    }
+
+    private static int GetPurchaseLevel(List<PurchaseLevelState> states, string id)
+    {
+        if (states == null || string.IsNullOrWhiteSpace(id))
+            return 0;
+
+        for (int i = 0; i < states.Count; i++)
+        {
+            PurchaseLevelState state = states[i];
+            if (state != null && state.id == id)
+                return Mathf.Max(0, state.level);
+        }
+
+        return 0;
+    }
+
+    private static void SetPurchaseLevel(List<PurchaseLevelState> states, string id, int level)
+    {
+        if (states == null || string.IsNullOrWhiteSpace(id))
+            return;
+
+        level = Mathf.Max(0, level);
+        for (int i = 0; i < states.Count; i++)
+        {
+            PurchaseLevelState state = states[i];
+            if (state == null || state.id != id)
+                continue;
+
+            state.level = Mathf.Max(state.level, level);
+            return;
+        }
+
+        states.Add(new PurchaseLevelState
+        {
+            id = id,
+            level = level
+        });
+    }
+
+    private static void SanitizePurchaseLevels(List<PurchaseLevelState> states)
+    {
+        if (states == null)
+            return;
+
+        for (int i = states.Count - 1; i >= 0; i--)
+        {
+            PurchaseLevelState state = states[i];
+            if (state == null || string.IsNullOrWhiteSpace(state.id))
+            {
+                states.RemoveAt(i);
+                continue;
+            }
+
+            state.level = Mathf.Max(0, state.level);
         }
     }
 

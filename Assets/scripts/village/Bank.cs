@@ -50,7 +50,7 @@ public class Bank : MonoBehaviour
             return;
 
         if (bankUI == null)
-            bankUI = FindFirstObjectByType<BankUI>();
+            bankUI = BankUI.Instance != null ? BankUI.Instance : FindFirstObjectByType<BankUI>();
 
         if (bankUI != null)
             bankUI.Open(this);

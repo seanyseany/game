@@ -4,6 +4,8 @@ using UnityEngine.UI;
 
 public class BuildingUI : MonoBehaviour
 {
+    public static BuildingUI Instance { get; private set; }
+
     [Header("UI")]
     [SerializeField] private GameObject panel;
     [SerializeField] private Image buildingImage;
@@ -25,6 +27,8 @@ public class BuildingUI : MonoBehaviour
 
     private void Awake()
     {
+        Instance = this;
+
         if (panel != null)
             panel.SetActive(false);
 
@@ -40,6 +44,12 @@ public class BuildingUI : MonoBehaviour
             upgradeButton.onClick.AddListener(HandleUpgrade);
         if (closeButton != null)
             closeButton.onClick.AddListener(Close);
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
     }
 
     public void Open(Path path, Building building)

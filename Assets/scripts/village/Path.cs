@@ -6,7 +6,11 @@ using System.Collections;
 public class Path : MonoBehaviour
 {
     private static readonly System.Collections.Generic.List<Path> AllPaths = new System.Collections.Generic.List<Path>();
-    private const float DropSnapPadding = 0.75f;
+    private const float DropSnapPadding = 1.5f;
+
+    [Header("Placement")]
+    [SerializeField] private bool allowsBuildingPlacement = true;
+    [SerializeField] private bool rotatePlacedPrefab180;
 
     private Collider2D cachedCollider;
     private Building buildingInstance;
@@ -20,6 +24,9 @@ public class Path : MonoBehaviour
     public string PathId => pathId;
     public Building Building => buildingInstance;
     public bool IsEmpty => buildingInstance == null && constructionRoutine == null;
+    public bool AllowsBuildingPlacement => allowsBuildingPlacement;
+    public bool RotatePlacedPrefab180 => rotatePlacedPrefab180;
+    public bool IsAvailableForBuildingPlacement => allowsBuildingPlacement && IsEmpty;
     public bool HasActiveConstruction => constructionRoutine != null;
     public string ActiveConstructionBuildingId => activeConstructionBuildingId;
     public int ActiveConstructionTargetLevel => constructionRoutine != null ? activeConstructionTargetLevel : 0;
@@ -83,7 +90,7 @@ public class Path : MonoBehaviour
         for (int i = 0; i < AllPaths.Count; i++)
         {
             Path path = AllPaths[i];
-            if (path != null && path.IsEmpty)
+            if (path != null && path.IsAvailableForBuildingPlacement)
                 return path;
         }
 
@@ -96,7 +103,7 @@ public class Path : MonoBehaviour
         for (int i = 0; i < AllPaths.Count; i++)
         {
             Path path = AllPaths[i];
-            if (path != null && path.IsEmpty)
+            if (path != null && path.IsAvailableForBuildingPlacement)
                 emptyPaths.Add(path);
         }
 
@@ -106,7 +113,7 @@ public class Path : MonoBehaviour
         return emptyPaths[Random.Range(0, emptyPaths.Count)];
     }
 
-    public static Path FindBestDropTarget(Vector3 bottomAnchorWorldPosition, Path originalPath)
+    public static Path FindBestEmptyDropTarget(Vector3 bottomAnchorWorldPosition, Path originalPath)
     {
         Path bestPath = null;
         float bestDistance = float.MaxValue;
@@ -114,7 +121,7 @@ public class Path : MonoBehaviour
         for (int i = 0; i < AllPaths.Count; i++)
         {
             Path candidate = AllPaths[i];
-            if (candidate == null || candidate == originalPath || !candidate.IsEmpty)
+            if (candidate == null || candidate == originalPath || !candidate.IsAvailableForBuildingPlacement)
                 continue;
 
             if (!candidate.IsWithinDropRange(bottomAnchorWorldPosition, out float distance))
@@ -130,9 +137,71 @@ public class Path : MonoBehaviour
         return bestPath;
     }
 
+    public static Path FindDirectOccupiedDropTarget(Vector3 worldPoint, Path originalPath)
+    {
+        Path bestPath = null;
+        float bestDistance = float.MaxValue;
+
+        for (int i = 0; i < AllPaths.Count; i++)
+        {
+            Path candidate = AllPaths[i];
+            if (candidate == null || candidate == originalPath || candidate.buildingInstance == null)
+                continue;
+
+            if (!candidate.IsDirectDropPoint(worldPoint))
+                continue;
+
+            float distance = Vector2.Distance(worldPoint, candidate.transform.position);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestPath = candidate;
+            }
+        }
+
+        return bestPath;
+    }
+
+    public static Path FindRelocationTarget(Vector3 referenceWorldPosition, Path excludedPath)
+    {
+        System.Collections.Generic.List<Path> emptyPaths = new System.Collections.Generic.List<Path>();
+
+        for (int i = 0; i < AllPaths.Count; i++)
+        {
+            Path candidate = AllPaths[i];
+            if (candidate == null || candidate == excludedPath || !candidate.IsAvailableForBuildingPlacement)
+                continue;
+
+            emptyPaths.Add(candidate);
+        }
+
+        if (emptyPaths.Count == 0)
+            return null;
+
+        return emptyPaths[Random.Range(0, emptyPaths.Count)];
+    }
+
+    public bool IsDirectDropPoint(Vector3 worldPoint)
+    {
+        if (cachedCollider == null)
+            return Vector2.Distance(transform.position, worldPoint) <= DropSnapPadding * 0.5f;
+
+        Bounds bounds = cachedCollider.bounds;
+        float expandAmount = DropSnapPadding * 0.7f;
+        float minX = bounds.min.x - expandAmount;
+        float maxX = bounds.max.x + expandAmount;
+        float minY = bounds.min.y - expandAmount;
+        float maxY = bounds.max.y + expandAmount;
+
+        return worldPoint.x >= minX &&
+               worldPoint.x <= maxX &&
+               worldPoint.y >= minY &&
+               worldPoint.y <= maxY;
+    }
+
     public void TryBuildSelected(Building selectedPrefab)
     {
-        if (selectedPrefab == null || constructionRoutine != null || buildingInstance != null)
+        if (!allowsBuildingPlacement || selectedPrefab == null || constructionRoutine != null || buildingInstance != null)
             return;
 
         VillageManagement villageManagement = VillageManagement.EnsureInstance();
@@ -198,6 +267,11 @@ public class Path : MonoBehaviour
             buildingUI.Close();
     }
 
+    public void SetBuildingPlacementAllowed(bool allowed)
+    {
+        allowsBuildingPlacement = allowed;
+    }
+
     private void OpenBuildingUI()
     {
         BuildingUI buildingUI = FindBuildingUi();
@@ -235,9 +309,11 @@ public class Path : MonoBehaviour
         constructionRoutine = StartCoroutine(RunConstruction(duration, targetLevel, buildingPrefab, upgrading, () =>
         {
             constructionRoutine = null;
-            if (upgrading && buildingInstance != null)
+            if (upgrading)
             {
-                buildingInstance.SetLevel(targetLevel);
+                Building upgradeTarget = buildingInstance != null ? buildingInstance : buildingPrefab;
+                if (upgradeTarget != null)
+                    upgradeTarget.SetLevel(targetLevel);
             }
             else
             {
@@ -288,6 +364,10 @@ public class Path : MonoBehaviour
         {
             buildingInstance = null;
             RefreshInteractionCollider();
+
+            VillageManagement villageManagement = VillageManagement.EnsureInstance();
+            if (villageManagement != null)
+                villageManagement.RemoveBuildingState(pathId);
         }
     }
 
@@ -305,6 +385,22 @@ public class Path : MonoBehaviour
         RefreshInteractionCollider();
         StartCoroutine(FinalizePlacedBuildingNextFrame(building));
         building.PushStateToVillageManagement();
+    }
+
+    public Building DetachCurrentBuilding()
+    {
+        if (buildingInstance == null)
+            return null;
+
+        Building detachedBuilding = buildingInstance;
+        buildingInstance = null;
+        RefreshInteractionCollider();
+
+        VillageManagement villageManagement = VillageManagement.EnsureInstance();
+        if (villageManagement != null)
+            villageManagement.RemoveBuildingState(pathId);
+
+        return detachedBuilding;
     }
 
     public void TransferActiveUpgradeTo(Path targetPath, Building movingBuilding)
@@ -419,7 +515,6 @@ public class Path : MonoBehaviour
         float pathReach = Mathf.Max(bounds.extents.x, bounds.extents.y) + DropSnapPadding;
         return distance <= pathReach;
     }
-
     private void ReceiveTransferredUpgrade(Building movingBuilding, int targetLevel, float remainingDuration, string buildingId)
     {
         if (movingBuilding == null)

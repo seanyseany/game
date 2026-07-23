@@ -83,6 +83,7 @@ public class Building : MonoBehaviour
     private Transform line1Point;
     private Transform line2Point;
     private SortingGroup sortingGroup;
+    private BuildingUI cachedBuildingUI;
     private Vector3 initialScale;
     private Vector3 dragPointerOffset;
     private Path currentPath;
@@ -142,6 +143,8 @@ public class Building : MonoBehaviour
 
     private void OnDisable()
     {
+        VillagePointerCapture.Release(this);
+
         if (salaryRoutine != null)
         {
             StopCoroutine(salaryRoutine);
@@ -189,6 +192,7 @@ public class Building : MonoBehaviour
         if (!CanStartPointerInteraction())
             return;
 
+        VillagePointerCapture.Acquire(this);
         pointerHeld = true;
         pointerDownStartedAt = Time.unscaledTime;
         dragOriginPath = currentPath;
@@ -214,7 +218,7 @@ public class Building : MonoBehaviour
         if (currentPath == null)
             return;
 
-        BuildingUI buildingUI = FindFirstObjectByType<BuildingUI>();
+        BuildingUI buildingUI = GetBuildingUI();
         if (buildingUI != null)
             buildingUI.Open(currentPath, this);
     }
@@ -226,16 +230,7 @@ public class Building : MonoBehaviour
 
     public bool HasPurchasableCustomerPoint()
     {
-        if (runtimeCustomerPointObject == null)
-            return false;
-
-        if (string.IsNullOrWhiteSpace(customerPointRequiredTag))
-            return true;
-
-        if (!IsTagDefined(customerPointRequiredTag))
-            return true;
-
-        return runtimeCustomerPointObject.CompareTag(customerPointRequiredTag);
+        return runtimeCustomerPointObject != null;
     }
 
     public bool HasQueueCapacity()
@@ -295,7 +290,7 @@ public class Building : MonoBehaviour
         slot = QueueSlot.None;
         target = null;
 
-        if (customer == null || !IsPlaced || !HasPurchasableCustomerPoint())
+        if (customer == null || !IsPlaced || !HasPurchasableCustomerPoint() || isDragging)
             return false;
 
         if (counterCustomer == customer)
@@ -350,6 +345,12 @@ public class Building : MonoBehaviour
     {
         if (customer == null)
             return;
+
+        if (isDragging)
+        {
+            customer.CancelBuildingWaitAndResumeWay(this);
+            return;
+        }
 
         if (customer == counterCustomer)
             TryStartService();
@@ -462,6 +463,9 @@ public class Building : MonoBehaviour
         if (villageManagement == null || string.IsNullOrWhiteSpace(slotId))
             return;
 
+        if (currentPath != null && currentPath.Building != this)
+            return;
+
         villageManagement.UpsertBuildingState(new VillageManagement.BuildingState
         {
             slotId = slotId,
@@ -484,11 +488,19 @@ public class Building : MonoBehaviour
 
     public void CancelWaitingCustomersForRelocation()
     {
+        if (activeOwnerBlood != null)
+            activeOwnerBlood.CancelCurrentService(false);
+
         counterCustomer = null;
         queueCustomer1 = null;
         queueCustomer2 = null;
         serviceRunning = false;
         CustomerBlood.CancelBuildingInteractions(this);
+    }
+
+    public void PrepareForRelocation()
+    {
+        CancelWaitingCustomersForRelocation();
     }
 
     public void SnapBottomAnchorToWorld(Vector3 worldPosition)
@@ -564,18 +576,18 @@ public class Building : MonoBehaviour
         if (isDragging || currentPath == null)
             return;
 
-        BuildingUI ui = FindFirstObjectByType<BuildingUI>();
+        BuildingUI ui = GetBuildingUI();
         if (ui != null)
             ui.Close();
 
         isDragging = true;
+        transform.localScale = initialScale * DragScaleMultiplier;
+        RaiseSortingForDrag();
         Vector3 pointerWorld = GetPointerWorldPosition();
         dragPointerOffset = transform.position - pointerWorld;
         CancelWaitingCustomersForRelocation();
         if (activeOwnerBlood != null)
             activeOwnerBlood.LockToBuildingForDrag();
-        transform.localScale = initialScale * DragScaleMultiplier;
-        RaiseSortingForDrag();
         currentPath.ReleaseBuildingReference(this);
     }
 
@@ -590,6 +602,7 @@ public class Building : MonoBehaviour
 
     private void FinishDrag()
     {
+        VillagePointerCapture.Release(this);
         isDragging = false;
         pointerHeld = false;
         pointerDownStartedAt = -1f;
@@ -601,13 +614,44 @@ public class Building : MonoBehaviour
 
         Transform anchor = BottomAnchor;
         Vector3 dropPoint = anchor != null ? anchor.position : transform.position;
-        Path targetPath = Path.FindBestDropTarget(dropPoint, dragOriginPath);
-        if (targetPath != null)
+        Path occupiedTargetPath = Path.FindDirectOccupiedDropTarget(dropPoint, dragOriginPath);
+        Path emptyTargetPath = Path.FindBestEmptyDropTarget(dropPoint, dragOriginPath);
+
+        float occupiedDistance = occupiedTargetPath != null ? Vector2.Distance(dropPoint, occupiedTargetPath.transform.position) : float.MaxValue;
+        float emptyDistance = emptyTargetPath != null ? Vector2.Distance(dropPoint, emptyTargetPath.transform.position) : float.MaxValue;
+
+        if (occupiedTargetPath != null &&
+            occupiedTargetPath.IsDirectDropPoint(dropPoint) &&
+            occupiedDistance <= emptyDistance)
         {
-            currentPath = targetPath;
-            targetPath.AcceptMovedBuilding(this);
+            Path relocationPath = Path.FindRelocationTarget(occupiedTargetPath.transform.position, occupiedTargetPath);
+            if (relocationPath != null)
+            {
+                Building displacedBuilding = occupiedTargetPath.DetachCurrentBuilding();
+                if (displacedBuilding != null)
+                {
+                    displacedBuilding.PrepareForRelocation();
+                    relocationPath.AcceptMovedBuilding(displacedBuilding);
+                    occupiedTargetPath.TransferActiveUpgradeTo(relocationPath, displacedBuilding);
+                }
+            }
+
+            if (relocationPath != null)
+            {
+                currentPath = occupiedTargetPath;
+                occupiedTargetPath.AcceptMovedBuilding(this);
+                if (dragOriginPath != null)
+                    dragOriginPath.TransferActiveUpgradeTo(occupiedTargetPath, this);
+                return;
+            }
+        }
+
+        if (emptyTargetPath != null)
+        {
+            currentPath = emptyTargetPath;
+            emptyTargetPath.AcceptMovedBuilding(this);
             if (dragOriginPath != null)
-                dragOriginPath.TransferActiveUpgradeTo(targetPath, this);
+                dragOriginPath.TransferActiveUpgradeTo(emptyTargetPath, this);
             return;
         }
 
@@ -657,6 +701,7 @@ public class Building : MonoBehaviour
         if (!pointerHeld && !isDragging)
             return;
 
+        VillagePointerCapture.Release(this);
         bool wasDragging = isDragging;
         pointerHeld = false;
         pointerDownStartedAt = -1f;
@@ -791,7 +836,10 @@ public class Building : MonoBehaviour
 
     private void TryStartService()
     {
-        if (serviceRunning || !IsWorking || activeOwnerBlood == null || counterCustomer == null)
+        if (serviceRunning || !IsWorking || activeOwnerBlood == null || counterCustomer == null || isDragging)
+            return;
+
+        if (!activeOwnerBlood.isActiveAndEnabled)
             return;
 
         if (!counterCustomer.IsWaitingAtCounter(this))
@@ -887,10 +935,18 @@ public class Building : MonoBehaviour
 
         if (notifyEntranceManagement)
         {
-            EntranceManagement entranceManagement = FindFirstObjectByType<EntranceManagement>();
+            EntranceManagement entranceManagement = EntranceManagement.Instance != null ? EntranceManagement.Instance : FindFirstObjectByType<EntranceManagement>();
             if (entranceManagement != null)
                 entranceManagement.NotifyBuildingTrafficChanged();
         }
+    }
+
+    private BuildingUI GetBuildingUI()
+    {
+        if (cachedBuildingUI == null)
+            cachedBuildingUI = BuildingUI.Instance != null ? BuildingUI.Instance : FindFirstObjectByType<BuildingUI>();
+
+        return cachedBuildingUI;
     }
 
     private void RestartSalaryRoutine()
@@ -929,13 +985,17 @@ public class Building : MonoBehaviour
     private void EnsurePointObjects()
     {
         runtimeBossCustomerPointObject = ResolvePointObject(bossCustomerPointPrefab, "_BossCustomerPoint");
-        runtimeCustomerPointObject = ResolveOptionalPointObject(customerPointPrefab, "_CustomerPoint");
+        runtimeCustomerPointObject = ResolvePointObject(customerPointPrefab, "_CustomerPoint");
         runtimeOwnerPatrolFromPointObject = ResolvePointObject(ownerPatrolFromPointPrefab, "_OwnerPatrolFromPoint");
         runtimeOwnerPatrolToPointObject = ResolvePointObject(ownerPatrolToPointPrefab, "_OwnerPatrolToPoint");
     }
 
     private GameObject ResolvePointObject(GameObject referenceObject, string fallbackName)
     {
+        GameObject runtimeObject = ResolveRuntimeChildObject(referenceObject, fallbackName);
+        if (runtimeObject != null)
+            return runtimeObject;
+
         if (referenceObject != null)
             return referenceObject;
 
@@ -959,6 +1019,10 @@ public class Building : MonoBehaviour
 
     private Transform ResolvePointTransform(GameObject referenceObject, string fallbackName)
     {
+        GameObject runtimeObject = ResolveRuntimeChildObject(referenceObject, fallbackName);
+        if (runtimeObject != null)
+            return runtimeObject.transform;
+
         if (referenceObject != null)
             return referenceObject.transform;
 
@@ -969,6 +1033,22 @@ public class Building : MonoBehaviour
         GameObject root = new GameObject(fallbackName);
         root.transform.SetParent(transform, false);
         return root.transform;
+    }
+
+    private GameObject ResolveRuntimeChildObject(GameObject referenceObject, string fallbackName)
+    {
+        if (referenceObject != null)
+        {
+            if (referenceObject.transform.IsChildOf(transform))
+                return referenceObject;
+
+            Transform sameNamedChild = FindChildRecursive(transform, referenceObject.name);
+            if (sameNamedChild != null)
+                return sameNamedChild.gameObject;
+        }
+
+        Transform fallbackChild = FindChildRecursive(transform, fallbackName);
+        return fallbackChild != null ? fallbackChild.gameObject : null;
     }
 
     private void UpdateAnchorPositions()

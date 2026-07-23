@@ -10,6 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 6515666139062805263}
   - component: {fileID: 4243438954079921848}
+  - component: {fileID: 8759900712206367411}
   m_Layer: 0
   m_Name: Customer0003_2
   m_TagString: Untagged
@@ -78,7 +79,7 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 100
   m_Sprite: {fileID: -8836497503347588616, guid: 123b9c55e3302474597ba1bb980de8ef, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -90,3 +91,22 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!114 &8759900712206367411
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8793181848221499149}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6df3c2db3ed34c8a8c1fab104016554c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::OilStaff
+  moveSpeed: 0.6
+  walkStretchFrequency: 6
+  roamPauseMin: 0
+  roamPauseMax: 0
+  walkStretchAmount: 0.03
+  arriveDistance: 0.05
+  spriteRenderer: {fileID: 4243438954079921848}

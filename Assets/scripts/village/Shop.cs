@@ -4,6 +4,8 @@ using UnityEngine.UI;
 
 public class Shop : MonoBehaviour
 {
+    private static readonly List<Shop> AllShops = new List<Shop>();
+
     [Header("Sections")]
     [SerializeField] private BuildingListUI buildingSectionUI;
     [SerializeField] private ShopSectionUI playerSectionUI;
@@ -25,15 +27,20 @@ public class Shop : MonoBehaviour
     private ShopSectionUI activeSection;
     private bool uiBuilt;
     private GameObject emptyContentRoot;
+    private bool sectionReferencesResolved;
 
     private void Awake()
     {
+        if (!AllShops.Contains(this))
+            AllShops.Add(this);
+
         if (openButton == null)
             openButton = GetComponent<Button>();
 
         if (openButton != null)
             openButton.onClick.AddListener(OpenShop);
 
+        ResolveSectionReferences();
         BuildUiIfNeeded();
         RebuildSectionOrder();
         ShowSection(GetDefaultSection());
@@ -42,6 +49,9 @@ public class Shop : MonoBehaviour
 
     private void OnEnable()
     {
+        if (!AllShops.Contains(this))
+            AllShops.Add(this);
+
         VillageManagement.InstanceReady += HandleVillageReady;
         if (VillageManagement.Instance != null)
             VillageManagement.Instance.SaveDataChanged += HandleSaveDataChanged;
@@ -49,6 +59,7 @@ public class Shop : MonoBehaviour
 
     private void OnDisable()
     {
+        AllShops.Remove(this);
         VillageManagement.InstanceReady -= HandleVillageReady;
         if (VillageManagement.Instance != null)
             VillageManagement.Instance.SaveDataChanged -= HandleSaveDataChanged;
@@ -56,6 +67,7 @@ public class Shop : MonoBehaviour
 
     public void OpenShop()
     {
+        ResolveSectionReferences();
         BuildUiIfNeeded();
         RebuildSectionOrder();
         SetPanelVisible(true);
@@ -70,11 +82,10 @@ public class Shop : MonoBehaviour
 
     public static void CloseAllShops()
     {
-        Shop[] shops = FindObjectsByType<Shop>(FindObjectsSortMode.None);
-        for (int i = 0; i < shops.Length; i++)
+        for (int i = 0; i < AllShops.Count; i++)
         {
-            if (shops[i] != null)
-                shops[i].CloseShop();
+            if (AllShops[i] != null)
+                AllShops[i].CloseShop();
         }
     }
 
@@ -174,6 +185,58 @@ public class Shop : MonoBehaviour
         sectionOrder.Add(playerSectionUI);
         sectionOrder.Add(turretSectionUI);
         sectionOrder.Add(oilSectionUI);
+    }
+
+    private void ResolveSectionReferences()
+    {
+        if (sectionReferencesResolved &&
+            IsSceneSection(buildingSectionUI) &&
+            IsSceneSection(playerSectionUI) &&
+            IsSceneSection(turretSectionUI) &&
+            IsSceneSection(oilSectionUI))
+            return;
+
+        buildingSectionUI = ResolveSceneSection(buildingSectionUI);
+        playerSectionUI = ResolveSceneSection(playerSectionUI);
+        turretSectionUI = ResolveSceneSection(turretSectionUI);
+        oilSectionUI = ResolveSceneSection(oilSectionUI);
+        sectionReferencesResolved = true;
+    }
+
+    private static T ResolveSceneSection<T>(T configuredSection) where T : ShopSectionUI
+    {
+        if (configuredSection == null)
+            return null;
+
+        GameObject configuredObject = configuredSection.gameObject;
+        if (configuredObject != null && configuredObject.scene.IsValid() && configuredObject.scene.isLoaded)
+            return configuredSection;
+
+        T[] sceneSections = FindObjectsByType<T>(FindObjectsSortMode.None);
+        for (int i = 0; i < sceneSections.Length; i++)
+        {
+            T candidate = sceneSections[i];
+            if (candidate == null || candidate == configuredSection)
+                continue;
+
+            GameObject candidateObject = candidate.gameObject;
+            if (candidateObject == null || !candidateObject.scene.IsValid() || !candidateObject.scene.isLoaded)
+                continue;
+
+            if (candidateObject.name == configuredObject.name)
+                return candidate;
+        }
+
+        return configuredSection;
+    }
+
+    private static bool IsSceneSection(ShopSectionUI section)
+    {
+        if (section == null)
+            return false;
+
+        GameObject sectionObject = section.gameObject;
+        return sectionObject != null && sectionObject.scene.IsValid() && sectionObject.scene.isLoaded;
     }
 
     private void RebuildTabButtons(Font font)

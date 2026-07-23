@@ -14,17 +14,23 @@ public class grass : MonoBehaviour
 
     [Header("Movement")]
     [SerializeField] private List<TimeTerm> timeTerms = new List<TimeTerm>();
-    [SerializeField] private Vector2 moveRange = new Vector2(0.05f, 0.12f);
+    [SerializeField] private Vector2 verticalStretchRange = new Vector2(-0.04f, 0.08f);
+    [SerializeField] private float horizontalResponse = 0.6f;
     [SerializeField] private float moveSpeed = 0.35f;
     [SerializeField] private float arriveDistance = 0.005f;
 
     private Coroutine moveRoutine;
+    private SpriteRenderer spriteRenderer;
     private Vector3 baseLocalPosition;
+    private Vector3 baseLocalScale;
+    private Vector3 bottomAnchorLocalPosition;
+    private float spriteHeight = 1f;
     private readonly WaitForFixedUpdate waitForFixedUpdate = new WaitForFixedUpdate();
 
     private void Awake()
     {
-        baseLocalPosition = transform.localPosition;
+        spriteRenderer = GetComponent<SpriteRenderer>();
+        CacheBasePose();
     }
 
     private void OnEnable()
@@ -32,7 +38,8 @@ public class grass : MonoBehaviour
         if (moveRoutine != null)
             StopCoroutine(moveRoutine);
 
-        baseLocalPosition = transform.localPosition;
+        CacheBasePose();
+        ApplyStretch(0f);
         moveRoutine = StartCoroutine(MoveLoopRoutine());
     }
 
@@ -44,7 +51,7 @@ public class grass : MonoBehaviour
             moveRoutine = null;
         }
 
-        transform.localPosition = baseLocalPosition;
+        ApplyStretch(0f);
     }
 
     private IEnumerator MoveLoopRoutine()
@@ -55,31 +62,60 @@ public class grass : MonoBehaviour
             if (delay > 0f)
                 yield return new WaitForSeconds(delay);
 
-            float targetOffset = GetRandomVerticalOffset();
-            if (Mathf.Abs(targetOffset) <= Mathf.Epsilon)
+            float targetStretch = GetRandomStretchAmount();
+            if (Mathf.Abs(targetStretch) <= Mathf.Epsilon)
                 continue;
 
-            Vector3 targetLocalPosition = baseLocalPosition + Vector3.up * targetOffset;
-            yield return MoveToRoutine(targetLocalPosition);
-            yield return MoveToRoutine(baseLocalPosition);
+            yield return MoveToRoutine(targetStretch);
+            yield return MoveToRoutine(0f);
+            yield return MoveToRoutine(targetStretch * 0.5f);
+            yield return MoveToRoutine(0f);
         }
     }
 
-    private IEnumerator MoveToRoutine(Vector3 targetLocalPosition)
+    private IEnumerator MoveToRoutine(float targetStretch)
     {
-        targetLocalPosition.z = baseLocalPosition.z;
-
-        while (Vector3.Distance(transform.localPosition, targetLocalPosition) > arriveDistance)
+        while (Mathf.Abs(GetCurrentStretch() - targetStretch) > arriveDistance)
         {
-            transform.localPosition = Vector3.MoveTowards(
-                transform.localPosition,
-                targetLocalPosition,
+            float nextStretch = Mathf.MoveTowards(
+                GetCurrentStretch(),
+                targetStretch,
                 moveSpeed * Time.fixedDeltaTime);
 
+            ApplyStretch(nextStretch);
             yield return waitForFixedUpdate;
         }
 
-        transform.localPosition = targetLocalPosition;
+        ApplyStretch(targetStretch);
+    }
+
+    private void CacheBasePose()
+    {
+        baseLocalPosition = transform.localPosition;
+        baseLocalScale = transform.localScale;
+
+        if (spriteRenderer != null && spriteRenderer.sprite != null)
+            spriteHeight = spriteRenderer.sprite.bounds.size.y;
+        else
+            spriteHeight = 1f;
+
+        bottomAnchorLocalPosition = baseLocalPosition - Vector3.up * (spriteHeight * baseLocalScale.y * 0.5f);
+    }
+
+    private void ApplyStretch(float stretchAmount)
+    {
+        float targetScaleY = Mathf.Max(0.01f, baseLocalScale.y + stretchAmount);
+        float normalizedStretch = baseLocalScale.y <= Mathf.Epsilon ? 0f : stretchAmount / baseLocalScale.y;
+        float targetScaleX = Mathf.Max(0.01f, baseLocalScale.x * (1f - normalizedStretch * horizontalResponse));
+        Vector3 pivotOffset = Vector3.up * (spriteHeight * targetScaleY * 0.5f);
+
+        transform.localScale = new Vector3(targetScaleX, targetScaleY, baseLocalScale.z);
+        transform.localPosition = bottomAnchorLocalPosition + pivotOffset;
+    }
+
+    private float GetCurrentStretch()
+    {
+        return transform.localScale.y - baseLocalScale.y;
     }
 
     private float GetRandomDelay()
@@ -93,11 +129,12 @@ public class grass : MonoBehaviour
         return maxDelay <= 0f ? 0f : UnityEngine.Random.Range(minDelay, maxDelay);
     }
 
-    private float GetRandomVerticalOffset()
+    private float GetRandomStretchAmount()
     {
-        float minRange = Mathf.Min(Mathf.Abs(moveRange.x), Mathf.Abs(moveRange.y));
-        float maxRange = Mathf.Max(Mathf.Abs(moveRange.x), Mathf.Abs(moveRange.y));
-        float distance = maxRange <= 0f ? 0f : UnityEngine.Random.Range(minRange, maxRange);
-        return UnityEngine.Random.value < 0.5f ? -distance : distance;
+        float minRange = Mathf.Min(verticalStretchRange.x, verticalStretchRange.y);
+        float maxRange = Mathf.Max(verticalStretchRange.x, verticalStretchRange.y);
+        return Mathf.Abs(maxRange - minRange) <= Mathf.Epsilon
+            ? minRange
+            : UnityEngine.Random.Range(minRange, maxRange);
     }
 }

@@ -169,6 +169,15 @@ public class Way : MonoBehaviour
         return false;
     }
 
+    public Transform GetRouteNodeTransform(int sequenceIndex, int nodeIndex)
+    {
+        List<Transform> nodes = GetSequenceNodes(sequenceIndex);
+        if (nodeIndex >= 0 && nodeIndex < nodes.Count)
+            return nodes[nodeIndex];
+
+        return null;
+    }
+
     public int GetFirstRouteNodeIndex(int sequenceIndex)
     {
         List<Transform> nodes = GetSequenceNodes(sequenceIndex);

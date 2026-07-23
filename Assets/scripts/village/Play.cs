@@ -393,6 +393,7 @@ public class Play : MonoBehaviour
             return;
         }
 
+        VillageCameraScroller.ResetActiveToDefaultPosition();
         ClosePlayMenu();
         SceneManager.LoadScene(sceneName, LoadSceneMode.Single);
     }

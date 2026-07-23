@@ -66,7 +66,8 @@ public class CustomerBlood : MonoBehaviour
     private int routeTravelDirection = 1;
     private Vector3 visualBaseScale = Vector3.one;
     private readonly WaitForFixedUpdate waitForFixedUpdate = new WaitForFixedUpdate();
-
+    private Transform activeMoveTargetTransform;
+    private Vector3 activeMoveTargetPosition;
     public string SpawnEntryId => spawnEntryId;
     public CustomerBlood SourcePrefab => sourcePrefab;
 
@@ -134,7 +135,11 @@ public class CustomerBlood : MonoBehaviour
         targetBuilding = path != null ? path.Building : null;
 
         Vector3 spawnPosition = entrance != null ? entrance.SpawnWorldPosition : transform.position;
+        transform.SetParent(null, true);
+
         transform.position = WithFixedZ(spawnPosition);
+        if (body != null)
+            body.position = transform.position;
 
         if (lifeRoutine != null)
             StopCoroutine(lifeRoutine);
@@ -154,7 +159,10 @@ public class CustomerBlood : MonoBehaviour
 
         Vector3 targetPosition = building.CustomerPoint.position;
         targetPosition.z = transform.position.z;
-        return Vector3.Distance(transform.position, targetPosition) <= 0.05f;
+        if (Vector3.Distance(transform.position, targetPosition) <= 0.2f)
+            return true;
+
+        return activeMoveTargetTransform == null;
     }
 
     public void CancelBuildingWaitAndResumeWay(Building building)
@@ -180,6 +188,7 @@ public class CustomerBlood : MonoBehaviour
         pendingPurchaseBuilding = null;
         purchaseSequenceRunning = false;
         transitioningToCarry = false;
+        ClearActiveMoveTarget();
 
         if (!purchaseFinished)
             ApplyVisualState(VisualState.Walking);
@@ -197,7 +206,21 @@ public class CustomerBlood : MonoBehaviour
 
         targetBuilding = building;
         currentQueueSlot = slot;
-        moveRoutine = StartCoroutine(MoveToRoutine(worldTarget, slot == Building.QueueSlot.Counter, building));
+        Transform queueTarget = GetQueueSlotTransform(building, slot);
+        moveRoutine = queueTarget != null
+            ? StartCoroutine(MoveToTransformRoutine(
+                queueTarget,
+                worldTarget,
+                slot == Building.QueueSlot.Counter,
+                building,
+                building,
+                slot))
+            : StartCoroutine(MoveToRoutine(
+                worldTarget,
+                slot == Building.QueueSlot.Counter,
+                building,
+                building,
+                slot));
     }
 
     public IEnumerator ReceivePurchasedItemRoutine(GameObject itemPrefab, System.Action onItemSpawned = null)
@@ -291,8 +314,10 @@ public class CustomerBlood : MonoBehaviour
 
         yield return ReturnAlongRouteSequence();
 
-        Vector3 targetPosition = sourceEntrance != null ? sourceEntrance.DespawnWorldPosition : transform.position;
-        yield return MoveToRoutine(targetPosition, false, null);
+        if (sourceEntrance != null)
+            yield return MoveToRoutine(sourceEntrance.DespawnWorldPosition, false, null);
+        else
+            yield return MoveToRoutine(transform.position, false, null);
 
         ownerEntranceManagement?.RecycleCustomer(this);
     }
@@ -304,7 +329,7 @@ public class CustomerBlood : MonoBehaviour
             int closestNodeIndex = currentWay.GetClosestRouteNodeIndex(routeSequenceIndex, transform.position);
             if (closestNodeIndex >= 0 && currentWay.TryGetRouteNode(routeSequenceIndex, closestNodeIndex, out Vector3 worldPoint))
             {
-                yield return MoveToRoutine(worldPoint, false, null);
+                yield return MoveToRouteNodeRoutine(closestNodeIndex);
                 currentRouteNodeIndex = closestNodeIndex;
             }
         }
@@ -324,22 +349,26 @@ public class CustomerBlood : MonoBehaviour
         Building.QueueSlot expectedSlot = Building.QueueSlot.None)
     {
         waitingAtCounter = false;
-        targetPosition = WithFixedZ(targetPosition);
+        activeMoveTargetTransform = null;
+        activeMoveTargetPosition = WithFixedZ(targetPosition);
 
-        while (Vector3.Distance(transform.position, targetPosition) > 0.03f)
+        while (Vector3.Distance(transform.position, activeMoveTargetPosition) > 0.03f)
         {
             if (expectedBuilding != null &&
                 (targetBuilding != expectedBuilding || currentQueueSlot != expectedSlot))
             {
+                ClearActiveMoveTarget();
                 ResetWalkStretch();
                 UpdateSortingOrders();
                 yield break;
             }
 
-            Vector3 next = Vector3.MoveTowards(transform.position, targetPosition, moveSpeed * Time.fixedDeltaTime);
+            Vector3 next = Vector3.MoveTowards(transform.position, activeMoveTargetPosition, moveSpeed * Time.fixedDeltaTime);
             next.z = fixedZ;
             UpdateFacing(next.x - transform.position.x);
-            body.MovePosition(next);
+            transform.position = next;
+            if (body != null)
+                body.position = next;
             ApplyWalkStretch();
             UpdateSortingOrders();
             if (!purchaseFinished)
@@ -351,7 +380,78 @@ public class CustomerBlood : MonoBehaviour
             yield return waitForFixedUpdate;
         }
 
-        body.MovePosition(WithFixedZ(targetPosition));
+        Vector3 finalPosition = WithFixedZ(activeMoveTargetPosition);
+        transform.position = finalPosition;
+        if (body != null)
+            body.position = finalPosition;
+        ClearActiveMoveTarget();
+        ResetWalkStretch();
+        UpdateSortingOrders();
+
+        if (expectedBuilding != null &&
+            (targetBuilding != expectedBuilding || currentQueueSlot != expectedSlot))
+            yield break;
+
+        if (idleAtEnd)
+        {
+            waitingAtCounter = true;
+            ApplyBuildingFacingPreference();
+            if (!purchaseFinished)
+                ApplyVisualState(VisualState.Walking);
+        }
+
+        if (notifyBuilding != null)
+            notifyBuilding.NotifyCustomerReachedSlot(this);
+    }
+
+    private IEnumerator MoveToTransformRoutine(
+        Transform targetTransform,
+        Vector3 fallbackWorldPosition,
+        bool idleAtEnd,
+        Building notifyBuilding,
+        Building expectedBuilding = null,
+        Building.QueueSlot expectedSlot = Building.QueueSlot.None)
+    {
+        waitingAtCounter = false;
+        activeMoveTargetTransform = targetTransform;
+        activeMoveTargetPosition = WithFixedZ(targetTransform != null ? targetTransform.position : fallbackWorldPosition);
+
+        while (Vector3.Distance(transform.position, GetCurrentMoveTargetPosition(fallbackWorldPosition)) > 0.03f)
+        {
+            if (expectedBuilding != null &&
+                (targetBuilding != expectedBuilding || currentQueueSlot != expectedSlot))
+            {
+                ClearActiveMoveTarget();
+                ResetWalkStretch();
+                UpdateSortingOrders();
+                yield break;
+            }
+
+            Vector3 moveTarget = GetCurrentMoveTargetPosition(fallbackWorldPosition);
+            Vector3 next = Vector3.MoveTowards(transform.position, moveTarget, moveSpeed * Time.fixedDeltaTime);
+            next.z = fixedZ;
+            UpdateFacing(next.x - transform.position.x);
+            transform.position = next;
+            if (body != null)
+                body.position = next;
+            ApplyWalkStretch();
+            UpdateSortingOrders();
+            if (!purchaseFinished)
+                ApplyVisualState(VisualState.Walking);
+            else if (transitioningToCarry)
+                ApplyVisualState(VisualState.ReceivingItem);
+            else
+                ApplyVisualState(VisualState.CarryingItem);
+            yield return waitForFixedUpdate;
+        }
+
+        Vector3 finalPosition = GetCurrentMoveTargetPosition(fallbackWorldPosition);
+        transform.position = finalPosition;
+        if (body != null)
+            body.position = finalPosition;
+        bool keepTrackingQueueTarget = expectedBuilding != null && expectedSlot != Building.QueueSlot.None;
+        if (!keepTrackingQueueTarget)
+            ClearActiveMoveTarget();
         ResetWalkStretch();
         UpdateSortingOrders();
 
@@ -412,6 +512,7 @@ public class CustomerBlood : MonoBehaviour
         currentRouteNodeIndex = -1;
         routeTravelDirection = 1;
         lifeEndTime = 0f;
+        ClearActiveMoveTarget();
         body.linearVelocity = Vector2.zero;
         facingLeft = true;
         Vector3 angles = transform.localEulerAngles;
@@ -488,10 +589,14 @@ public class CustomerBlood : MonoBehaviour
         if (currentWay == null || routeNodeIndex < 0)
             yield break;
 
-        if (!currentWay.TryGetRouteNode(routeSequenceIndex, routeNodeIndex, out Vector3 worldPoint))
+        Vector3 worldPoint = transform.position;
+        Transform routeNode = currentWay.GetRouteNodeTransform(routeSequenceIndex, routeNodeIndex);
+        if (routeNode == null && !currentWay.TryGetRouteNode(routeSequenceIndex, routeNodeIndex, out worldPoint))
             yield break;
 
-        yield return TravelWaySegmentRoutine(worldPoint);
+        Vector3 targetPoint = routeNode != null ? routeNode.position : worldPoint;
+        yield return TravelWaySegmentRoutine(targetPoint);
+
         currentRouteNodeIndex = routeNodeIndex;
     }
 
@@ -654,14 +759,28 @@ public class CustomerBlood : MonoBehaviour
                 while (targetBuilding == building && !purchaseFinished)
                 {
                     Vector3 queueTargetPosition = GetQueueSlotWorldPosition(building, currentQueueSlot);
+                    Transform queueTargetTransform = GetQueueSlotTransform(building, currentQueueSlot);
                     bool isCounterSlot = currentQueueSlot == Building.QueueSlot.Counter;
 
-                    yield return MoveToRoutine(
-                        queueTargetPosition,
-                        isCounterSlot,
-                        isCounterSlot ? building : null,
-                        building,
-                        currentQueueSlot);
+                    if (queueTargetTransform != null)
+                    {
+                        yield return MoveToTransformRoutine(
+                            queueTargetTransform,
+                            queueTargetPosition,
+                            isCounterSlot,
+                            isCounterSlot ? building : null,
+                            building,
+                            currentQueueSlot);
+                    }
+                    else
+                    {
+                        yield return MoveToRoutine(
+                            queueTargetPosition,
+                            isCounterSlot,
+                            isCounterSlot ? building : null,
+                            building,
+                            currentQueueSlot);
+                    }
 
                     if (targetBuilding != building || purchaseFinished)
                         break;
@@ -730,6 +849,39 @@ public class CustomerBlood : MonoBehaviour
         }
     }
 
+    private Transform GetQueueSlotTransform(Building building, Building.QueueSlot slot)
+    {
+        if (building == null)
+            return null;
+
+        switch (slot)
+        {
+            case Building.QueueSlot.Counter:
+                return building.CustomerPoint;
+            case Building.QueueSlot.Line1:
+                return building.Line1Point;
+            case Building.QueueSlot.Line2:
+                return building.Line2Point;
+            default:
+                return null;
+        }
+    }
+
+    private Vector3 GetCurrentMoveTargetPosition(Vector3 fallbackWorldPosition)
+    {
+        if (activeMoveTargetTransform != null)
+            activeMoveTargetPosition = WithFixedZ(activeMoveTargetTransform.position);
+        else
+            activeMoveTargetPosition = WithFixedZ(activeMoveTargetPosition == Vector3.zero ? fallbackWorldPosition : activeMoveTargetPosition);
+
+        return activeMoveTargetPosition;
+    }
+
+    private void ClearActiveMoveTarget()
+    {
+        activeMoveTargetTransform = null;
+    }
+
     private bool TryChoosePurchaseTargetAlongSegment(Vector3 start, Vector3 end, out Building building, out Path path, out Vector3 branchPoint)
     {
         building = null;
@@ -739,7 +891,8 @@ public class CustomerBlood : MonoBehaviour
         if (currentWay == null)
             return false;
 
-        float detectionSqrDistance = purchasePassDistance * purchasePassDistance;
+        float detectionDistance = Mathf.Max(0.6f, purchasePassDistance);
+        float detectionSqrDistance = detectionDistance * detectionDistance;
         float bestT = float.MaxValue;
         var connectedPaths = currentWay.ConnectedPaths;
         for (int i = 0; i < connectedPaths.Count; i++)
@@ -752,18 +905,25 @@ public class CustomerBlood : MonoBehaviour
             if (candidateBuilding == null || Random.value > candidateBuilding.GetPurchaseChance())
                 continue;
 
-            Vector3 candidatePoint = WithFixedZ(candidateBuilding.CustomerPoint.position);
-            Vector3 projectedPoint = GetClosestPointOnSegment(start, end, candidatePoint, out float t);
-            if ((candidatePoint - projectedPoint).sqrMagnitude > detectionSqrDistance)
+            Vector3 pathPoint = WithFixedZ(candidatePath.transform.position);
+            Vector3 customerPoint = WithFixedZ(candidateBuilding.CustomerPoint.position);
+            Vector3 pathProjectedPoint = GetClosestPointOnSegment(start, end, pathPoint, out float pathT);
+            Vector3 customerProjectedPoint = GetClosestPointOnSegment(start, end, customerPoint, out float customerT);
+
+            float pathDistance = (pathPoint - pathProjectedPoint).sqrMagnitude;
+            float customerDistance = (customerPoint - customerProjectedPoint).sqrMagnitude;
+            float candidateDistance = Mathf.Min(pathDistance, customerDistance);
+            if (candidateDistance > detectionSqrDistance)
                 continue;
 
+            float t = pathDistance <= customerDistance ? pathT : customerT;
             if (t >= bestT)
                 continue;
 
             bestT = t;
             building = candidateBuilding;
             path = candidatePath;
-            branchPoint = projectedPoint;
+            branchPoint = pathDistance <= customerDistance ? pathProjectedPoint : customerProjectedPoint;
         }
 
         return building != null && path != null;

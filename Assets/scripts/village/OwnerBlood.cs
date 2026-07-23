@@ -27,6 +27,10 @@ public class OwnerBlood : MonoBehaviour
     private bool servingActive;
     private bool atServicePoint;
     private VisualState visualState = VisualState.Walking;
+    private Transform activeMoveTargetTransform;
+    private Vector3 activeMoveTargetPosition;
+    private Vector3 activeMoveTargetLocalPosition;
+    private bool activeMoveUsesBuildingLocalSpace;
 
     private void Awake()
     {
@@ -103,8 +107,8 @@ public class OwnerBlood : MonoBehaviour
             Vector2 patrolTo = building.OwnerPatrolToLocalPosition;
             float targetLocalX = Random.Range(patrolFrom.x, patrolTo.x);
             float fixedLocalY = building.OwnerLocalPosition.y;
-            Vector3 targetPosition = building.transform.TransformPoint(new Vector3(targetLocalX, fixedLocalY, 0f));
-            yield return MoveTo(targetPosition);
+            Vector3 targetLocalPosition = new Vector3(targetLocalX, fixedLocalY, transform.localPosition.z);
+            yield return MoveToBuildingLocal(targetLocalPosition);
             yield return new WaitForSeconds(Random.Range(0.5f, 1.5f));
         }
     }
@@ -115,7 +119,7 @@ public class OwnerBlood : MonoBehaviour
         servingActive = true;
         atServicePoint = false;
 
-        yield return MoveTo(building.OwnerPoint.position, true);
+        yield return MoveToTransform(building != null ? building.OwnerPoint : null, building != null ? building.OwnerPoint.position : transform.position, true);
 
         if (customer != servingCustomer || !servingActive)
             yield break;
@@ -151,16 +155,68 @@ public class OwnerBlood : MonoBehaviour
 
     private IEnumerator MoveTo(Vector3 targetPosition, bool snapToTarget = false)
     {
-        while (Vector3.Distance(transform.position, targetPosition) > 0.025f)
+        activeMoveTargetTransform = null;
+        activeMoveUsesBuildingLocalSpace = false;
+        activeMoveTargetPosition = targetPosition;
+
+        while (Vector3.Distance(transform.position, activeMoveTargetPosition) > 0.025f)
         {
-            Vector3 next = Vector3.MoveTowards(transform.position, targetPosition, moveSpeed * Time.deltaTime);
+            Vector3 next = Vector3.MoveTowards(transform.position, activeMoveTargetPosition, moveSpeed * Time.deltaTime);
             UpdateFacing(next.x - transform.position.x);
             transform.position = next;
             yield return null;
         }
 
         if (snapToTarget)
-            transform.position = targetPosition;
+            transform.position = activeMoveTargetPosition;
+
+        ClearActiveMoveTarget();
+    }
+
+    private IEnumerator MoveToTransform(Transform targetTransform, Vector3 fallbackWorldPosition, bool snapToTarget = false)
+    {
+        activeMoveTargetTransform = targetTransform;
+        activeMoveUsesBuildingLocalSpace = false;
+        activeMoveTargetPosition = targetTransform != null ? targetTransform.position : fallbackWorldPosition;
+
+        while (Vector3.Distance(transform.position, GetCurrentMoveTargetPosition(fallbackWorldPosition)) > 0.025f)
+        {
+            Vector3 moveTarget = GetCurrentMoveTargetPosition(fallbackWorldPosition);
+            Vector3 next = Vector3.MoveTowards(transform.position, moveTarget, moveSpeed * Time.deltaTime);
+            UpdateFacing(next.x - transform.position.x);
+            transform.position = next;
+            yield return null;
+        }
+
+        if (snapToTarget)
+            transform.position = GetCurrentMoveTargetPosition(fallbackWorldPosition);
+
+        ClearActiveMoveTarget();
+    }
+
+    private IEnumerator MoveToBuildingLocal(Vector3 targetLocalPosition, bool snapToTarget = false)
+    {
+        if (building == null)
+            yield break;
+
+        activeMoveTargetTransform = null;
+        activeMoveUsesBuildingLocalSpace = true;
+        activeMoveTargetLocalPosition = targetLocalPosition;
+        activeMoveTargetPosition = building.transform.TransformPoint(targetLocalPosition);
+
+        while (Vector3.Distance(transform.position, GetCurrentMoveTargetPosition(transform.position)) > 0.025f)
+        {
+            Vector3 moveTarget = GetCurrentMoveTargetPosition(transform.position);
+            Vector3 next = Vector3.MoveTowards(transform.position, moveTarget, moveSpeed * Time.deltaTime);
+            UpdateFacing(next.x - transform.position.x);
+            transform.position = next;
+            yield return null;
+        }
+
+        if (snapToTarget)
+            transform.position = GetCurrentMoveTargetPosition(transform.position);
+
+        ClearActiveMoveTarget();
     }
 
     private void UpdateFacing(float deltaX)
@@ -260,5 +316,23 @@ public class OwnerBlood : MonoBehaviour
             StopCoroutine(behaviourRoutine);
 
         behaviourRoutine = StartCoroutine(PatrolLoop());
+    }
+
+    private Vector3 GetCurrentMoveTargetPosition(Vector3 fallbackWorldPosition)
+    {
+        if (activeMoveTargetTransform != null)
+            activeMoveTargetPosition = activeMoveTargetTransform.position;
+        else if (activeMoveUsesBuildingLocalSpace && building != null)
+            activeMoveTargetPosition = building.transform.TransformPoint(activeMoveTargetLocalPosition);
+        else if (activeMoveTargetPosition == Vector3.zero)
+            activeMoveTargetPosition = fallbackWorldPosition;
+
+        return activeMoveTargetPosition;
+    }
+
+    private void ClearActiveMoveTarget()
+    {
+        activeMoveTargetTransform = null;
+        activeMoveUsesBuildingLocalSpace = false;
     }
 }

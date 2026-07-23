@@ -4,6 +4,8 @@ using UnityEngine.UI;
 
 public class BankUI : MonoBehaviour
 {
+    public static BankUI Instance { get; private set; }
+
     [SerializeField] private GameObject panel;
     [SerializeField] private Image bankImage;
     [SerializeField] private Sprite level1Sprite;
@@ -17,6 +19,8 @@ public class BankUI : MonoBehaviour
 
     private void Awake()
     {
+        Instance = this;
+
         if (panel != null)
             panel.SetActive(false);
 
@@ -24,6 +28,12 @@ public class BankUI : MonoBehaviour
             upgradeButton.onClick.AddListener(HandleUpgrade);
         if (closeButton != null)
             closeButton.onClick.AddListener(Close);
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
     }
 
     public void Open(Bank bank)
