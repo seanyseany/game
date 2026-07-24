@@ -1,5 +1,4 @@
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 public abstract class BaseTurret : MonoBehaviour
@@ -14,35 +13,24 @@ public abstract class BaseTurret : MonoBehaviour
         public GameObject reloadVisualPrefab;
     }
 
-    [Header("Identity")]
-    [SerializeField] protected string turretId;
-    [SerializeField] protected string slotId;
     [SerializeField] protected int level = 1;
 
-    [Header("Range")]
-    [SerializeField] protected Vector2 rangeMinLocal = new Vector2(-3f, -2f);
-    [SerializeField] protected Vector2 rangeMaxLocal = new Vector2(3f, 2f);
-
-    [Header("Rig")]
-    [SerializeField] protected Transform turretStart;
-    [SerializeField] protected Transform turretEnd;
+    [Header("Placement")]
     [SerializeField] protected Vector2 bottomLocalPosition;
-    [SerializeField] protected GameObject exclamationPrefab;
 
-    [Header("Data")]
-    [SerializeField] protected TurretLevelData level1Data = new TurretLevelData();
-    [SerializeField] protected TurretLevelData level2Data = new TurretLevelData();
-    [SerializeField] protected TurretLevelData level3Data = new TurretLevelData();
+    [HideInInspector] [SerializeField] protected TurretLevelData level1Data = new TurretLevelData();
+    [HideInInspector] [SerializeField] protected TurretLevelData level2Data = new TurretLevelData();
+    [HideInInspector] [SerializeField] protected TurretLevelData level3Data = new TurretLevelData();
 
     protected int ammoCurrent;
     protected int ammoCapacity;
     protected Villan currentTarget;
     protected Coroutine firingRoutine;
-    protected GameObject exclamationInstance;
     protected GameObject reloadVisualInstance;
 
-    public string TurretId => turretId;
-    public string CatalogId => ShopIdentityUtility.GetStableId(turretId, this);
+    protected string slotId;
+
+    public string CatalogId => gameObject.name.Replace("(Clone)", string.Empty).Trim();
     public string SlotId => slotId;
     public int Level => level;
     public int AmmoCurrent => ammoCurrent;
@@ -54,13 +42,6 @@ public abstract class BaseTurret : MonoBehaviour
     protected virtual void Start()
     {
         ApplyLevel(level, false);
-    }
-
-    protected virtual void Update()
-    {
-        AcquireTarget();
-        AimAtTargetOrCenter();
-        UpdateFiringState();
     }
 
     public void AssignSlot(string nextSlotId)
@@ -78,7 +59,6 @@ public abstract class BaseTurret : MonoBehaviour
         ammoCurrent = keepAmmoRatio ? Mathf.Clamp(Mathf.RoundToInt(ammoCapacity * fillRatio), 0, ammoCapacity) : ammoCapacity;
 
         RebuildReloadVisual();
-        UpdateEmptyIndicator();
         PushState();
     }
 
@@ -100,7 +80,7 @@ public abstract class BaseTurret : MonoBehaviour
         if (!CanRefillPercent(percent))
             return false;
 
-        Bullet bulletPrefab = GetBulletPrefab();
+        TurretBullet bulletPrefab = GetBulletPrefab();
         if (bulletPrefab == null || VillageManagement.Instance == null)
             return false;
 
@@ -110,14 +90,13 @@ public abstract class BaseTurret : MonoBehaviour
 
         ammoCurrent = Mathf.Clamp(ammoCurrent + GetAmmoAmountForPercent(percent), 0, ammoCapacity);
         RebuildReloadVisual();
-        UpdateEmptyIndicator();
         PushState();
         return true;
     }
 
-    public int GetBulletPriceForPercent(int percent, Bullet bulletPrefab = null)
+    public int GetBulletPriceForPercent(int percent, TurretBullet bulletPrefab = null)
     {
-        Bullet source = bulletPrefab != null ? bulletPrefab : GetBulletPrefab();
+        TurretBullet source = bulletPrefab != null ? bulletPrefab : GetBulletPrefab();
         if (source == null)
             return 0;
 
@@ -165,11 +144,10 @@ public abstract class BaseTurret : MonoBehaviour
     {
         ammoCurrent = Mathf.Max(0, ammoCurrent - amount);
         RebuildReloadVisual();
-        UpdateEmptyIndicator();
         PushState();
     }
 
-    protected abstract Bullet GetBulletPrefab();
+    protected abstract TurretBullet GetBulletPrefab();
     protected abstract IEnumerator FireRoutine();
 
     protected bool HasAmmo()
@@ -185,13 +163,22 @@ public abstract class BaseTurret : MonoBehaviour
         return transform.right;
     }
 
-    protected void SpawnBullet(Bullet prefab, Transform spawnPoint)
+    protected virtual Quaternion GetBulletSpawnRotation(Transform spawnPoint)
+    {
+        Vector3 direction = GetCurrentSpawnDirection(spawnPoint);
+        if (direction.sqrMagnitude <= 0.0001f)
+            return Quaternion.identity;
+
+        float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
+        return Quaternion.Euler(0f, 0f, angle);
+    }
+
+    protected void SpawnBullet(TurretBullet prefab, Transform spawnPoint)
     {
         if (prefab == null || spawnPoint == null || !HasAmmo())
             return;
 
-        Bullet bullet = Instantiate(prefab, spawnPoint.position, Quaternion.identity);
-        bullet.Launch(GetCurrentSpawnDirection(spawnPoint));
+        TurretBullet.Spawn(prefab, spawnPoint.position, GetCurrentSpawnDirection(spawnPoint), GetBulletSpawnRotation(spawnPoint));
         ConsumeAmmo(1);
     }
 
@@ -208,88 +195,6 @@ public abstract class BaseTurret : MonoBehaviour
                 : level2Data;
 
         return level1Data;
-    }
-
-    private void AcquireTarget()
-    {
-        if (currentTarget != null)
-        {
-            if (!currentTarget || !IsInRange(currentTarget.transform.position))
-                currentTarget = null;
-        }
-
-        if (currentTarget != null)
-            return;
-
-        Villan[] all = FindObjectsByType<Villan>(FindObjectsSortMode.None);
-        float bestDistance = float.MaxValue;
-        for (int i = 0; i < all.Length; i++)
-        {
-            Villan candidate = all[i];
-            if (candidate == null || !candidate.isActiveAndEnabled || !IsInRange(candidate.transform.position))
-                continue;
-
-            float distance = Vector2.Distance(transform.position, candidate.transform.position);
-            if (distance < bestDistance)
-            {
-                bestDistance = distance;
-                currentTarget = candidate;
-            }
-        }
-    }
-
-    private bool IsInRange(Vector3 worldPosition)
-    {
-        Vector3 local = transform.InverseTransformPoint(worldPosition);
-        return local.x >= Mathf.Min(rangeMinLocal.x, rangeMaxLocal.x) &&
-               local.x <= Mathf.Max(rangeMinLocal.x, rangeMaxLocal.x) &&
-               local.y >= Mathf.Min(rangeMinLocal.y, rangeMaxLocal.y) &&
-               local.y <= Mathf.Max(rangeMinLocal.y, rangeMaxLocal.y);
-    }
-
-    private void AimAtTargetOrCenter()
-    {
-        Vector3 aimPoint = currentTarget != null
-            ? currentTarget.AimTarget.position
-            : transform.TransformPoint(new Vector3((rangeMinLocal.x + rangeMaxLocal.x) * 0.5f, (rangeMinLocal.y + rangeMaxLocal.y) * 0.5f, 0f));
-
-        if (turretStart == null || turretEnd == null)
-            return;
-
-        Vector3 direction = aimPoint - turretStart.position;
-        float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
-        Vector3 euler = transform.eulerAngles;
-        euler.z = angle;
-        transform.eulerAngles = euler;
-    }
-
-    private void UpdateFiringState()
-    {
-        if (currentTarget != null && HasAmmo())
-        {
-            if (firingRoutine == null)
-                firingRoutine = StartCoroutine(FireRoutine());
-        }
-        else if (firingRoutine != null)
-        {
-            StopCoroutine(firingRoutine);
-            firingRoutine = null;
-        }
-    }
-
-    private void UpdateEmptyIndicator()
-    {
-        bool shouldShow = ammoCurrent <= 0 && exclamationPrefab != null;
-        if (shouldShow && exclamationInstance == null)
-        {
-            exclamationInstance = Instantiate(exclamationPrefab, transform);
-            exclamationInstance.transform.localPosition = Vector3.zero;
-        }
-        else if (!shouldShow && exclamationInstance != null)
-        {
-            Destroy(exclamationInstance);
-            exclamationInstance = null;
-        }
     }
 
     protected void RebuildReloadVisual()

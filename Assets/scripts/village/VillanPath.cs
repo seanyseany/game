@@ -1,14 +1,28 @@
+using System.Collections.Generic;
 using UnityEngine;
 
-[RequireComponent(typeof(Collider2D))]
 public class VillanPath : MonoBehaviour
 {
-    [SerializeField] private Vector2 entry1LocalPosition;
-    [SerializeField] private float exit1LocalX = -6f;
-    [SerializeField] private Vector2 entry2LocalPosition;
+    [Header("Path")]
+    [SerializeField] private Transform villanEntrance;
+    [SerializeField] private List<Transform> movePoints = new List<Transform>();
+    [SerializeField] private List<Transform> flipPoints = new List<Transform>();
 
-    public Vector3 Entry1World => transform.TransformPoint(entry1LocalPosition);
-    public Vector3 Entry2World => transform.TransformPoint(entry2LocalPosition);
-    public float Exit1WorldX => transform.TransformPoint(new Vector3(exit1LocalX, 0f, 0f)).x;
-    public float Exit2WorldX => transform.TransformPoint(new Vector3(-exit1LocalX, 0f, 0f)).x;
+    public Transform VillanEntrance => villanEntrance != null ? villanEntrance : transform;
+    public IReadOnlyList<Transform> MovePoints => movePoints;
+
+    public Vector3 EntranceWorldPosition => VillanEntrance.position;
+
+    public bool IsFlipPoint(Transform point)
+    {
+        return point != null && flipPoints.Contains(point);
+    }
+
+    public Vector3 GetMovePointPosition(int index)
+    {
+        if (index < 0 || index >= movePoints.Count || movePoints[index] == null)
+            return transform.position;
+
+        return movePoints[index].position;
+    }
 }

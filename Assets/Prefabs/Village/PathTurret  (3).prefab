@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1 &4990008936426463019
+--- !u!1 &5749831882301675893
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -8,23 +8,23 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 93379573733503970}
-  - component: {fileID: 304552580350131038}
-  - component: {fileID: 1200183542107959239}
+  - component: {fileID: 3038882649904222637}
+  - component: {fileID: 5653931963355623584}
+  - component: {fileID: 8957932978701279307}
   m_Layer: 0
-  m_Name: 'PathTurret '
+  m_Name: PathTurret  (3)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &93379573733503970
+--- !u!4 &3038882649904222637
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4990008936426463019}
+  m_GameObject: {fileID: 5749831882301675893}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 5.8736706, y: -4.96468, z: 0}
@@ -33,13 +33,13 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!61 &304552580350131038
+--- !u!61 &5653931963355623584
 BoxCollider2D:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4990008936426463019}
+  m_GameObject: {fileID: 5749831882301675893}
   m_Enabled: 1
   serializedVersion: 3
   m_Density: 1
@@ -70,25 +70,28 @@ BoxCollider2D:
   m_Offset: {x: 0.041409135, y: 0.8292022}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
-    pivot: {x: 0, y: 0}
-    oldSize: {x: 0, y: 0}
-    newSize: {x: 0, y: 0}
-    adaptiveTilingThreshold: 0
+    pivot: {x: 0.5, y: 0.5}
+    oldSize: {x: 0.65, y: 0.95}
+    newSize: {x: 5.4, y: 3}
+    adaptiveTilingThreshold: 0.5
     drawMode: 0
     adaptiveTiling: 0
   m_AutoTiling: 0
   m_Size: {x: 2.23189, y: 2.2073803}
   m_EdgeRadius: 0
---- !u!114 &1200183542107959239
+--- !u!114 &8957932978701279307
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4990008936426463019}
+  m_GameObject: {fileID: 5749831882301675893}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 208d987f2c404434dad8ed92f0493ede, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Path
   allowsBuildingPlacement: 0
+  rotatePlacedPrefab180: 0
+  turretTargetRangeMinLocal: {x: 2.04, y: -2.27}
+  turretTargetRangeMaxLocal: {x: 5, y: -2.27}

@@ -52,8 +52,23 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
     private Vector3 draggedTurretOriginalScale = Vector3.one;
 
     public string SlotId => slotId;
-    public BaseTurret CurrentTurret => currentTurret;
-    public int CurrentTurretLevel => currentTurret != null ? Mathf.Max(0, currentTurret.Level) : 0;
+    public BaseTurret CurrentTurret
+    {
+        get
+        {
+            EnsureCurrentTurretReference();
+            return currentTurret;
+        }
+    }
+
+    public int CurrentTurretLevel
+    {
+        get
+        {
+            EnsureCurrentTurretReference();
+            return currentTurret != null ? Mathf.Max(0, currentTurret.Level) : 0;
+        }
+    }
 
     public void ConfigureRuntimeSlot(string nextSlotId, Vector2 nextPlaceLocalPosition)
     {
@@ -149,6 +164,7 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
     public void TryInstall(BaseTurret turretPrefab, bool ownedAlready)
     {
+        EnsureCurrentTurretReference();
         if (currentTurret != null || turretPrefab == null)
             return;
 
@@ -170,13 +186,15 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
     public bool TryInstallFromShop(BaseTurret turretPrefab)
     {
+        EnsureCurrentTurretReference();
         if (currentTurret != null || turretPrefab == null)
             return false;
 
         PlaceTurret(GetPrefabForLevel(turretPrefab.Level, turretPrefab), turretPrefab.Level, false);
+        EnsureCurrentTurretReference();
         turretListUI?.Close();
         turretUI?.Close();
-        return true;
+        return currentTurret != null;
     }
 
     public void TryUpgrade()
@@ -249,10 +267,12 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
             placeLocalPosition.x - currentTurret.BottomLocalPosition.x,
             placeLocalPosition.y - currentTurret.BottomLocalPosition.y,
             0f);
+        ConfigureTurretRange(currentTurret);
         currentTurret.ApplyLevel(level, keepAmmoRatio);
         currentTurret.SetPlacementMirrored(ShouldMirrorPlacedTurret());
         currentTurret.PushState();
         initialScale = currentTurret.transform.localScale;
+        SyncCurrentTurretFromChildren();
         EnsurePointerForwarders();
     }
 
@@ -455,11 +475,34 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
             placeLocalPosition.x - currentTurret.BottomLocalPosition.x,
             placeLocalPosition.y - currentTurret.BottomLocalPosition.y,
             0f);
+        ConfigureTurretRange(currentTurret);
         currentTurret.transform.localScale = restoredScale == Vector3.zero ? Vector3.one : restoredScale;
         currentTurret.SetPlacementMirrored(ShouldMirrorPlacedTurret());
         currentTurret.PushState();
         initialScale = currentTurret.transform.localScale;
+        SyncCurrentTurretFromChildren();
         EnsurePointerForwarders();
+    }
+
+    private void EnsureCurrentTurretReference()
+    {
+        if (currentTurret == null)
+            SyncCurrentTurretFromChildren();
+    }
+
+    private void ConfigureTurretRange(BaseTurret turret)
+    {
+        if (turret is not Turret configuredTurret)
+            return;
+
+        Path path = GetComponent<Path>();
+        if (path == null)
+            configuredTurret.ConfigureTargetRange(transform, new Vector2(-3f, -2f), new Vector2(3f, 2f));
+        else
+            configuredTurret.ConfigureTargetRange(
+                path.transform,
+                path.TurretTargetRangeMinLocal,
+                path.TurretTargetRangeMaxLocal);
     }
 
     private bool ShouldMirrorPlacedTurret()

@@ -6,54 +6,42 @@ using UnityEngine.SceneManagement;
 public class Emergency : MonoBehaviour
 {
     [System.Serializable]
-    public class DifficultySpawn
+    public class EmergencyVillanEntry
     {
-        [Range(1, 10)] public int villanLevel = 1;
-        public int count = 1;
+        public Villan villanPrefab;
+        [Min(1)] public int count = 1;
     }
 
     [System.Serializable]
-    public class DifficultyEntry
+    public class EmergencyLevel
     {
-        [Range(1, 26)] public int difficulty = 1;
-        public List<DifficultySpawn> spawns = new List<DifficultySpawn>();
+        public bool enabled = true;
+        public List<EmergencyVillanEntry> villans = new List<EmergencyVillanEntry>();
+        public List<float> spawnIntervals = new List<float>();
     }
 
-    [SerializeField] private int difficulty = 1;
-    [SerializeField] private Villan villanPrefab;
-    [SerializeField] private VillanPath villanPath;
-    [SerializeField] private List<DifficultyEntry> difficultyEntries = new List<DifficultyEntry>();
+    [Header("Emergency")]
+    [SerializeField] private List<float> emergencyTriggerTimes = new List<float> { 40f, 60f, 110f, 130f, 160f };
     [SerializeField] private GameObject emergencyWarning;
-    [SerializeField] private float[] timelineOptions = { 40f, 60f, 110f, 130f, 160f };
 
-    private readonly List<int> remainingTimelineIndices = new List<int>();
+    [Header("Paths")]
+    [SerializeField] private List<VillanPath> villanPaths = new List<VillanPath>();
+
+    [Header("Levels")]
+    [SerializeField] private List<EmergencyLevel> levels = new List<EmergencyLevel>();
+
     private float elapsedInVillage;
     private float nextEmergencyAt = -1f;
-
-    private void OnEnable()
-    {
-        VillageManagement.InstanceReady += HandleVillageReady;
-        if (VillageManagement.Instance != null)
-            VillageManagement.Instance.SaveDataChanged += HandleSaveDataChanged;
-    }
-
-    private void OnDisable()
-    {
-        VillageManagement.InstanceReady -= HandleVillageReady;
-        if (VillageManagement.Instance != null)
-            VillageManagement.Instance.SaveDataChanged -= HandleSaveDataChanged;
-    }
+    private bool emergencyRunning;
 
     private void Start()
     {
-        ResetTimelinePoolIfNeeded();
         ChooseNextEmergencyTime();
-        HandleVillageReady(VillageManagement.Instance);
     }
 
     private void Update()
     {
-        if (!IsVillageSceneActive())
+        if (!IsVillageSceneActive() || emergencyRunning)
             return;
 
         elapsedInVillage += Time.deltaTime;
@@ -64,29 +52,10 @@ public class Emergency : MonoBehaviour
         }
     }
 
-    private void HandleVillageReady(VillageManagement villageManagement)
-    {
-        if (villageManagement == null)
-            return;
-
-        villageManagement.SaveDataChanged -= HandleSaveDataChanged;
-        villageManagement.SaveDataChanged += HandleSaveDataChanged;
-
-        difficulty = CalculateDynamicDifficulty(villageManagement);
-        villageManagement.SetEmergencyDifficulty(difficulty);
-    }
-
-    private void HandleSaveDataChanged(VillageManagement.VillageSaveData _)
-    {
-        if (VillageManagement.Instance == null)
-            return;
-
-        difficulty = CalculateDynamicDifficulty(VillageManagement.Instance);
-        VillageManagement.Instance.SetEmergencyDifficulty(difficulty);
-    }
-
     private IEnumerator EmergencyRoutine()
     {
+        emergencyRunning = true;
+
         if (emergencyWarning != null)
             emergencyWarning.SetActive(true);
 
@@ -95,111 +64,87 @@ public class Emergency : MonoBehaviour
         if (emergencyWarning != null)
             emergencyWarning.SetActive(false);
 
-        DifficultyEntry entry = GetDifficultyEntry(difficulty);
-        if (entry != null)
-            yield return SpawnWave(entry);
+        for (int i = 0; i < levels.Count; i++)
+        {
+            EmergencyLevel level = levels[i];
+            if (level == null || !level.enabled)
+                continue;
 
-        elapsedInVillage = 0f;
-        ResetTimelinePoolIfNeeded();
+            yield return StartCoroutine(SpawnLevel(level));
+        }
+
         ChooseNextEmergencyTime();
+        emergencyRunning = false;
     }
 
-    private IEnumerator SpawnWave(DifficultyEntry entry)
+    private IEnumerator SpawnLevel(EmergencyLevel level)
     {
-        List<DifficultySpawn> expanded = new List<DifficultySpawn>();
-        for (int i = 0; i < entry.spawns.Count; i++)
-        {
-            DifficultySpawn spawn = entry.spawns[i];
-            for (int c = 0; c < Mathf.Max(0, spawn.count); c++)
-                expanded.Add(spawn);
-        }
-
-        int total = expanded.Count;
-        if (total == 0 || villanPrefab == null || villanPath == null)
+        if (level == null || level.villans.Count == 0)
             yield break;
 
-        int firstCount = Mathf.RoundToInt(total * 0.2f);
-        int secondCount = Mathf.RoundToInt(total * 0.3f);
-        int thirdCount = Mathf.Max(0, total - firstCount - secondCount);
-
-        yield return SpawnChunk(expanded, 0, firstCount, 6f);
-        yield return SpawnChunk(expanded, firstCount, secondCount, 7f);
-        yield return SpawnChunk(expanded, firstCount + secondCount, thirdCount, 7f);
-    }
-
-    private IEnumerator SpawnChunk(List<DifficultySpawn> expanded, int startIndex, int count, float duration)
-    {
-        if (count <= 0)
+        VillanPath path = GetRandomPath();
+        if (path == null)
             yield break;
 
-        float interval = duration / count;
-        for (int i = 0; i < count; i++)
+        for (int i = 0; i < level.villans.Count; i++)
         {
-            DifficultySpawn spawn = expanded[startIndex + i];
-            Villan villan = Instantiate(villanPrefab);
-            villan.Initialize(villanPath, spawn.villanLevel);
-            yield return new WaitForSeconds(interval);
+            EmergencyVillanEntry entry = level.villans[i];
+            if (entry == null || entry.villanPrefab == null || entry.count <= 0)
+                continue;
+
+            for (int spawnIndex = 0; spawnIndex < entry.count; spawnIndex++)
+            {
+                Villan.Spawn(entry.villanPrefab, path, 1);
+                float interval = GetRandomSpawnInterval(level.spawnIntervals);
+                yield return new WaitForSeconds(interval);
+            }
         }
     }
 
-    private DifficultyEntry GetDifficultyEntry(int targetDifficulty)
+    private VillanPath GetRandomPath()
     {
-        for (int i = 0; i < difficultyEntries.Count; i++)
+        List<VillanPath> availablePaths = new List<VillanPath>();
+        for (int i = 0; i < villanPaths.Count; i++)
         {
-            if (difficultyEntries[i] != null && difficultyEntries[i].difficulty == targetDifficulty)
-                return difficultyEntries[i];
+            if (villanPaths[i] != null)
+                availablePaths.Add(villanPaths[i]);
         }
 
-        return difficultyEntries.Count > 0 ? difficultyEntries[difficultyEntries.Count - 1] : null;
+        if (availablePaths.Count == 0)
+            return null;
+
+        return availablePaths[Random.Range(0, availablePaths.Count)];
     }
 
-    private int CalculateDynamicDifficulty(VillageManagement villageManagement)
+    private float GetRandomSpawnInterval(List<float> intervals)
     {
-        int result = 1;
-
-        for (int i = 0; i < villageManagement.Buildings.Count; i++)
+        List<float> validIntervals = new List<float>();
+        for (int i = 0; i < intervals.Count; i++)
         {
-            VillageManagement.BuildingState state = villageManagement.Buildings[i];
-            if (state != null && state.isPlaced)
-                result += Mathf.Max(0, state.level);
+            if (intervals[i] > 0f)
+                validIntervals.Add(intervals[i]);
         }
 
-        for (int i = 0; i < villageManagement.OxygenGenerators.Count; i++)
-        {
-            VillageManagement.OxygenGeneratorState state = villageManagement.OxygenGenerators[i];
-            if (state != null && state.isPlaced)
-                result += Mathf.Max(0, state.level);
-        }
+        if (validIntervals.Count == 0)
+            return 1f;
 
-        for (int i = 0; i < villageManagement.Turrets.Count; i++)
-        {
-            VillageManagement.TurretState state = villageManagement.Turrets[i];
-            if (state != null && state.isPlaced)
-                result += Mathf.Max(0, state.level);
-        }
-
-        return Mathf.Clamp(result, 1, 26);
-    }
-
-    private void ResetTimelinePoolIfNeeded()
-    {
-        if (remainingTimelineIndices.Count > 0)
-            return;
-
-        remainingTimelineIndices.Clear();
-        for (int i = 0; i < timelineOptions.Length; i++)
-            remainingTimelineIndices.Add(i);
+        return validIntervals[Random.Range(0, validIntervals.Count)];
     }
 
     private void ChooseNextEmergencyTime()
     {
-        if (remainingTimelineIndices.Count == 0)
+        List<float> validTimes = new List<float>();
+        for (int i = 0; i < emergencyTriggerTimes.Count; i++)
+        {
+            if (emergencyTriggerTimes[i] > 0f)
+                validTimes.Add(emergencyTriggerTimes[i]);
+        }
+
+        if (validTimes.Count == 0)
             return;
 
-        int pick = Random.Range(0, remainingTimelineIndices.Count);
-        int timelineIndex = remainingTimelineIndices[pick];
-        remainingTimelineIndices.RemoveAt(pick);
-        nextEmergencyAt = timelineOptions[timelineIndex];
+        float delay = validTimes[Random.Range(0, validTimes.Count)];
+        nextEmergencyAt = elapsedInVillage + delay;
     }
 
     private bool IsVillageSceneActive()

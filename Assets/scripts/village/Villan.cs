@@ -1,29 +1,35 @@
 using System.Collections;
-using TMPro;
+using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
+using UnityEngine.Serialization;
 
 [RequireComponent(typeof(Collider2D))]
 [RequireComponent(typeof(Rigidbody2D))]
 public class Villan : MonoBehaviour
 {
-    [SerializeField] private float baseMoveSpeed = 2f;
-    [SerializeField] private Transform aimTarget;
-    [SerializeField] private Animator animator;
-    [SerializeField] private string attackTrigger = "Attack";
-    [SerializeField] private string dieTrigger = "Die";
-    [SerializeField] private TMP_Text levelText;
-    [SerializeField] private Image hpFill;
+    private static readonly Dictionary<int, Queue<Villan>> PoolsByPrefab = new Dictionary<int, Queue<Villan>>();
+    private const float ArriveDistance = 0.03f;
+
+    [FormerlySerializedAs("baseMoveSpeed")]
+    [SerializeField] private float moveSpeed = 2f;
+    [SerializeField] private int hitCount = 1;
+    [HideInInspector] [SerializeField] private Transform aimTarget;
+    [HideInInspector] [SerializeField] private Animator animator;
+
+    private const string DestroyTrigger = "destroy";
 
     private VillanPath path;
     private Rigidbody2D body;
-    private int level = 1;
-    private int defense = 1;
-    private int attack = 10;
-    private float moveSpeed;
-    private int leg = 1;
+    private Villan sourcePrefab;
+    private int currentHitCount;
+    private float currentMoveSpeed;
+    private int routeIndex;
     private bool dead;
     private bool facingLeft = true;
+    private bool returningToPool;
+    private Vector3 originalLocalScale = Vector3.one;
+    private Vector3 originalLocalEulerAngles;
+    private int prefabPoolKey;
 
     public Transform AimTarget => aimTarget != null ? aimTarget : transform;
 
@@ -32,41 +38,67 @@ public class Villan : MonoBehaviour
         body = GetComponent<Rigidbody2D>();
         body.gravityScale = 0f;
         GetComponent<Collider2D>().isTrigger = true;
+        if (animator == null)
+            animator = GetComponentInChildren<Animator>();
+        originalLocalScale = transform.localScale;
+        originalLocalEulerAngles = transform.localEulerAngles;
     }
 
     private void Update()
     {
-        if (dead || path == null)
+        if (dead || returningToPool || path == null)
             return;
 
-        float direction = leg == 1 ? -1f : 1f;
-        body.linearVelocity = new Vector2(direction * moveSpeed, body.linearVelocity.y);
-        UpdateFacing(direction < 0f);
+        MoveAlongRoute();
+    }
 
-        if (leg == 1 && transform.position.x <= path.Exit1WorldX)
+    public static Villan Spawn(Villan prefab, VillanPath nextPath, int nextLevel)
+    {
+        if (prefab == null)
+            return null;
+
+        int poolKey = prefab.GetInstanceID();
+        if (!PoolsByPrefab.TryGetValue(poolKey, out Queue<Villan> pool))
         {
-            StartCoroutine(SwitchToSecondLeg());
+            pool = new Queue<Villan>();
+            PoolsByPrefab.Add(poolKey, pool);
         }
-        else if (leg == 2 && transform.position.x >= path.Exit2WorldX)
+
+        Villan villan = null;
+        while (pool.Count > 0 && villan == null)
+            villan = pool.Dequeue();
+
+        if (villan == null)
         {
-            Destroy(gameObject);
+            villan = Instantiate(prefab);
+            villan.sourcePrefab = prefab;
+            villan.prefabPoolKey = poolKey;
         }
+        else
+        {
+            villan.gameObject.SetActive(true);
+        }
+
+        villan.Initialize(nextPath, nextLevel);
+        return villan;
     }
 
     public void Initialize(VillanPath nextPath, int nextLevel)
     {
         path = nextPath;
-        level = Mathf.Clamp(nextLevel, 1, 10);
-        transform.position = path != null ? path.Entry1World : transform.position;
-        leg = 1;
         dead = false;
+        returningToPool = false;
+        routeIndex = 0;
+        StopAllCoroutines();
+        ResetOrientation();
+        transform.position = path != null ? path.EntranceWorldPosition : transform.position;
+        if (body != null)
+            body.position = transform.position;
+        body.linearVelocity = Vector2.zero;
 
-        float scale = Mathf.Clamp(0.7f + (level - 1) * 0.03f, 0.7f, 1f);
-        transform.localScale = new Vector3(scale, scale, 1f);
-        defense = level;
-        attack = 10 + (level - 1) * 10;
-        moveSpeed = Mathf.Max(0.2f, baseMoveSpeed - (level - 1) * 0.05f);
-        RefreshUi();
+        transform.localScale = originalLocalScale;
+        currentHitCount = Mathf.Max(1, hitCount);
+        currentMoveSpeed = Mathf.Max(0.2f, moveSpeed);
     }
 
     public void TakeDamage(int amount)
@@ -74,63 +106,37 @@ public class Villan : MonoBehaviour
         if (dead)
             return;
 
-        defense = Mathf.Max(0, defense - Mathf.Max(0, amount));
-        RefreshUi();
-        if (defense <= 0)
+        currentHitCount = Mathf.Max(0, currentHitCount - Mathf.Max(1, amount));
+        if (currentHitCount <= 0)
             StartCoroutine(DieRoutine());
     }
 
     private void OnTriggerEnter2D(Collider2D other)
     {
-        if (dead || other == null)
+        if (dead || returningToPool || other == null)
             return;
 
         Bank bank = other.GetComponent<Bank>() ?? other.GetComponentInParent<Bank>();
         if (bank != null)
-        {
-            bank.TakeDamage(attack);
-            StartCoroutine(DieRoutine(attackAnimationFirst: true));
-        }
+            StartCoroutine(DieRoutine());
     }
 
-    private IEnumerator SwitchToSecondLeg()
-    {
-        if (dead || leg != 1)
-            yield break;
-
-        leg = 0;
-        body.linearVelocity = Vector2.zero;
-        yield return new WaitForSeconds(1f);
-        if (dead || path == null)
-            yield break;
-
-        transform.position = path.Entry2World;
-        leg = 2;
-    }
-
-    private IEnumerator DieRoutine(bool attackAnimationFirst = false)
+    private IEnumerator DieRoutine()
     {
         if (dead)
             yield break;
 
         dead = true;
+        returningToPool = true;
         body.linearVelocity = Vector2.zero;
 
         if (animator != null)
         {
-            animator.SetTrigger(attackAnimationFirst ? attackTrigger : dieTrigger);
+            animator.SetTrigger(DestroyTrigger);
             yield return new WaitForSeconds(0.3f);
         }
 
-        Destroy(gameObject);
-    }
-
-    private void RefreshUi()
-    {
-        if (levelText != null)
-            levelText.text = $"Lv.{level}";
-        if (hpFill != null)
-            hpFill.fillAmount = Mathf.Clamp01(defense / (float)Mathf.Max(1, level));
+        ReturnToPool();
     }
 
     private void UpdateFacing(bool shouldFaceLeft)
@@ -142,5 +148,70 @@ public class Villan : MonoBehaviour
         Vector3 angles = transform.localEulerAngles;
         angles.y = facingLeft ? 0f : 180f;
         transform.localEulerAngles = angles;
+    }
+
+    private void MoveAlongRoute()
+    {
+        if (path == null || routeIndex >= path.MovePoints.Count)
+        {
+            StartCoroutine(ReturnToPoolAtRouteEnd());
+            return;
+        }
+
+        Vector3 target = path.GetMovePointPosition(routeIndex);
+        Vector3 next = Vector3.MoveTowards(transform.position, target, currentMoveSpeed * Time.deltaTime);
+        float deltaX = next.x - transform.position.x;
+        if (Mathf.Abs(deltaX) > 0.0001f)
+            UpdateFacing(deltaX < 0f);
+
+        transform.position = next;
+        if (body != null)
+            body.position = next;
+
+        if (Vector3.Distance(transform.position, target) > ArriveDistance)
+            return;
+
+        Transform reachedPoint = path.MovePoints[routeIndex];
+        if (path.IsFlipPoint(reachedPoint))
+            UpdateFacing(!facingLeft);
+
+        routeIndex++;
+    }
+
+    private IEnumerator ReturnToPoolAtRouteEnd()
+    {
+        if (returningToPool)
+            yield break;
+
+        returningToPool = true;
+        if (body != null)
+            body.linearVelocity = Vector2.zero;
+
+        yield return null;
+        ReturnToPool();
+    }
+
+    private void ReturnToPool()
+    {
+        ResetOrientation();
+        path = null;
+        routeIndex = 0;
+        dead = false;
+        returningToPool = false;
+
+        if (!PoolsByPrefab.TryGetValue(prefabPoolKey, out Queue<Villan> pool))
+        {
+            pool = new Queue<Villan>();
+            PoolsByPrefab.Add(prefabPoolKey, pool);
+        }
+
+        gameObject.SetActive(false);
+        pool.Enqueue(this);
+    }
+
+    private void ResetOrientation()
+    {
+        facingLeft = true;
+        transform.localEulerAngles = originalLocalEulerAngles;
     }
 }

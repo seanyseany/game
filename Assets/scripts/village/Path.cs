@@ -12,6 +12,10 @@ public class Path : MonoBehaviour
     [SerializeField] private bool allowsBuildingPlacement = true;
     [SerializeField] private bool rotatePlacedPrefab180;
 
+    [Header("Turret Range")]
+    [SerializeField] private Vector2 turretTargetRangeMinLocal = new Vector2(-3f, -2f);
+    [SerializeField] private Vector2 turretTargetRangeMaxLocal = new Vector2(3f, 2f);
+
     private Collider2D cachedCollider;
     private Building buildingInstance;
     private string pathId;
@@ -26,6 +30,8 @@ public class Path : MonoBehaviour
     public bool IsEmpty => buildingInstance == null && constructionRoutine == null;
     public bool AllowsBuildingPlacement => allowsBuildingPlacement;
     public bool RotatePlacedPrefab180 => rotatePlacedPrefab180;
+    public Vector2 TurretTargetRangeMinLocal => turretTargetRangeMinLocal;
+    public Vector2 TurretTargetRangeMaxLocal => turretTargetRangeMaxLocal;
     public bool IsAvailableForBuildingPlacement => allowsBuildingPlacement && IsEmpty;
     public bool HasActiveConstruction => constructionRoutine != null;
     public string ActiveConstructionBuildingId => activeConstructionBuildingId;

@@ -90,6 +90,37 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!1 &2570673137639096845
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5939685346035884547}
+  m_Layer: 0
+  m_Name: midPoint
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5939685346035884547
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2570673137639096845}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 1.51, y: -0.21, z: 0}
+  m_LocalScale: {x: 1.8181819, y: 1.8181819, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7608901885438138369}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2666589568459783854
 GameObject:
   m_ObjectHideFlags: 0
@@ -127,6 +158,9 @@ Transform:
   - {fileID: 8789940038336735519}
   - {fileID: 1283894665594607224}
   - {fileID: 6189794865141496931}
+  - {fileID: 3131694120409371742}
+  - {fileID: 5939685346035884547}
+  - {fileID: 3865278540150496012}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &4982626350162984040
@@ -138,22 +172,15 @@ MonoBehaviour:
   m_GameObject: {fileID: 2666589568459783854}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fb9e108cd0e584f9fa4a6c0aa3c20377, type: 3}
+  m_Script: {fileID: 11500000, guid: 31996b8c5a454cb59a1885af0f4ff507, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Turret1
-  turretId: 
-  slotId: 
+  m_EditorClassIdentifier: Assembly-CSharp::Turret
   level: 1
-  rangeMinLocal: {x: -3, y: -2}
-  rangeMaxLocal: {x: 3, y: 2}
-  turretStart: {fileID: 0}
-  turretEnd: {fileID: 0}
   bottomLocalPosition: {x: 0, y: 0}
-  exclamationPrefab: {fileID: 0}
   level1Data:
     sprite: {fileID: 0}
     oxygenPrice: 10
-    ammoCapacity: 10
+    ammoCapacity: 1000
     upgradePrefab: {fileID: 0}
     reloadVisualPrefab: {fileID: 0}
   level2Data:
@@ -168,8 +195,14 @@ MonoBehaviour:
     ammoCapacity: 10
     upgradePrefab: {fileID: 0}
     reloadVisualPrefab: {fileID: 0}
-  bulletSpawnPoint: {fileID: 0}
-  bulletPrefab: {fileID: 0}
+  centerPoint: {fileID: 5939685346035884547}
+  endPoint: {fileID: 3865278540150496012}
+  bulletSpawnPoints:
+  - {fileID: 3131694120409371742}
+  bulletPrefab: {fileID: 7582161541335610467, guid: a65f52def6e6049a2804a441663db909, type: 3}
+  bulletSpawnInterval: 0.2
+  ammoCapacitySetting: 1000
+  reloadPrefabs: []
 --- !u!61 &-1275854214451916204
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -364,6 +397,68 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!1 &3745199897763710925
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 3131694120409371742}
+  m_Layer: 0
+  m_Name: bulletPoint
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &3131694120409371742
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3745199897763710925}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -1.07, y: -0.21, z: 0}
+  m_LocalScale: {x: 1.8181819, y: 1.8181819, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7608901885438138369}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &4181403726390374725
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 3865278540150496012}
+  m_Layer: 0
+  m_Name: endPoint
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &3865278540150496012
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4181403726390374725}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -0.832, y: -0.21, z: 0}
+  m_LocalScale: {x: 1.8181819, y: 1.8181819, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7608901885438138369}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &6122106681639696489
 GameObject:
   m_ObjectHideFlags: 0
