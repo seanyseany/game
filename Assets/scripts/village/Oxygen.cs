@@ -14,15 +14,18 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
     [SerializeField] private string purchaseEntryId;
     [SerializeField] private int oxygenPrice = 10;
     [SerializeField] private int energyUsage = 1;
+    [SerializeField] private float energyConsumptionInterval = 10f;
     [SerializeField] private int oxygenProduction = 10;
     [SerializeField] private int level = 1;
     [SerializeField] private GameObject exclamationPrefab;
+    [SerializeField] private Transform exclamationAnchor;
     [SerializeField] private Animator animator;
     [SerializeField] private float productionInterval = 10f;
     [SerializeField] private Vector2 bottomLocalPosition;
 
     private int storedOxygen;
     private Coroutine productionRoutine;
+    private Coroutine energyConsumptionRoutine;
     private GameObject exclamationInstance;
     private SortingGroup sortingGroup;
     private Vector3 initialScale;
@@ -53,6 +56,7 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
     {
         level = Mathf.Clamp(level, 1, 3);
         initialScale = transform.localScale;
+        ResolveExclamationAnchor();
         EnsureInteractionCollider();
         EnsurePointerForwarders();
         EnsureSortingGroup();
@@ -67,6 +71,7 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
 
     private void Start()
     {
+        RestartEnergyConsumption();
         RestartProduction();
         UpdateProductionAnimation();
         PushState();
@@ -94,6 +99,12 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
         {
             StopCoroutine(productionRoutine);
             productionRoutine = null;
+        }
+
+        if (energyConsumptionRoutine != null)
+        {
+            StopCoroutine(energyConsumptionRoutine);
+            energyConsumptionRoutine = null;
         }
 
         if (animator != null)
@@ -142,9 +153,6 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
 
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
             return;
-
-        if (storedOxygen > 0)
-            CollectStoredOxygen();
     }
 
     public void AssignSlot(string nextSlotId)
@@ -174,6 +182,8 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
     public void SetLevel(int nextLevel)
     {
         level = Mathf.Clamp(nextLevel, 1, 3);
+        ResolveExclamationAnchor();
+        RestartEnergyConsumption();
         RestartProduction();
         UpdateProductionAnimation();
         PushState();
@@ -192,6 +202,8 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
     {
         level = Mathf.Clamp(savedLevel, 1, 3);
         storedOxygen = Mathf.Max(0, savedStoredOxygen);
+        ResolveExclamationAnchor();
+        RestartEnergyConsumption();
         RestartProduction();
         UpdateProductionAnimation();
         UpdateExclamation();
@@ -478,6 +490,20 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
         productionRoutine = StartCoroutine(ProductionRoutine());
     }
 
+    private void RestartEnergyConsumption()
+    {
+        if (energyConsumptionRoutine != null)
+            StopCoroutine(energyConsumptionRoutine);
+
+        if (energyConsumptionInterval <= 0f || energyUsage <= 0)
+        {
+            energyConsumptionRoutine = null;
+            return;
+        }
+
+        energyConsumptionRoutine = StartCoroutine(EnergyConsumptionRoutine());
+    }
+
     private IEnumerator ProductionRoutine()
     {
         while (true)
@@ -495,9 +521,26 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
                 continue;
             }
 
-            villageManagement.TrySpendEnergy(energyUsage);
             storedOxygen += oxygenProduction;
             UpdateExclamation();
+            PushState();
+        }
+    }
+
+    private IEnumerator EnergyConsumptionRoutine()
+    {
+        while (true)
+        {
+            yield return new WaitForSeconds(energyConsumptionInterval);
+
+            VillageManagement villageManagement = VillageManagement.EnsureInstance();
+            if (villageManagement == null)
+                continue;
+
+            if (energyUsage > 0)
+                villageManagement.TrySpendEnergy(energyUsage);
+
+            UpdateProductionAnimation();
             PushState();
         }
     }
@@ -552,13 +595,52 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
         bool shouldShow = storedOxygen > 0 && exclamationPrefab != null;
         if (shouldShow && exclamationInstance == null)
         {
-            exclamationInstance = Instantiate(exclamationPrefab, transform);
+            ResolveExclamationAnchor();
+            Transform parent = exclamationAnchor != null ? exclamationAnchor : transform;
+            exclamationInstance = Instantiate(exclamationPrefab, parent);
             exclamationInstance.transform.localPosition = Vector3.zero;
+            O2Icon icon = exclamationInstance.GetComponent<O2Icon>();
+            if (icon != null)
+                icon.Bind(this);
         }
         else if (!shouldShow && exclamationInstance != null)
         {
             Destroy(exclamationInstance);
             exclamationInstance = null;
         }
+
+        if (exclamationInstance != null)
+        {
+            O2Icon icon = exclamationInstance.GetComponent<O2Icon>();
+            if (icon != null)
+                icon.Bind(this);
+        }
+    }
+
+    private void ResolveExclamationAnchor()
+    {
+        if (exclamationAnchor != null)
+            return;
+
+        exclamationAnchor = FindChildRecursive(transform, "ExclamationAnchor");
+    }
+
+    private static Transform FindChildRecursive(Transform root, string childName)
+    {
+        if (root == null || string.IsNullOrWhiteSpace(childName))
+            return null;
+
+        for (int i = 0; i < root.childCount; i++)
+        {
+            Transform child = root.GetChild(i);
+            if (child.name == childName)
+                return child;
+
+            Transform nested = FindChildRecursive(child, childName);
+            if (nested != null)
+                return nested;
+        }
+
+        return null;
     }
 }

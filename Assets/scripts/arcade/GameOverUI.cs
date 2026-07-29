@@ -15,7 +15,7 @@ public class GameOverUI : MonoBehaviour
     public Button quitButton;
 
     [Header("Score Texts")]
-    public TMP_Text cleanScoreText;   // SCORE
+    public TMP_Text cleanScoreText;   // ENERGY
     public TMP_Text o2ScoreText;      // O2
 
     [Header("Scene")]
@@ -39,7 +39,7 @@ public class GameOverUI : MonoBehaviour
         int o2 = GameData.Instance.GetO2Score();
 
         if (cleanScoreText != null)
-            cleanScoreText.text = $"SCORE: {clean}";
+            cleanScoreText.text = $"ENERGY: {clean}";
         if (o2ScoreText != null)
             o2ScoreText.text = $"O2: {o2}";
 

@@ -1014,6 +1014,7 @@ Transform:
   - {fileID: 6204842310277388611}
   - {fileID: 8850144817833876069}
   - {fileID: 8923507632571490120}
+  - {fileID: 395038191187647524}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &3323491027540906821
@@ -1056,7 +1057,7 @@ MonoBehaviour:
   itemPrefab: {fileID: 2076610737963759606, guid: dbb124373760d4778928fce88a892be1, type: 3}
   bossCustomerPointPrefab: {fileID: 5933801925397066372}
   customerPointPrefab: {fileID: 4963458673756322917}
-  energyValue: 1
+  energyValue: 5
   level1WorkTickSeconds: 6
   level2WorkTickSeconds: 3
   customerSalaryCost: 2
@@ -1068,7 +1069,10 @@ MonoBehaviour:
   ownerPatrolToPointPrefab: {fileID: 7435059761532996896}
   bottomAnchor: {fileID: 515578244743069790}
   uiAnchor: {fileID: 8923507632571490120}
-  exclamationPrefab: {fileID: 0}
+  exclamationPrefab: {fileID: 2076610737963759606, guid: dbb124373760d4778928fce88a892be1, type: 3}
+  exclamationAnchor: {fileID: 395038191187647524}
+  exclamationDuration: 0.8
+  exclamationMoveSpeed: 1.2
   salaryControlledPrefabs:
   - {fileID: 6433273009198024791}
   - {fileID: 5523517178643126439}
@@ -1135,6 +1139,37 @@ SortingGroup:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_SortAtRoot: 0
+--- !u!1 &4572036437074552280
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 395038191187647524}
+  m_Layer: 0
+  m_Name: g1 (3)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &395038191187647524
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4572036437074552280}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 1.86, y: 1.51, z: 0}
+  m_LocalScale: {x: 3.9215686, y: 3.9215686, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2758445761469616460}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &4963458673756322917
 GameObject:
   m_ObjectHideFlags: 0

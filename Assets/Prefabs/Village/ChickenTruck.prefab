@@ -660,6 +660,7 @@ Transform:
   - {fileID: 1501023619923229092}
   - {fileID: 3673011985200732119}
   - {fileID: 8322574057597476234}
+  - {fileID: 5630103132623773376}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &5470861081487404597
@@ -702,7 +703,7 @@ MonoBehaviour:
   itemPrefab: {fileID: 8302010992810163763, guid: bc0a6395bb8e04ff89985df413fb86f4, type: 3}
   bossCustomerPointPrefab: {fileID: 3851732261221024266}
   customerPointPrefab: {fileID: 8812744835345057898}
-  energyValue: 1
+  energyValue: 5
   level1WorkTickSeconds: 6
   level2WorkTickSeconds: 3
   customerSalaryCost: 2
@@ -714,7 +715,10 @@ MonoBehaviour:
   ownerPatrolToPointPrefab: {fileID: 2031285366964412413}
   bottomAnchor: {fileID: 4868616995676669370}
   uiAnchor: {fileID: 8322574057597476234}
-  exclamationPrefab: {fileID: 0}
+  exclamationPrefab: {fileID: 6381973523456147728, guid: 179dfece3a225412e93b3e82f7c07663, type: 3}
+  exclamationAnchor: {fileID: 5630103132623773376}
+  exclamationDuration: 0.8
+  exclamationMoveSpeed: 1.2
   salaryControlledPrefabs:
   - {fileID: 3740425059647588486}
   - {fileID: 2931835380964370469}
@@ -1165,6 +1169,37 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!1 &3807401190823563654
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5630103132623773376}
+  m_Layer: 0
+  m_Name: g1 (3)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5630103132623773376
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3807401190823563654}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.59, y: 1.94, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 4892140846532760611}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &3851732261221024266
 GameObject:
   m_ObjectHideFlags: 0
@@ -1253,7 +1288,7 @@ MonoBehaviour:
     m_SelectOnDown: {fileID: 0}
     m_SelectOnLeft: {fileID: 0}
     m_SelectOnRight: {fileID: 0}
-  m_Transition: 1
+  m_Transition: 0
   m_Colors:
     m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
     m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
@@ -1273,7 +1308,7 @@ MonoBehaviour:
     m_PressedTrigger: Pressed
     m_SelectedTrigger: Selected
     m_DisabledTrigger: Disabled
-  m_Interactable: 1
+  m_Interactable: 0
   m_TargetGraphic: {fileID: 0}
   m_FillRect: {fileID: 6067849623474829961}
   m_HandleRect: {fileID: 0}
@@ -1281,7 +1316,7 @@ MonoBehaviour:
   m_MinValue: 0
   m_MaxValue: 1
   m_WholeNumbers: 0
-  m_Value: 0
+  m_Value: 1
   m_OnValueChanged:
     m_PersistentCalls:
       m_Calls: []

@@ -295,6 +295,37 @@ Canvas:
   m_SortingLayerID: 0
   m_SortingOrder: 203
   m_TargetDisplay: 0
+--- !u!1 &1795624223954750825
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 9176948421673253828}
+  m_Layer: 0
+  m_Name: g1 (3)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &9176948421673253828
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1795624223954750825}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0.59, y: 1.02, z: 0}
+  m_LocalScale: {x: 3.7037034, y: 3.7037034, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7463745251529170952}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2041679133327991024
 GameObject:
   m_ObjectHideFlags: 0
@@ -852,6 +883,7 @@ Transform:
   - {fileID: 6658470234892372981}
   - {fileID: 6395980427457217313}
   - {fileID: 742644730931221643}
+  - {fileID: 9176948421673253828}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &7669706897036996230
@@ -894,7 +926,7 @@ MonoBehaviour:
   itemPrefab: {fileID: 2578425402793149651, guid: 3f435d3a8e66f49c9bb3e9f9445f2751, type: 3}
   bossCustomerPointPrefab: {fileID: 1483074412895016740}
   customerPointPrefab: {fileID: 8473069385498834791}
-  energyValue: 1
+  energyValue: 5
   level1WorkTickSeconds: 6
   level2WorkTickSeconds: 3
   customerSalaryCost: 2
@@ -906,7 +938,10 @@ MonoBehaviour:
   ownerPatrolToPointPrefab: {fileID: 7417927262664444717}
   bottomAnchor: {fileID: 7014984479747273570}
   uiAnchor: {fileID: 742644730931221643}
-  exclamationPrefab: {fileID: 0}
+  exclamationPrefab: {fileID: 6381973523456147728, guid: 179dfece3a225412e93b3e82f7c07663, type: 3}
+  exclamationAnchor: {fileID: 9176948421673253828}
+  exclamationDuration: 0.8
+  exclamationMoveSpeed: 1.2
   salaryControlledPrefabs:
   - {fileID: 3854109996024349932}
   customerPointRequiredTag: CustomerPoint

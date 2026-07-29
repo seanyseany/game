@@ -588,7 +588,7 @@ public class GameData : MonoBehaviour
 
         if (scoreUI != null)
         {
-            scoreUI.scoreText.text = $"SCORE: {GetCleanScore()}";
+            scoreUI.scoreText.text = $"ENERGY: {GetCleanScore()}";
             scoreUI.o2Text.text = $"O2: {GetO2Score()}";
         }
     }
@@ -743,6 +743,14 @@ public class GameData : MonoBehaviour
 
     public void AddO2(int amount = 1) => o2Score = Mathf.Max(0, o2Score + amount);
 
+    public void AddEnergyScore(int amount = 1)
+    {
+        if (amount <= 0)
+            return;
+
+        score = Mathf.Max(0, score + amount);
+    }
+
     public void SpendO2(int amount = 1)
     {
         if (amount <= 0)
@@ -753,8 +761,7 @@ public class GameData : MonoBehaviour
 
     public int GetCleanScore()
     {
-        int timeScore = Mathf.FloorToInt(survivalTime / 2f);
-        return timeScore + score;
+        return score;
     }
 
     public int GetO2Score() => o2Score;

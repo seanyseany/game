@@ -90,6 +90,37 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!1 &437071954024137320
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 872461948425485899}
+  m_Layer: 0
+  m_Name: g1 (3)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &872461948425485899
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 437071954024137320}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0.4, y: 1.83, z: 0}
+  m_LocalScale: {x: 3.508772, y: 3.7037034, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 6904745788464642067}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &839361933492829598
 GameObject:
   m_ObjectHideFlags: 0
@@ -1248,6 +1279,7 @@ Transform:
   - {fileID: 304830085014486372}
   - {fileID: 2780337261507439366}
   - {fileID: 6454469365276296438}
+  - {fileID: 872461948425485899}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1724990465804394592
@@ -1290,7 +1322,7 @@ MonoBehaviour:
   itemPrefab: {fileID: 517682745057696832, guid: 1a9453ffbcb594c77b1647436131db41, type: 3}
   bossCustomerPointPrefab: {fileID: 1628118444665150123}
   customerPointPrefab: {fileID: 8155330662841208764}
-  energyValue: 1
+  energyValue: 5
   level1WorkTickSeconds: 6
   level2WorkTickSeconds: 3
   customerSalaryCost: 2
@@ -1302,7 +1334,10 @@ MonoBehaviour:
   ownerPatrolToPointPrefab: {fileID: 3073761928600864037}
   bottomAnchor: {fileID: 4826179622577916490}
   uiAnchor: {fileID: 6454469365276296438}
-  exclamationPrefab: {fileID: 0}
+  exclamationPrefab: {fileID: 6381973523456147728, guid: 179dfece3a225412e93b3e82f7c07663, type: 3}
+  exclamationAnchor: {fileID: 872461948425485899}
+  exclamationDuration: 0.8
+  exclamationMoveSpeed: 1.2
   salaryControlledPrefabs:
   - {fileID: 3072481692629516511}
   - {fileID: 181601364843779159}

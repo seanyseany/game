@@ -47,6 +47,7 @@ Transform:
   - {fileID: 4607570235926426503}
   - {fileID: 8436600076502118807}
   - {fileID: 2972922043967691947}
+  - {fileID: 5877124668783266254}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1738622788499479818
@@ -89,7 +90,7 @@ MonoBehaviour:
   itemPrefab: {fileID: 1387671173567334051, guid: 81db31ab8faac4b90867836a5574d29a, type: 3}
   bossCustomerPointPrefab: {fileID: 8752142357982587261}
   customerPointPrefab: {fileID: 729632771461894932}
-  energyValue: 1
+  energyValue: 5
   level1WorkTickSeconds: 6
   level2WorkTickSeconds: 3
   customerSalaryCost: 2
@@ -101,7 +102,10 @@ MonoBehaviour:
   ownerPatrolToPointPrefab: {fileID: 3636782832457468496}
   bottomAnchor: {fileID: 7719310449105862222}
   uiAnchor: {fileID: 2972922043967691947}
-  exclamationPrefab: {fileID: 0}
+  exclamationPrefab: {fileID: 2076610737963759606, guid: dbb124373760d4778928fce88a892be1, type: 3}
+  exclamationAnchor: {fileID: 5877124668783266254}
+  exclamationDuration: 0.8
+  exclamationMoveSpeed: 1.2
   salaryControlledPrefabs:
   - {fileID: 8420100453853136253}
   - {fileID: 8488779384146427220}
@@ -860,6 +864,37 @@ Transform:
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: -1.9299994, y: -0.5199999, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 926572510320004368}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &4348170799670833619
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5877124668783266254}
+  m_Layer: 0
+  m_Name: g1 (3)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5877124668783266254
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4348170799670833619}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0.56, y: 1.02, z: 0}
+  m_LocalScale: {x: 3.9215686, y: 3.7037034, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 926572510320004368}

@@ -152,6 +152,7 @@ Transform:
   - {fileID: 499314350407911772}
   - {fileID: 3405091056517155468}
   - {fileID: 9140379455802112523}
+  - {fileID: 2432501975288844362}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &8968142192216383021
@@ -168,13 +169,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Oxygen
   oxygenId: 
   slotId: 
+  purchaseEntryId: 
   oxygenPrice: 10
   energyUsage: 1
-  oxygenProduction: 10
+  energyConsumptionInterval: 1
+  oxygenProduction: 20
   level: 2
-  exclamationPrefab: {fileID: 0}
+  exclamationPrefab: {fileID: 8413208340636897535, guid: 16f2c044f55d749cdab31e3e566e633f, type: 3}
+  exclamationAnchor: {fileID: 2432501975288844362}
   animator: {fileID: 4630639886275918396}
-  productionInterval: 10
+  productionInterval: 16
   bottomLocalPosition: {x: 0, y: -1.82}
 --- !u!61 &-6164214150112990379
 BoxCollider2D:
@@ -222,6 +226,37 @@ BoxCollider2D:
   m_AutoTiling: 0
   m_Size: {x: 6.860699, y: 4.337343}
   m_EdgeRadius: 0
+--- !u!1 &3188228135783541209
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2432501975288844362}
+  m_Layer: 0
+  m_Name: GameObject
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2432501975288844362
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3188228135783541209}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -3.71, y: 1.49, z: 0}
+  m_LocalScale: {x: 2, y: 2, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1046586799101052335}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &3491419283575845400
 GameObject:
   m_ObjectHideFlags: 0

@@ -50,6 +50,8 @@ public class Building : MonoBehaviour
     [SerializeField] private GameObject itemPrefab;
     [SerializeField] private GameObject bossCustomerPointPrefab;
     [SerializeField] private GameObject customerPointPrefab;
+    [Header("Trade Reward")]
+    [Tooltip("Amount of total energy awarded whenever this building completes a customer transaction.")]
     [SerializeField] private int energyValue = 1;
     [SerializeField] private float level1WorkTickSeconds = 5f;
     [SerializeField] private float level2WorkTickSeconds = 5f;
@@ -63,6 +65,9 @@ public class Building : MonoBehaviour
     [SerializeField] private Transform bottomAnchor;
     [SerializeField] private Transform uiAnchor;
     [SerializeField] private GameObject exclamationPrefab;
+    [SerializeField] private Transform exclamationAnchor;
+    [SerializeField] private float exclamationDuration = 0.8f;
+    [SerializeField] private float exclamationMoveSpeed = 1.2f;
     [SerializeField] private GameObject[] salaryControlledPrefabs;
     [SerializeField] private string customerPointRequiredTag = "CustomerPoint";
     [SerializeField] private Canvas salaryStatusBar;
@@ -141,6 +146,7 @@ public class Building : MonoBehaviour
     {
         ResolveBottomAnchor();
         ResolveUiAnchor();
+        ResolveExclamationAnchor();
         ResolveStatusBar();
         EnsureInteractionCollider();
         EnsureSortingGroup();
@@ -176,6 +182,7 @@ public class Building : MonoBehaviour
     {
         ResolveBottomAnchor();
         ResolveUiAnchor();
+        ResolveExclamationAnchor();
         ResolveStatusBar();
         EnsureInteractionCollider();
         EnsureSortingGroup();
@@ -183,9 +190,12 @@ public class Building : MonoBehaviour
         currentSalary = Mathf.Max(0, currentSalary);
         level1.totalSalaryCapacity = Mathf.Max(0, level1.totalSalaryCapacity);
         level2.totalSalaryCapacity = Mathf.Max(0, level2.totalSalaryCapacity);
+        energyValue = Mathf.Max(0, energyValue);
         level1WorkTickSeconds = Mathf.Max(0f, level1WorkTickSeconds);
         level2WorkTickSeconds = Mathf.Max(0f, level2WorkTickSeconds);
         customerSalaryCost = Mathf.Max(0, customerSalaryCost);
+        exclamationDuration = Mathf.Max(0.05f, exclamationDuration);
+        exclamationMoveSpeed = Mathf.Max(0f, exclamationMoveSpeed);
 
         ApplyLevelBuildingVisual();
 
@@ -467,6 +477,15 @@ public class Building : MonoBehaviour
         ConsumeSalaryForCustomer();
         serviceRunning = false;
         PromoteQueue();
+    }
+
+    public void AwardTradeEnergy()
+    {
+        VillageManagement villageManagement = VillageManagement.EnsureInstance();
+        if (villageManagement != null && energyValue > 0)
+            villageManagement.AddEnergy(energyValue);
+
+        ShowTradeExclamation();
     }
 
     public void AbortService(CustomerBlood customer)
@@ -947,6 +966,14 @@ public class Building : MonoBehaviour
             uiAnchor = FindChildRecursive(transform, "UIAnchor");
     }
 
+    private void ResolveExclamationAnchor()
+    {
+        if (exclamationAnchor != null)
+            return;
+
+        exclamationAnchor = FindChildRecursive(transform, "ExclamationAnchor");
+    }
+
     private static Transform FindChildRecursive(Transform root, string childName)
     {
         if (root == null || string.IsNullOrWhiteSpace(childName))
@@ -1081,17 +1108,26 @@ public class Building : MonoBehaviour
 
     private void UpdateExclamation()
     {
-        bool shouldShow = currentSalary <= 0 && exclamationPrefab != null;
-        if (shouldShow && exclamationInstance == null)
-        {
-            exclamationInstance = Instantiate(exclamationPrefab, transform);
-            exclamationInstance.transform.localPosition = Vector3.zero;
-        }
-        else if (!shouldShow && exclamationInstance != null)
+        if (exclamationInstance != null)
         {
             Destroy(exclamationInstance);
             exclamationInstance = null;
         }
+    }
+
+    private void ShowTradeExclamation()
+    {
+        if (exclamationPrefab == null)
+            return;
+
+        ResolveExclamationAnchor();
+        Transform anchor = exclamationAnchor != null ? exclamationAnchor : transform;
+        GameObject instance = Instantiate(exclamationPrefab, anchor.position, Quaternion.identity);
+        EnergyIcon icon = instance.GetComponent<EnergyIcon>();
+        if (icon == null)
+            icon = instance.AddComponent<EnergyIcon>();
+
+        icon.Play(exclamationDuration, exclamationMoveSpeed);
     }
 
     private void NotifyWorkStateChanged(bool previousWorking, bool notifyEntranceManagement = true)

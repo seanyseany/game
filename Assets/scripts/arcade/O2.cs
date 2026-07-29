@@ -190,7 +190,7 @@ public class O2 : MonoBehaviour, IReinitializable
         collected = true;
 
         if (grantReward && GameData.Instance != null)
-            GameData.Instance.AddO2(O2Amount);
+            GameData.Instance.AddEnergyScore(O2Amount);
 
         if (hitCollider != null)
             hitCollider.enabled = false;

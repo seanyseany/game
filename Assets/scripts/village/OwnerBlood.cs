@@ -179,9 +179,8 @@ public class OwnerBlood : MonoBehaviour
                 () => ApplyVisualState(VisualState.Walking));
         }
 
-        VillageManagement villageManagement = VillageManagement.EnsureInstance();
-        if (villageManagement != null)
-            villageManagement.AddEnergy(building.EnergyValue);
+        if (building != null)
+            building.AwardTradeEnergy();
 
         CancelCurrentService(true);
     }

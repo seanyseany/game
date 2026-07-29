@@ -2211,7 +2211,7 @@ public class Player : MonoBehaviour
             AddManaForLauncher(1);
 
             if (GameData.Instance != null)
-                GameData.Instance.AddO2(1);
+                GameData.Instance.AddEnergyScore(1);
 
             Mana mana = other.GetComponent<Mana>();
             if (mana != null)
