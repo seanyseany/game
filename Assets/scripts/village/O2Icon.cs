@@ -1,9 +1,15 @@
+using System.Collections;
 using TMPro;
 using UnityEngine;
 
 [RequireComponent(typeof(Collider2D))]
 public class O2Icon : MonoBehaviour
 {
+    private const float CollectFadeDuration = 0.7f;
+    private const float CollectMoveSpeed = 1.2f;
+    private const float FloatYOffset = 0.1f;
+    private const float FloatSpeed = 2f;
+
     [SerializeField] private TMP_Text amountText;
     [SerializeField] private int sortingOrder = 200;
 
@@ -12,10 +18,15 @@ public class O2Icon : MonoBehaviour
     private Collider2D hitCollider;
     private bool mousePressedOnIcon;
     private int activeTouchId = -1;
+    private bool isCollecting;
+    private Color baseSpriteColor = Color.white;
+    private Color baseTextColor = Color.white;
+    private Vector3 idleBaseLocalPosition;
 
     public void Bind(Oxygen oxygen)
     {
         sourceOxygen = oxygen;
+        idleBaseLocalPosition = transform.localPosition;
         Refresh();
     }
 
@@ -28,7 +39,13 @@ public class O2Icon : MonoBehaviour
             spriteRenderer = GetComponent<SpriteRenderer>();
 
         if (spriteRenderer != null)
+        {
             spriteRenderer.sortingOrder = sortingOrder;
+            baseSpriteColor = spriteRenderer.color;
+        }
+
+        if (amountText != null)
+            baseTextColor = amountText.color;
 
         hitCollider = GetComponent<Collider2D>();
         if (hitCollider == null)
@@ -42,9 +59,10 @@ public class O2Icon : MonoBehaviour
 
     private void Update()
     {
-        if (sourceOxygen == null)
+        if (isCollecting || sourceOxygen == null)
             return;
 
+        ApplyFloatingMotion();
         Refresh();
         HandleTouchInput();
         HandleMouseInput();
@@ -52,7 +70,7 @@ public class O2Icon : MonoBehaviour
 
     private void Refresh()
     {
-        if (amountText == null || sourceOxygen == null)
+        if (isCollecting || amountText == null || sourceOxygen == null)
             return;
 
         amountText.text = sourceOxygen.StoredOxygen.ToString();
@@ -128,9 +146,61 @@ public class O2Icon : MonoBehaviour
 
     private void Collect()
     {
-        if (sourceOxygen == null || sourceOxygen.StoredOxygen <= 0)
+        if (isCollecting || sourceOxygen == null || sourceOxygen.StoredOxygen <= 0)
             return;
 
-        sourceOxygen.CollectStoredOxygen();
+        isCollecting = true;
+        activeTouchId = -1;
+        mousePressedOnIcon = false;
+
+        sourceOxygen.CollectStoredOxygen(this);
+
+        if (hitCollider != null)
+            hitCollider.enabled = false;
+
+        transform.SetParent(null, true);
+        StopAllCoroutines();
+        StartCoroutine(PlayCollectAnimation());
+    }
+
+    private IEnumerator PlayCollectAnimation()
+    {
+        float elapsed = 0f;
+        Vector3 startPosition = transform.position;
+
+        while (elapsed < CollectFadeDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / CollectFadeDuration);
+
+            transform.position = startPosition + Vector3.up * (CollectMoveSpeed * elapsed);
+            ApplyAlpha(1f - t);
+            yield return null;
+        }
+
+        Destroy(gameObject);
+    }
+
+    private void ApplyFloatingMotion()
+    {
+        float offsetY = Mathf.Sin(Time.time * FloatSpeed) * FloatYOffset;
+        transform.localPosition = idleBaseLocalPosition + Vector3.up * offsetY;
+    }
+
+    private void ApplyAlpha(float alpha)
+    {
+        if (spriteRenderer != null)
+        {
+            Color color = baseSpriteColor;
+            color.a = alpha;
+            spriteRenderer.color = color;
+        }
+
+        if (amountText != null)
+        {
+            Color color = baseTextColor;
+            color.a = alpha;
+            amountText.color = color;
+        }
     }
 }

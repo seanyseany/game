@@ -209,7 +209,7 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
         UpdateExclamation();
     }
 
-    public void CollectStoredOxygen()
+    public void CollectStoredOxygen(O2Icon collectedIcon = null)
     {
         if (storedOxygen <= 0)
             return;
@@ -219,6 +219,10 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
             villageManagement.AddOxygen(storedOxygen);
 
         storedOxygen = 0;
+
+        if (collectedIcon != null && exclamationInstance == collectedIcon.gameObject)
+            exclamationInstance = null;
+
         UpdateExclamation();
         PushState();
     }
