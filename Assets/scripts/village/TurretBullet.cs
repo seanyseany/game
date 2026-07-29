@@ -6,9 +6,12 @@ using UnityEngine;
 [RequireComponent(typeof(Rigidbody2D))]
 public class TurretBullet : MonoBehaviour
 {
-    private const int AttackPower = 1;
     private const string DestroyTrigger = "destroy";
     private const float ReturnToPoolDelaySeconds = 0.2f;
+    private const float DestroyTransitionTimeoutSeconds = 0.1f;
+    private const float DestroyAnimationTimeoutSeconds = 1f;
+    private const float SpawnCollisionGraceSeconds = 0.08f;
+    private const float FloorCollisionMinTravelDistance = 0.6f;
 
     private static readonly Dictionary<int, Queue<TurretBullet>> PoolsByPrefab = new Dictionary<int, Queue<TurretBullet>>();
 
@@ -16,6 +19,7 @@ public class TurretBullet : MonoBehaviour
     [SerializeField] private int oxygenPrice30 = 3;
     [SerializeField] private int oxygenPrice60 = 6;
     [SerializeField] private int oxygenPrice100 = 10;
+    [SerializeField] [Min(1)] private int hitCount = 1;
 
     [Header("Motion")]
     [SerializeField] private float spawnSpeed = 0.5f;
@@ -28,13 +32,15 @@ public class TurretBullet : MonoBehaviour
     private Vector2 direction = Vector2.right;
     private bool returningToPool;
     private int prefabPoolKey;
+    private float collisionEnabledAt;
+    private Vector3 launchPosition;
 
     public int OxygenPrice30 => oxygenPrice30;
     public int OxygenPrice60 => oxygenPrice60;
     public int OxygenPrice100 => oxygenPrice100;
     public float SpawnSpeed => spawnSpeed;
     public float MoveSpeed => moveSpeed;
-    public int AttackPowerValue => AttackPower;
+    public int HitCount => Mathf.Max(1, hitCount);
 
     private void Awake()
     {
@@ -98,11 +104,16 @@ public class TurretBullet : MonoBehaviour
         StopAllCoroutines();
         returningToPool = false;
         direction = nextDirection.sqrMagnitude > 0.0001f ? nextDirection.normalized : Vector2.right;
+        collisionEnabledAt = Time.time + SpawnCollisionGraceSeconds;
+        launchPosition = transform.position;
         Vector3 euler = rotation.eulerAngles;
         transform.eulerAngles = new Vector3(0f, 0f, euler.z + spawnRotationOffsetZ);
 
         if (body != null)
             body.linearVelocity = direction * moveSpeed;
+
+        if (hitCollider != null)
+            hitCollider.enabled = false;
 
         if (animator != null)
         {
@@ -111,21 +122,32 @@ public class TurretBullet : MonoBehaviour
         }
     }
 
+    private void LateUpdate()
+    {
+        if (hitCollider != null && !hitCollider.enabled && Time.time >= collisionEnabledAt)
+            hitCollider.enabled = true;
+    }
+
     private void OnTriggerEnter2D(Collider2D other)
     {
-        if (returningToPool || other == null)
+        if (returningToPool || other == null || Time.time < collisionEnabledAt)
             return;
 
         Villan villan = other.GetComponent<Villan>() ?? other.GetComponentInParent<Villan>();
         if (villan != null)
         {
-            villan.TakeDamage(AttackPower);
+            villan.TakeDamage(HitCount);
             StartCoroutine(ReturnToPoolRoutine());
             return;
         }
 
         if (other.CompareTag("floor") || other.transform.CompareTag("floor"))
+        {
+            if (Vector2.Distance(transform.position, launchPosition) < FloorCollisionMinTravelDistance)
+                return;
+
             StartCoroutine(ReturnToPoolRoutine());
+        }
     }
 
     private IEnumerator ReturnToPoolRoutine()
@@ -138,10 +160,55 @@ public class TurretBullet : MonoBehaviour
             body.linearVelocity = Vector2.zero;
 
         if (animator != null)
+        {
+            AnimatorStateInfo previousState = animator.GetCurrentAnimatorStateInfo(0);
             animator.SetTrigger(DestroyTrigger);
+            yield return WaitForDestroyAnimation(previousState);
+        }
+        else
+        {
+            yield return new WaitForSeconds(ReturnToPoolDelaySeconds);
+        }
+        ReturnToPool();
+    }
+
+    private IEnumerator WaitForDestroyAnimation(AnimatorStateInfo previousState)
+    {
+        float elapsed = 0f;
+        while (elapsed < DestroyTransitionTimeoutSeconds)
+        {
+            if (animator == null)
+                yield break;
+
+            if (animator.IsInTransition(0))
+                break;
+
+            AnimatorStateInfo currentState = animator.GetCurrentAnimatorStateInfo(0);
+            if (currentState.fullPathHash != previousState.fullPathHash)
+                break;
+
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        elapsed = 0f;
+        while (elapsed < DestroyAnimationTimeoutSeconds)
+        {
+            if (animator == null)
+                yield break;
+
+            if (!animator.IsInTransition(0))
+            {
+                AnimatorStateInfo currentState = animator.GetCurrentAnimatorStateInfo(0);
+                if (currentState.fullPathHash != previousState.fullPathHash && currentState.normalizedTime >= 1f)
+                    yield break;
+            }
+
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
 
         yield return new WaitForSeconds(ReturnToPoolDelaySeconds);
-        ReturnToPool();
     }
 
     private void ReturnToPool()
@@ -151,6 +218,9 @@ public class TurretBullet : MonoBehaviour
             pool = new Queue<TurretBullet>();
             PoolsByPrefab.Add(prefabPoolKey, pool);
         }
+
+        if (hitCollider != null)
+            hitCollider.enabled = true;
 
         gameObject.SetActive(false);
         pool.Enqueue(this);

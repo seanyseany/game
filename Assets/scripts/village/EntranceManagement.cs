@@ -12,6 +12,7 @@ public class EntranceManagement : MonoBehaviour
         public float score;
         public int remaining;
         public float exactShare;
+        public float fractionalShare;
         public bool usesFallbackScore;
     }
 
@@ -198,34 +199,52 @@ public class EntranceManagement : MonoBehaviour
 
             allocation.exactShare = (allocation.score / totalScore) * totalAvailable;
             allocation.remaining = Mathf.FloorToInt(allocation.exactShare);
+            allocation.fractionalShare = allocation.exactShare - allocation.remaining;
             positiveScores.Add(allocation);
             assigned += allocation.remaining;
         }
 
         if (positiveScores.Count == 1 && totalAvailable > 0)
         {
-            positiveScores[0].remaining = Mathf.Max(1, positiveScores[0].remaining);
-        }
-        else
-        {
-            for (int i = 0; i < positiveScores.Count && assigned < totalAvailable; i++)
-            {
-                WayAllocation allocation = positiveScores[i];
-                if (allocation.remaining == 0)
-                {
-                    allocation.remaining = 1;
-                    assigned++;
-                }
-            }
+            positiveScores[0].remaining = totalAvailable;
+            return;
         }
 
         int remainder = Mathf.Max(0, totalAvailable - assigned);
         while (remainder > 0 && positiveScores.Count > 0)
         {
-            WayAllocation bonusAllocation = positiveScores[Random.Range(0, positiveScores.Count)];
+            WayAllocation bonusAllocation = ChooseAllocationByFractionalShare(positiveScores);
+            if (bonusAllocation == null)
+                bonusAllocation = positiveScores[Random.Range(0, positiveScores.Count)];
+
             bonusAllocation.remaining++;
+            bonusAllocation.fractionalShare = 0f;
             remainder--;
         }
+    }
+
+    private static WayAllocation ChooseAllocationByFractionalShare(List<WayAllocation> allocations)
+    {
+        if (allocations == null || allocations.Count == 0)
+            return null;
+
+        float totalFraction = 0f;
+        for (int i = 0; i < allocations.Count; i++)
+            totalFraction += Mathf.Max(0f, allocations[i].fractionalShare);
+
+        if (totalFraction <= 0f)
+            return null;
+
+        float pick = Random.Range(0f, totalFraction);
+        float cumulative = 0f;
+        for (int i = 0; i < allocations.Count; i++)
+        {
+            cumulative += Mathf.Max(0f, allocations[i].fractionalShare);
+            if (pick <= cumulative)
+                return allocations[i];
+        }
+
+        return allocations[allocations.Count - 1];
     }
 
     private bool HasRemainingAllocation()

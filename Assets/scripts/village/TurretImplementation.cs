@@ -43,6 +43,7 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
     private TurretImplementation dragOriginSlot;
     private Vector3 dragOriginWorldPosition;
     private float pointerDownStartedAt = -1f;
+    private bool tapPending;
     private bool pointerHeld;
     private bool isDragging;
     private float lastDragFinishedAt = -1f;
@@ -51,7 +52,7 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
     private int draggedTurretOriginalSortingOrder;
     private Vector3 draggedTurretOriginalScale = Vector3.one;
 
-    public string SlotId => slotId;
+    public string SlotId => GetResolvedSlotId();
     public BaseTurret CurrentTurret
     {
         get
@@ -69,7 +70,6 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
             return currentTurret != null ? Mathf.Max(0, currentTurret.Level) : 0;
         }
     }
-
     public void ConfigureRuntimeSlot(string nextSlotId, Vector2 nextPlaceLocalPosition)
     {
         slotId = nextSlotId;
@@ -78,6 +78,7 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
     private void Awake()
     {
+        EnsureSlotId();
         SyncCurrentTurretFromChildren();
         EnsureInteractionCollider();
         EnsurePointerForwarders();
@@ -106,7 +107,12 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
     private void Update()
     {
         if ((pointerHeld || isDragging) && !IsPointerStillPressed())
+        {
+            if (tapPending && !isDragging)
+                TryOpenUiFromTap();
+
             ReleasePointerHold();
+        }
 
         if (pointerHeld && !isDragging && Time.unscaledTime - pointerDownStartedAt >= HoldDurationSeconds)
             BeginDrag();
@@ -122,12 +128,13 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
     private void OnMouseUp()
     {
+        TryOpenUiFromTap();
         HandleColliderPointerUp();
     }
 
     private void OnMouseUpAsButton()
     {
-        HandleColliderPointerUpAsButton();
+        TryOpenUiFromTap();
     }
 
     public void HandleColliderPointerDown()
@@ -137,6 +144,7 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
         VillagePointerCapture.Acquire(this);
         pointerHeld = true;
+        tapPending = true;
         pointerDownStartedAt = Time.unscaledTime;
         dragOriginSlot = this;
         dragOriginWorldPosition = currentTurret != null ? currentTurret.transform.position : transform.position;
@@ -161,6 +169,27 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
         else
             OpenTurretUI();
     }
+
+    private void TryOpenUiFromTap()
+    {
+        if (!tapPending)
+            return;
+
+        if (isDragging || Time.unscaledTime - lastDragFinishedAt < 0.1f)
+            return;
+
+        if (Time.unscaledTime - pointerDownStartedAt >= HoldDurationSeconds)
+            return;
+
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+            return;
+
+        if (currentTurret == null)
+            OpenList();
+        else
+            OpenTurretUI();
+    }
+
 
     public void TryInstall(BaseTurret turretPrefab, bool ownedAlready)
     {
@@ -209,7 +238,7 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
         if (!VillageManagement.Instance.TrySpendOxygen(upgradePrefab.CurrentOxygenPrice))
             return;
 
-        ReplaceTurret(upgradePrefab, upgradePrefab.Level, true);
+        ReplaceTurret(upgradePrefab, upgradePrefab.Level, false);
         turretUI?.Open(this, currentTurret);
     }
 
@@ -222,7 +251,7 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
         if (targetLevel != currentTurret.Level + 1)
             return false;
 
-        ReplaceTurret(upgradePrefab, targetLevel, true);
+        ReplaceTurret(upgradePrefab, targetLevel, false);
         turretListUI?.Close();
         turretUI?.Close();
         return true;
@@ -238,9 +267,60 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
         VillageManagement villageManagement = VillageManagement.EnsureInstance();
         if (villageManagement != null)
-            villageManagement.RemoveTurretState(slotId);
+            villageManagement.RemoveTurretState(SlotId);
 
         turretUI?.Close();
+    }
+
+    public void PrepareForRestore()
+    {
+        if (currentTurret != null)
+            Destroy(currentTurret.gameObject);
+
+        currentTurret = null;
+        draggedTurret = null;
+        pointerHeld = false;
+        isDragging = false;
+        tapPending = false;
+        pointerDownStartedAt = -1f;
+    }
+
+    public bool RestoreFromState(VillageManagement.TurretState state, BaseTurret fallbackPrefab)
+    {
+        if (state == null || fallbackPrefab == null)
+            return false;
+
+        EnsureSlotId();
+
+        if (!string.Equals(state.slotId, SlotId, System.StringComparison.Ordinal))
+            return false;
+
+        ReplaceTurret(fallbackPrefab, Mathf.Max(1, state.level), false, false);
+        EnsureCurrentTurretReference();
+        if (currentTurret == null)
+            return false;
+
+        currentTurret.ApplySavedState(state.level, state.currentAmmo, state.maxAmmo);
+        initialScale = currentTurret.transform.localScale;
+        return true;
+    }
+
+    public bool TryReapplySavedState(VillageManagement.TurretState state)
+    {
+        if (state == null)
+            return false;
+
+        EnsureSlotId();
+        EnsureCurrentTurretReference();
+        if (currentTurret == null)
+            return false;
+
+        if (!string.Equals(state.slotId, SlotId, System.StringComparison.Ordinal))
+            return false;
+
+        currentTurret.ApplySavedState(state.level, state.currentAmmo, state.maxAmmo);
+        initialScale = currentTurret.transform.localScale;
+        return true;
     }
 
     private void OpenList()
@@ -254,35 +334,37 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
     private void OpenTurretUI()
     {
         if (turretUI == null)
-            turretUI = TurretUI.Instance != null ? TurretUI.Instance : FindFirstObjectByType<TurretUI>();
+            turretUI = TurretUI.EnsureInstance();
         if (turretUI != null)
             turretUI.Open(this, currentTurret);
     }
 
-    private void PlaceTurret(BaseTurret prefab, int level, bool keepAmmoRatio)
+    private void PlaceTurret(BaseTurret prefab, int level, bool keepAmmoRatio, bool initializeAmmoState = true)
     {
         currentTurret = Instantiate(prefab, transform);
-        currentTurret.AssignSlot(slotId);
+        currentTurret.AssignSlot(SlotId);
         currentTurret.transform.localPosition = new Vector3(
             placeLocalPosition.x - currentTurret.BottomLocalPosition.x,
             placeLocalPosition.y - currentTurret.BottomLocalPosition.y,
             0f);
         ConfigureTurretRange(currentTurret);
-        currentTurret.ApplyLevel(level, keepAmmoRatio);
+        if (initializeAmmoState)
+            currentTurret.ApplyLevel(level, keepAmmoRatio);
         currentTurret.SetPlacementMirrored(ShouldMirrorPlacedTurret());
-        currentTurret.PushState();
+        if (initializeAmmoState)
+            currentTurret.PushState();
         initialScale = currentTurret.transform.localScale;
         SyncCurrentTurretFromChildren();
         EnsurePointerForwarders();
     }
 
-    private void ReplaceTurret(BaseTurret prefab, int level, bool keepAmmoRatio)
+    private void ReplaceTurret(BaseTurret prefab, int level, bool keepAmmoRatio, bool initializeAmmoState = true)
     {
         if (currentTurret != null)
             Destroy(currentTurret.gameObject);
 
         currentTurret = null;
-        PlaceTurret(GetPrefabForLevel(level, prefab), level, keepAmmoRatio);
+        PlaceTurret(GetPrefabForLevel(level, prefab), level, keepAmmoRatio, initializeAmmoState);
     }
 
     private BaseTurret GetPrefabForLevel(int level, BaseTurret fallback)
@@ -302,6 +384,7 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
         if (isDragging || currentTurret == null)
             return;
 
+        tapPending = false;
         if (turretListUI != null)
             turretListUI.Close();
         if (turretUI != null)
@@ -414,6 +497,7 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
         bool wasDragging = isDragging;
         pointerHeld = false;
         pointerDownStartedAt = -1f;
+        tapPending = false;
         if (wasDragging)
             FinishDrag();
     }
@@ -424,6 +508,7 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
         pointerHeld = false;
         isDragging = false;
         pointerDownStartedAt = -1f;
+        tapPending = false;
         dragOriginSlot = null;
         draggedTurret = null;
     }
@@ -442,8 +527,8 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
         if (removeState)
         {
             VillageManagement villageManagement = VillageManagement.EnsureInstance();
-            if (villageManagement != null && !string.IsNullOrWhiteSpace(slotId))
-                villageManagement.RemoveTurretState(slotId);
+            if (villageManagement != null && !string.IsNullOrWhiteSpace(SlotId))
+                villageManagement.RemoveTurretState(SlotId);
         }
     }
 
@@ -457,8 +542,8 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
         detachedTurret.transform.SetParent(null, true);
 
         VillageManagement villageManagement = VillageManagement.EnsureInstance();
-        if (villageManagement != null && !string.IsNullOrWhiteSpace(slotId))
-            villageManagement.RemoveTurretState(slotId);
+        if (villageManagement != null && !string.IsNullOrWhiteSpace(SlotId))
+            villageManagement.RemoveTurretState(SlotId);
 
         return detachedTurret;
     }
@@ -470,7 +555,7 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
         currentTurret = turret;
         currentTurret.transform.SetParent(transform, false);
-        currentTurret.AssignSlot(slotId);
+        currentTurret.AssignSlot(SlotId);
         currentTurret.transform.localPosition = new Vector3(
             placeLocalPosition.x - currentTurret.BottomLocalPosition.x,
             placeLocalPosition.y - currentTurret.BottomLocalPosition.y,
@@ -509,6 +594,39 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
     {
         Path path = GetComponent<Path>();
         return path != null && path.RotatePlacedPrefab180;
+    }
+
+    private void EnsureSlotId()
+    {
+        if (!string.IsNullOrWhiteSpace(slotId))
+            return;
+
+        slotId = BuildStableSlotId();
+    }
+
+    private string GetResolvedSlotId()
+    {
+        EnsureSlotId();
+        return slotId;
+    }
+
+    private string BuildStableSlotId()
+    {
+        System.Text.StringBuilder builder = new System.Text.StringBuilder("turret_slot:");
+        Transform current = transform;
+        while (current != null)
+        {
+            builder.Append(current.name);
+            builder.Append('[');
+            builder.Append(current.GetSiblingIndex());
+            builder.Append(']');
+
+            current = current.parent;
+            if (current != null)
+                builder.Append('/');
+        }
+
+        return builder.ToString();
     }
 
     public bool IsEmptySlot => currentTurret == null;

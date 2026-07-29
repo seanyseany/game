@@ -11,6 +11,7 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
 
     [SerializeField] private string oxygenId;
     [SerializeField] private string slotId;
+    [SerializeField] private string purchaseEntryId;
     [SerializeField] private int oxygenPrice = 10;
     [SerializeField] private int energyUsage = 1;
     [SerializeField] private int oxygenProduction = 10;
@@ -38,8 +39,11 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
     private int originalSortingOrder;
     public string OxygenId => oxygenId;
     public string CatalogId => ShopIdentityUtility.GetStableId(oxygenId, this);
+    public string ShopFamilyId => BuildShopFamilyId(oxygenId, name);
+    public string PurchaseEntryId => purchaseEntryId;
     public string SlotId => slotId;
     public int Level => level;
+    public int StoredOxygen => storedOxygen;
     public int CurrentOxygenPrice => oxygenPrice;
     public int CurrentEnergyUsage => energyUsage;
     public int OxygenProduction => oxygenProduction;
@@ -148,6 +152,11 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
         slotId = nextSlotId;
     }
 
+    public void AssignPurchaseEntryId(string nextPurchaseEntryId)
+    {
+        purchaseEntryId = nextPurchaseEntryId;
+    }
+
     public void BindWayOilSlot(WayOil wayOil, int slotIndex)
     {
         currentWayOil = wayOil;
@@ -211,12 +220,43 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
         villageManagement.UpsertOxygenGeneratorState(new VillageManagement.OxygenGeneratorState
         {
             slotId = slotId,
-            oxygenId = CatalogId,
+            oxygenId = ShopFamilyId,
+            purchaseEntryId = purchaseEntryId,
             level = level,
             isPlaced = true,
             isProducing = CanProduce(villageManagement),
             storedOxygen = storedOxygen
         });
+    }
+
+    public static string BuildShopFamilyId(string explicitId, string objectName)
+    {
+        if (!string.IsNullOrWhiteSpace(explicitId))
+            return explicitId.Trim();
+
+        string trimmed = string.IsNullOrWhiteSpace(objectName) ? string.Empty : objectName.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return string.Empty;
+
+        string withoutClone = trimmed.Replace("(Clone)", string.Empty).Trim();
+        string[] suffixes =
+        {
+            "_L1", "_L2", "_L3",
+            "-L1", "-L2", "-L3",
+            " L1", " L2", " L3",
+            "_Level1", "_Level2", "_Level3",
+            "-Level1", "-Level2", "-Level3",
+            " Level1", " Level2", " Level3"
+        };
+
+        for (int i = 0; i < suffixes.Length; i++)
+        {
+            string suffix = suffixes[i];
+            if (withoutClone.EndsWith(suffix, System.StringComparison.OrdinalIgnoreCase))
+                return withoutClone.Substring(0, withoutClone.Length - suffix.Length).Trim();
+        }
+
+        return withoutClone;
     }
 
     private bool CanStartPointerInteraction()

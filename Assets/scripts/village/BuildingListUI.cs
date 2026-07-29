@@ -92,6 +92,23 @@ public class BuildingListUI : ShopSectionUI
         entries.Sort((left, right) => string.Compare(left.displayName, right.displayName, StringComparison.Ordinal));
     }
 
+    public Building ResolveBuildingPrefab(string buildingId)
+    {
+        if (string.IsNullOrWhiteSpace(buildingId))
+            return null;
+
+        RefreshCatalog();
+        for (int i = 0; i < entries.Count; i++)
+        {
+            BuildingCatalogEntry entry = entries[i];
+            if (entry?.prefab != null &&
+                string.Equals(entry.prefab.BuildingId, buildingId, StringComparison.Ordinal))
+                return entry.prefab;
+        }
+
+        return null;
+    }
+
     private GameObject BuildRoot(RectTransform parent)
     {
         Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
@@ -437,6 +454,35 @@ public class BuildingListUI : ShopSectionUI
                 hasLevel2Construction = true;
             else
                 hasLevel1Construction = true;
+        }
+
+        VillageManagement villageManagement = VillageManagement.Instance;
+        if (villageManagement != null)
+        {
+            IReadOnlyList<VillageManagement.BuildingState> savedBuildings = villageManagement.Buildings;
+            for (int i = 0; i < savedBuildings.Count; i++)
+            {
+                VillageManagement.BuildingState state = savedBuildings[i];
+                if (state == null || !string.Equals(state.buildingId, buildingId, StringComparison.Ordinal))
+                    continue;
+
+                if (state.underConstruction)
+                {
+                    if (state.level >= 2)
+                        hasLevel2Construction = true;
+                    else
+                        hasLevel1Construction = true;
+                    continue;
+                }
+
+                if (!state.isPlaced)
+                    continue;
+
+                if (state.level >= 2)
+                    hasLevel2Placed = true;
+                else
+                    hasLevel1Placed = true;
+            }
         }
 
         if (hasLevel2Placed)

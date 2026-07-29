@@ -34,6 +34,7 @@ public class Play : MonoBehaviour
     private bool uiBuilt;
     private int selectedSceneIndex;
     private int selectedPlayerType = -1;
+    private bool sceneTransitionInProgress;
 
     private void Awake()
     {
@@ -43,6 +44,7 @@ public class Play : MonoBehaviour
         if (openButton != null)
             openButton.onClick.AddListener(OpenPlayMenu);
 
+        LoadSavedSelection();
         BuildUiIfNeeded();
         RefreshSceneButtons();
         RefreshPlayerButtons();
@@ -84,11 +86,15 @@ public class Play : MonoBehaviour
 
         villageManagement.SaveDataChanged -= HandleSaveDataChanged;
         villageManagement.SaveDataChanged += HandleSaveDataChanged;
+        LoadSavedSelection();
+        RefreshSceneButtons();
         RefreshPlayerButtons();
     }
 
-    private void HandleSaveDataChanged(VillageManagement.VillageSaveData _)
+    private void HandleSaveDataChanged(VillageManagement.VillageSaveData saveData)
     {
+        ApplySavedSelection(saveData);
+        RefreshSceneButtons();
         RefreshPlayerButtons();
     }
 
@@ -232,6 +238,7 @@ public class Play : MonoBehaviour
             button.onClick.AddListener(() =>
             {
                 selectedSceneIndex = sceneIndex;
+                SaveSelectedScene();
                 RefreshSceneButtons();
             });
 
@@ -285,7 +292,10 @@ public class Play : MonoBehaviour
         }
 
         if (!selectedPlayerStillAvailable)
+        {
             selectedPlayerType = hasPlayers ? availablePlayers[0].playerType : -1;
+            SaveSelectedPlayer();
+        }
 
         if (emptyPlayersText != null)
             emptyPlayersText.gameObject.SetActive(!hasPlayers);
@@ -337,6 +347,7 @@ public class Play : MonoBehaviour
             button.onClick.AddListener(() =>
             {
                 selectedPlayerType = playerType;
+                SaveSelectedPlayer();
                 RefreshPlayerButtons();
             });
             playerButtons.Add(button);
@@ -366,7 +377,7 @@ public class Play : MonoBehaviour
 
     private void StartSelectedArcade()
     {
-        if (selectedPlayerType <= 0)
+        if (selectedPlayerType <= 0 || sceneTransitionInProgress)
             return;
 
         StartArcade(selectedPlayerType);
@@ -381,6 +392,9 @@ public class Play : MonoBehaviour
         if (villageManagement == null || !villageManagement.IsArcadePlayerAvailable(playerType))
             return;
 
+        SaveSelectedScene();
+        SaveSelectedPlayer();
+
         GameData gameData = EnsureGameData();
         if (gameData != null)
             gameData.PrepareForSceneTransition();
@@ -393,8 +407,24 @@ public class Play : MonoBehaviour
             return;
         }
 
+        StartCoroutine(LoadArcadeAfterSaveDelay(sceneName));
+    }
+
+    private System.Collections.IEnumerator LoadArcadeAfterSaveDelay(string sceneName)
+    {
+        sceneTransitionInProgress = true;
+        if (playButton != null)
+            playButton.interactable = false;
+
         VillageCameraScroller.ResetActiveToDefaultPosition();
         ClosePlayMenu();
+
+        yield return new WaitForSecondsRealtime(2f);
+
+        VillageManagement villageManagement = VillageManagement.Instance;
+        if (villageManagement != null)
+            villageManagement.FlushPendingSaveNow();
+
         SceneManager.LoadScene(sceneName, LoadSceneMode.Single);
     }
 
@@ -488,5 +518,33 @@ public class Play : MonoBehaviour
         rect.SetParent(parent, false);
         rect.localScale = Vector3.one;
         return gameObject;
+    }
+
+    private void LoadSavedSelection()
+    {
+        ApplySavedSelection(VillageManagement.Instance != null ? VillageManagement.Instance.SaveData : null);
+    }
+
+    private void ApplySavedSelection(VillageManagement.VillageSaveData saveData)
+    {
+        if (saveData == null)
+            return;
+
+        selectedSceneIndex = Mathf.Max(0, saveData.selectedArcadeSceneIndex);
+        selectedPlayerType = saveData.selectedArcadePlayerType;
+    }
+
+    private void SaveSelectedScene()
+    {
+        VillageManagement villageManagement = VillageManagement.Instance;
+        if (villageManagement != null)
+            villageManagement.SetSelectedArcadeSceneIndex(selectedSceneIndex);
+    }
+
+    private void SaveSelectedPlayer()
+    {
+        VillageManagement villageManagement = VillageManagement.Instance;
+        if (villageManagement != null)
+            villageManagement.SetSelectedArcadePlayerType(selectedPlayerType);
     }
 }

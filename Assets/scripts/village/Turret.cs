@@ -4,17 +4,31 @@ using UnityEngine;
 
 public class Turret : BaseTurret
 {
+    [System.Serializable]
+    private class LauncherEntry
+    {
+        public Transform launcher;
+        public Transform bulletSpawnPoint;
+        public float extraInterval;
+        public float recoilDistance = 0.1f;
+        public float recoilSpeed = 6f;
+
+        [HideInInspector] public Vector3 originalLocalPosition;
+        [HideInInspector] public bool poseCached;
+        [HideInInspector] public float currentRecoilOffset;
+    }
+
     private const float IdleSwingAmplitude = 0.3f;
     private const float IdleSwingBaseOffset = 0.5f;
     private const float IdleSwingSpeed = 1.5f;
     private const float LineRangeThickness = 0.75f;
-    private const float RotationDegreesPerSecond = 360f;
+    private const float RotationDegreesPerSecond = 180f;
 
     [Header("Rig")]
     [SerializeField] private Transform centerPoint;
     [SerializeField] private Transform endPoint;
-    [SerializeField] private List<Transform> bulletSpawnPoints = new List<Transform>();
-    [SerializeField] private List<float> bulletSpawnPointExtraIntervals = new List<float>();
+    [SerializeField] private Transform uiAnchor;
+    [SerializeField] private List<LauncherEntry> launchers = new List<LauncherEntry>();
 
     [Header("Bullet")]
     [SerializeField] private GameObject bulletPrefab;
@@ -32,30 +46,46 @@ public class Turret : BaseTurret
     private Vector2 targetRangeMinLocal = new Vector2(-3f, -2f);
     private Vector2 targetRangeMaxLocal = new Vector2(3f, 2f);
     private bool poseCached;
-    private int nextSpawnPointIndex;
     private float currentRotationAngle;
+    private Vector3 uiAnchorOriginalLocalPosition;
+    private bool uiAnchorPoseCached;
+
+    [HideInInspector] [SerializeField] private List<Transform> legacyBulletSpawnPoints = new List<Transform>();
+    [HideInInspector] [SerializeField] private List<float> legacyBulletSpawnPointExtraIntervals = new List<float>();
+
+    public Transform UiAnchor => uiAnchor != null ? uiAnchor : transform;
 
     protected override void Start()
     {
+        ResolveUiAnchor();
         ApplyInspectorAmmoCapacity();
         base.Start();
         CacheOriginalPose();
+        CacheLauncherPoses();
         CacheReloadAnimators();
         StopReloadAnimation();
     }
 
     private void OnValidate()
     {
+        UpgradeLegacyLauncherData();
+        ResolveUiAnchor();
         ApplyInspectorAmmoCapacity();
+        CacheLauncherPoses();
+        EditorValidateStatusBar();
     }
 
     private void Update()
     {
-        if (transform.parent == null)
+        if (!IsInstalled())
+        {
+            StopFiringImmediately();
             return;
+        }
 
         UpdateTarget();
         UpdateRotation();
+        UpdateLauncherRecoil();
         UpdateFiringState();
     }
 
@@ -68,6 +98,77 @@ public class Turret : BaseTurret
         }
 
         StopReloadAnimation();
+    }
+
+    private void UpgradeLegacyLauncherData()
+    {
+        if (launchers.Count > 0 || legacyBulletSpawnPoints.Count == 0)
+            return;
+
+        for (int i = 0; i < legacyBulletSpawnPoints.Count; i++)
+        {
+            Transform spawnPoint = legacyBulletSpawnPoints[i];
+            if (spawnPoint == null)
+                continue;
+
+            LauncherEntry entry = new LauncherEntry
+            {
+                bulletSpawnPoint = spawnPoint,
+                launcher = spawnPoint.parent,
+                extraInterval = i < legacyBulletSpawnPointExtraIntervals.Count ? legacyBulletSpawnPointExtraIntervals[i] : 0f
+            };
+            launchers.Add(entry);
+        }
+    }
+
+    private void ResolveUiAnchor()
+    {
+        if (uiAnchor != null)
+            return;
+
+        uiAnchor = FindChildRecursive(transform, "UiAnchor");
+        if (uiAnchor == null)
+            uiAnchor = FindChildRecursive(transform, "UIAnchor");
+    }
+
+    private void CacheUiAnchorPose()
+    {
+        if (uiAnchor == null || uiAnchorPoseCached)
+            return;
+
+        uiAnchorOriginalLocalPosition = uiAnchor.localPosition;
+        uiAnchorPoseCached = true;
+    }
+
+    protected override void HandlePlacementMirrorChanged(bool mirrored)
+    {
+        ResolveUiAnchor();
+        CacheUiAnchorPose();
+        if (uiAnchor == null)
+            return;
+
+        Vector3 localPosition = uiAnchorOriginalLocalPosition;
+        localPosition.x = mirrored ? -Mathf.Abs(localPosition.x) : Mathf.Abs(localPosition.x);
+        uiAnchor.localPosition = localPosition;
+    }
+
+    private static Transform FindChildRecursive(Transform root, string childName)
+    {
+        if (root == null || string.IsNullOrWhiteSpace(childName))
+            return null;
+
+        for (int i = 0; i < root.childCount; i++)
+        {
+            Transform child = root.GetChild(i);
+            if (child.name == childName)
+                return child;
+
+            Transform nested = FindChildRecursive(child, childName);
+            if (nested != null)
+                return nested;
+        }
+
+        return null;
     }
 
     private void ApplyInspectorAmmoCapacity()
@@ -109,37 +210,38 @@ public class Turret : BaseTurret
     {
         Dictionary<int, float> nextFireTimes = new Dictionary<int, float>();
 
-        while (currentTarget != null && HasAmmo())
+        while (IsInstalled() && currentTarget != null && HasAmmo())
         {
             TurretBullet currentBulletPrefab = GetBulletPrefab();
             if (currentBulletPrefab == null)
                 break;
 
-            List<int> activeSpawnPointIndices = GetActiveSpawnPointIndices();
-            if (activeSpawnPointIndices.Count == 0)
+            List<int> activeLauncherIndices = GetActiveLauncherIndices();
+            if (activeLauncherIndices.Count == 0)
                 break;
 
             bool firedThisFrame = false;
             float now = Time.time;
 
-            for (int i = 0; i < activeSpawnPointIndices.Count; i++)
+            for (int i = 0; i < activeLauncherIndices.Count; i++)
             {
                 if (!HasAmmo())
                     break;
 
-                int spawnPointIndex = activeSpawnPointIndices[i];
-                Transform spawnPoint = bulletSpawnPoints[spawnPointIndex];
-                if (spawnPoint == null)
+                int launcherIndex = activeLauncherIndices[i];
+                LauncherEntry launcherEntry = launchers[launcherIndex];
+                if (launcherEntry == null || launcherEntry.bulletSpawnPoint == null)
                     continue;
 
-                if (!nextFireTimes.TryGetValue(spawnPointIndex, out float nextFireTime))
+                if (!nextFireTimes.TryGetValue(launcherIndex, out float nextFireTime))
                     nextFireTime = now;
 
                 if (now < nextFireTime)
                     continue;
 
-                SpawnBullet(currentBulletPrefab, spawnPoint);
-                nextFireTimes[spawnPointIndex] = now + GetSpawnInterval() + GetSpawnPointExtraInterval(spawnPointIndex);
+                SpawnBullet(currentBulletPrefab, launcherEntry.bulletSpawnPoint);
+                TriggerLauncherRecoil(launcherEntry);
+                nextFireTimes[launcherIndex] = now + GetSpawnInterval() + Mathf.Max(0f, launcherEntry.extraInterval);
                 firedThisFrame = true;
             }
 
@@ -151,6 +253,23 @@ public class Turret : BaseTurret
 
         StopReloadAnimation();
         firingRoutine = null;
+    }
+
+    private bool IsInstalled()
+    {
+        return transform.parent != null && transform.parent.GetComponent<TurretImplementation>() != null;
+    }
+
+    private void StopFiringImmediately()
+    {
+        currentTarget = null;
+        if (firingRoutine != null)
+        {
+            StopCoroutine(firingRoutine);
+            firingRoutine = null;
+        }
+
+        StopReloadAnimation();
     }
 
     private void UpdateTarget()
@@ -236,16 +355,7 @@ public class Turret : BaseTurret
         if (!poseCached)
             CacheOriginalPose();
 
-        Vector3 desiredWorldTarget;
-        if (currentTarget == null)
-        {
-            desiredWorldTarget = GetIdleWorldTarget();
-        }
-        else
-        {
-            desiredWorldTarget = currentTarget.AimTarget.position;
-        }
-
+        Vector3 desiredWorldTarget = currentTarget != null ? currentTarget.AimTarget.position : GetIdleWorldTarget();
         ApplySmoothedRotation(desiredWorldTarget);
     }
 
@@ -256,12 +366,12 @@ public class Turret : BaseTurret
 
         RestoreOriginalPose();
 
-        Vector2 currentDirection = endPoint.position - centerPoint.position;
+        Vector2 baseDirection = endPoint.position - centerPoint.position;
         Vector2 desiredDirection = worldTarget - centerPoint.position;
-        if (currentDirection.sqrMagnitude < 0.0001f || desiredDirection.sqrMagnitude < 0.0001f)
+        if (baseDirection.sqrMagnitude < 0.0001f || desiredDirection.sqrMagnitude < 0.0001f)
             return;
 
-        float desiredAngle = Vector2.SignedAngle(currentDirection, desiredDirection);
+        float desiredAngle = Vector2.SignedAngle(baseDirection, desiredDirection);
         currentRotationAngle = Mathf.MoveTowardsAngle(currentRotationAngle, desiredAngle, RotationDegreesPerSecond * Time.deltaTime);
         transform.RotateAround(centerPoint.position, Vector3.forward, currentRotationAngle);
     }
@@ -286,27 +396,68 @@ public class Turret : BaseTurret
 
     private bool HasSpawnPoint()
     {
-        return GetActiveSpawnPointIndices().Count > 0;
+        return GetActiveLauncherIndices().Count > 0;
     }
 
-    private List<int> GetActiveSpawnPointIndices()
+    private List<int> GetActiveLauncherIndices()
     {
-        List<int> activeSpawnPointIndices = new List<int>();
-        for (int i = 0; i < bulletSpawnPoints.Count; i++)
+        List<int> activeLauncherIndices = new List<int>();
+        for (int i = 0; i < launchers.Count; i++)
         {
-            if (bulletSpawnPoints[i] != null)
-                activeSpawnPointIndices.Add(i);
+            LauncherEntry entry = launchers[i];
+            if (entry != null && entry.bulletSpawnPoint != null)
+                activeLauncherIndices.Add(i);
         }
 
-        return activeSpawnPointIndices;
+        return activeLauncherIndices;
     }
 
-    private float GetSpawnPointExtraInterval(int spawnPointIndex)
+    private void CacheLauncherPoses()
     {
-        if (spawnPointIndex < 0 || spawnPointIndex >= bulletSpawnPointExtraIntervals.Count)
-            return 0f;
+        for (int i = 0; i < launchers.Count; i++)
+        {
+            LauncherEntry entry = launchers[i];
+            if (entry == null || entry.launcher == null)
+                continue;
 
-        return Mathf.Max(0f, bulletSpawnPointExtraIntervals[spawnPointIndex]);
+            entry.originalLocalPosition = entry.launcher.localPosition;
+            entry.poseCached = true;
+        }
+    }
+
+    private void TriggerLauncherRecoil(LauncherEntry entry)
+    {
+        if (entry == null || entry.launcher == null)
+            return;
+
+        if (!entry.poseCached)
+        {
+            entry.originalLocalPosition = entry.launcher.localPosition;
+            entry.poseCached = true;
+        }
+
+        float distance = Mathf.Max(0f, entry.recoilDistance);
+        entry.currentRecoilOffset = Mathf.Max(entry.currentRecoilOffset, distance);
+    }
+
+    private void UpdateLauncherRecoil()
+    {
+        for (int i = 0; i < launchers.Count; i++)
+        {
+            LauncherEntry entry = launchers[i];
+            if (entry == null || entry.launcher == null)
+                continue;
+
+            if (!entry.poseCached)
+            {
+                entry.originalLocalPosition = entry.launcher.localPosition;
+                entry.poseCached = true;
+            }
+
+            float speed = Mathf.Max(0.01f, entry.recoilSpeed);
+            entry.currentRecoilOffset = Mathf.MoveTowards(entry.currentRecoilOffset, 0f, speed * Time.deltaTime);
+            entry.launcher.localPosition = entry.originalLocalPosition + Vector3.right * entry.currentRecoilOffset;
+        }
     }
 
     private float GetSpawnInterval()

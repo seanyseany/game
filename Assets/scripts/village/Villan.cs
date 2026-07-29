@@ -9,10 +9,13 @@ public class Villan : MonoBehaviour
 {
     private static readonly Dictionary<int, Queue<Villan>> PoolsByPrefab = new Dictionary<int, Queue<Villan>>();
     private const float ArriveDistance = 0.03f;
+    private const int SortingOrderOffsetCycle = 20;
+    private static int nextSortingOrderOffset;
 
     [FormerlySerializedAs("baseMoveSpeed")]
     [SerializeField] private float moveSpeed = 2f;
     [SerializeField] private int hitCount = 1;
+    [SerializeField] private SpriteRenderer spriteRenderer;
     [HideInInspector] [SerializeField] private Transform aimTarget;
     [HideInInspector] [SerializeField] private Animator animator;
 
@@ -30,6 +33,7 @@ public class Villan : MonoBehaviour
     private Vector3 originalLocalScale = Vector3.one;
     private Vector3 originalLocalEulerAngles;
     private int prefabPoolKey;
+    private int baseSortingOrder;
 
     public Transform AimTarget => aimTarget != null ? aimTarget : transform;
 
@@ -38,6 +42,10 @@ public class Villan : MonoBehaviour
         body = GetComponent<Rigidbody2D>();
         body.gravityScale = 0f;
         GetComponent<Collider2D>().isTrigger = true;
+        if (spriteRenderer == null)
+            spriteRenderer = GetComponentInChildren<SpriteRenderer>();
+        if (spriteRenderer != null)
+            baseSortingOrder = spriteRenderer.sortingOrder;
         if (animator == null)
             animator = GetComponentInChildren<Animator>();
         originalLocalScale = transform.localScale;
@@ -99,6 +107,7 @@ public class Villan : MonoBehaviour
         transform.localScale = originalLocalScale;
         currentHitCount = Mathf.Max(1, hitCount);
         currentMoveSpeed = Mathf.Max(0.2f, moveSpeed);
+        ApplySpawnSortingOrderOffset();
     }
 
     public void TakeDamage(int amount)
@@ -213,5 +222,14 @@ public class Villan : MonoBehaviour
     {
         facingLeft = true;
         transform.localEulerAngles = originalLocalEulerAngles;
+    }
+
+    private void ApplySpawnSortingOrderOffset()
+    {
+        if (spriteRenderer == null)
+            return;
+
+        spriteRenderer.sortingOrder = baseSortingOrder + nextSortingOrderOffset;
+        nextSortingOrderOffset = (nextSortingOrderOffset + 1) % SortingOrderOffsetCycle;
     }
 }

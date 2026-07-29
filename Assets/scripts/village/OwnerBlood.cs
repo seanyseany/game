@@ -126,8 +126,9 @@ public class OwnerBlood : MonoBehaviour
 
         atServicePoint = true;
         ApplyServicePointFacing();
-        ApplyVisualState(VisualState.Package);
-        yield return new WaitForSeconds(itemPickupPause);
+        ApplyVisualState(VisualState.Walking);
+
+        float pickupPause = Mathf.Max(0f, itemPickupPause);
 
         while (customer != null &&
                building != null &&
@@ -144,7 +145,39 @@ public class OwnerBlood : MonoBehaviour
             yield break;
         }
 
-        yield return customer.ReceivePurchasedItemRoutine(building.ItemPrefab, () => ApplyVisualState(VisualState.Walking));
+        float packageStartDelay = pickupPause * (2f / 3f);
+        float customerReceiveStartDelay = Mathf.Max(0f, pickupPause - customer.ReceiveItemSpawnDelay);
+
+        if (customerReceiveStartDelay < packageStartDelay)
+        {
+            if (customerReceiveStartDelay > 0f)
+                yield return new WaitForSeconds(customerReceiveStartDelay);
+
+            Coroutine receiveRoutine = StartCoroutine(
+                customer.ReceivePurchasedItemRoutine(building.ItemPrefab, () => ApplyVisualState(VisualState.Walking)));
+
+            float remainingUntilPackage = packageStartDelay - customerReceiveStartDelay;
+            if (remainingUntilPackage > 0f)
+                yield return new WaitForSeconds(remainingUntilPackage);
+
+            ApplyVisualState(VisualState.Package);
+            yield return receiveRoutine;
+        }
+        else
+        {
+            if (packageStartDelay > 0f)
+                yield return new WaitForSeconds(packageStartDelay);
+
+            ApplyVisualState(VisualState.Package);
+
+            float remainingUntilReceive = customerReceiveStartDelay - packageStartDelay;
+            if (remainingUntilReceive > 0f)
+                yield return new WaitForSeconds(remainingUntilReceive);
+
+            yield return customer.ReceivePurchasedItemRoutine(
+                building.ItemPrefab,
+                () => ApplyVisualState(VisualState.Walking));
+        }
 
         VillageManagement villageManagement = VillageManagement.EnsureInstance();
         if (villageManagement != null)

@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 using System.Collections;
+using System.Collections.Generic;
 
 [RequireComponent(typeof(Collider2D))]
 public class Path : MonoBehaviour
@@ -273,6 +274,89 @@ public class Path : MonoBehaviour
             buildingUI.Close();
     }
 
+    public void ClearPlacementState()
+    {
+        if (buildingInstance != null)
+        {
+            RemoveCurrentBuilding();
+            return;
+        }
+
+        if (constructionRoutine != null)
+        {
+            StopCoroutine(constructionRoutine);
+            constructionRoutine = null;
+        }
+
+        activeConstructionBuildingId = string.Empty;
+        activeConstructionTargetLevel = 0;
+        activeConstructionRemainingSeconds = 0f;
+        activeConstructionUpgrading = false;
+        RefreshInteractionCollider();
+
+        VillageManagement villageManagement = VillageManagement.EnsureInstance();
+        if (villageManagement != null)
+            villageManagement.RemoveBuildingState(pathId);
+    }
+
+    public void PrepareForRestore()
+    {
+        if (constructionRoutine != null)
+        {
+            StopCoroutine(constructionRoutine);
+            constructionRoutine = null;
+        }
+
+        activeConstructionBuildingId = string.Empty;
+        activeConstructionTargetLevel = 0;
+        activeConstructionRemainingSeconds = 0f;
+        activeConstructionUpgrading = false;
+
+        if (buildingInstance != null)
+            Destroy(buildingInstance.gameObject);
+
+        buildingInstance = null;
+        RefreshInteractionCollider();
+    }
+
+    public bool RestoreFromState(VillageManagement.BuildingState state, Building buildingPrefab)
+    {
+        if (state == null || buildingPrefab == null)
+            return false;
+
+        if (!string.Equals(state.slotId, pathId, System.StringComparison.Ordinal))
+            return false;
+
+        if (constructionRoutine != null)
+            return false;
+
+        if (buildingInstance != null)
+        {
+            Destroy(buildingInstance.gameObject);
+            buildingInstance = null;
+            RefreshInteractionCollider();
+        }
+
+        if (state.underConstruction)
+        {
+            BeginConstruction(
+                buildingPrefab,
+                Mathf.Max(1, state.level),
+                Mathf.Max(0.01f, state.constructionRemainingSeconds),
+                false);
+            return true;
+        }
+
+        PlaceBuildingImmediately(buildingPrefab, Mathf.Max(1, state.level), true);
+        if (buildingInstance == null)
+            return false;
+
+        buildingInstance.SetSalary(state.currentSalary, state.maxSalary);
+        buildingInstance.SetWorking(state.isWorking);
+        buildingInstance.MarkPlaced(state.isPlaced);
+        return true;
+    }
+
     public void SetBuildingPlacementAllowed(bool allowed)
     {
         allowsBuildingPlacement = allowed;
@@ -330,10 +414,6 @@ public class Path : MonoBehaviour
             activeConstructionTargetLevel = 0;
             activeConstructionRemainingSeconds = 0f;
             activeConstructionUpgrading = false;
-
-            BuildingUI buildingUI = FindBuildingUi();
-            if (buildingUI != null && buildingInstance != null)
-                buildingUI.Open(this, buildingInstance);
         }));
     }
 
@@ -348,6 +428,8 @@ public class Path : MonoBehaviour
         buildingInstance = Instantiate(buildingPrefab, transform, false);
         buildingInstance.AssignSlot(pathId);
         buildingInstance.SetLevel(level);
+        if (!skipCapacityBonus)
+            buildingInstance.SetSalary(buildingInstance.MaxSalary, buildingInstance.MaxSalary);
         buildingInstance.MarkPlaced(true);
         SnapBuildingToPath(buildingInstance);
         buildingInstance.RestartOwnerPatrolFromAnchor();
@@ -364,7 +446,7 @@ public class Path : MonoBehaviour
         buildingInstance.PushStateToVillageManagement();
     }
 
-    public void ReleaseBuildingReference(Building building)
+    public void ReleaseBuildingReference(Building building, bool removeSavedState = true)
     {
         if (buildingInstance == building)
         {
@@ -372,12 +454,16 @@ public class Path : MonoBehaviour
             RefreshInteractionCollider();
 
             VillageManagement villageManagement = VillageManagement.EnsureInstance();
-            if (villageManagement != null)
+            if (removeSavedState && villageManagement != null)
                 villageManagement.RemoveBuildingState(pathId);
         }
     }
 
-    public void AcceptMovedBuilding(Building building)
+    public void AcceptMovedBuilding(
+        Building building,
+        string previousSlotId = null,
+        bool saveImmediately = true,
+        bool removePreviousState = true)
     {
         if (building == null)
             return;
@@ -390,10 +476,21 @@ public class Path : MonoBehaviour
         building.RestartOwnerPatrolFromAnchor();
         RefreshInteractionCollider();
         StartCoroutine(FinalizePlacedBuildingNextFrame(building));
-        building.PushStateToVillageManagement();
+
+        VillageManagement villageManagement = VillageManagement.EnsureInstance();
+        if (villageManagement != null &&
+            removePreviousState &&
+            !string.IsNullOrWhiteSpace(previousSlotId) &&
+            !string.Equals(previousSlotId, pathId, System.StringComparison.Ordinal))
+        {
+            villageManagement.RemoveBuildingState(previousSlotId, building.BuildingId, false);
+        }
+
+        if (saveImmediately)
+            building.PushStateToVillageManagement(true);
     }
 
-    public Building DetachCurrentBuilding()
+    public Building DetachCurrentBuilding(bool removeSavedState = true)
     {
         if (buildingInstance == null)
             return null;
@@ -403,7 +500,7 @@ public class Path : MonoBehaviour
         RefreshInteractionCollider();
 
         VillageManagement villageManagement = VillageManagement.EnsureInstance();
-        if (villageManagement != null)
+        if (removeSavedState && villageManagement != null)
             villageManagement.RemoveBuildingState(pathId);
 
         return detachedBuilding;
@@ -477,23 +574,30 @@ public class Path : MonoBehaviour
 
     private BuildingUI FindBuildingUi()
     {
-        return FindFirstObjectByType<BuildingUI>();
+        return BuildingUI.EnsureInstance();
     }
 
     private string BuildPathId()
     {
-        System.Text.StringBuilder builder = new System.Text.StringBuilder();
+        Stack<string> segments = new Stack<string>();
         Transform current = transform;
         while (current != null)
         {
-            if (builder.Length > 0)
-                builder.Insert(0, "/");
+            bool isPathsRoot = current.name.StartsWith("paths", System.StringComparison.OrdinalIgnoreCase);
+            segments.Push(isPathsRoot
+                ? "paths"
+                : $"{current.name}[{current.GetSiblingIndex()}]");
 
-            builder.Insert(0, $"{current.name}[{current.GetSiblingIndex()}]");
+            if (isPathsRoot)
+                break;
+
             current = current.parent;
         }
 
-        return builder.ToString();
+        if (segments.Count == 0)
+            return $"{transform.name}[{transform.GetSiblingIndex()}]";
+
+        return string.Join("/", segments.ToArray());
     }
 
     private void SnapBuildingToPath(Building building)
@@ -546,10 +650,6 @@ public class Path : MonoBehaviour
             activeConstructionTargetLevel = 0;
             activeConstructionRemainingSeconds = 0f;
             activeConstructionUpgrading = false;
-
-            BuildingUI buildingUI = FindBuildingUi();
-            if (buildingUI != null && buildingInstance != null)
-                buildingUI.Open(this, buildingInstance);
         }));
     }
 }

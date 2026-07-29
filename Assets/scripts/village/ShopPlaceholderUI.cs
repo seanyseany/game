@@ -16,7 +16,15 @@ public class ShopPlaceholderUI : ShopSectionUI
     private sealed class OilCatalogEntry
     {
         public string id;
+        public string familyId;
         public string displayName;
+        public Oxygen level1Prefab;
+        public Oxygen level2Prefab;
+    }
+
+    [Serializable]
+    public sealed class OilPrefabGroup
+    {
         public Oxygen level1Prefab;
         public Oxygen level2Prefab;
     }
@@ -35,8 +43,7 @@ public class ShopPlaceholderUI : ShopSectionUI
     [SerializeField] [TextArea] private string message = "준비 중입니다.";
 
     [Header("Oil Shop")]
-    [SerializeField] private List<Oxygen> registeredOilPrefabs = new List<Oxygen>();
-    [SerializeField] private int oilShopSlotCount = 4;
+    [SerializeField] private List<OilPrefabGroup> registeredOilPrefabs = new List<OilPrefabGroup>();
 
     [Header("Turret Shop")]
     [SerializeField] private List<BaseTurret> registeredTurretPrefabs = new List<BaseTurret>();
@@ -187,32 +194,141 @@ public class ShopPlaceholderUI : ShopSectionUI
             RefreshTurretCatalog();
     }
 
+    public void PrepareRuntimeRestore()
+    {
+        RefreshCatalogs();
+    }
+
+    public bool TryRestoreOxygenGeneratorState(VillageManagement.OxygenGeneratorState state)
+    {
+        if (state == null || !IsOilSection())
+            return false;
+
+        RefreshCatalogs();
+        OilCatalogEntry entry = FindOilEntryForRestore(state);
+        Oxygen prefab = GetOilPrefabForLevel(entry, Mathf.Max(1, state.level));
+        if (entry == null || prefab == null)
+            return false;
+
+        if (!TryFindOilSlotTargetBySlotId(state.slotId, out OilSlotTarget target) || target.wayOil == null)
+            return false;
+
+        if (!target.wayOil.TryInstallPurchasedOilAt(target.pathIndex, prefab, state.slotId, true, entry.id))
+            return false;
+
+        if (!target.wayOil.TryGetInstalledOilBySlotId(state.slotId, out Oxygen installedOil) || installedOil == null)
+            return false;
+
+        installedOil.AssignPurchaseEntryId(entry.id);
+        installedOil.ApplySavedState(state.level, state.storedOxygen);
+        installedOil.PushState();
+        return true;
+    }
+
+    public bool TryRestoreTurretState(VillageManagement.TurretState state)
+    {
+        if (state == null || !IsTurretSection())
+            return false;
+
+        RefreshCatalogs();
+
+        if (TryRestoreTurretStateBySlotId(state))
+            return true;
+
+        BaseTurret fallbackPrefab = ResolveTurretPrefabByCatalogId(state.turretId, state.level);
+        if (fallbackPrefab == null)
+            return false;
+
+        for (int i = 0; i < turretEntries.Count; i++)
+        {
+            if (!TryGetOrCreateTurretSlot(i, out TurretImplementation slot) || slot == null)
+                continue;
+
+            if (slot.RestoreFromState(state, fallbackPrefab))
+                return true;
+        }
+
+        return false;
+    }
+
+    private bool TryRestoreTurretStateBySlotId(VillageManagement.TurretState state)
+    {
+        for (int i = 0; i < turretEntries.Count; i++)
+        {
+            TurretCatalogEntry entry = turretEntries[i];
+            if (entry == null || !string.Equals(entry.id, state.slotId, StringComparison.Ordinal))
+                continue;
+
+            if (!TryGetOrCreateTurretSlot(i, out TurretImplementation slot) || slot == null)
+                return false;
+
+            BaseTurret prefab = GetTurretPrefabForLevel(entry, Mathf.Max(1, state.level));
+            return slot.RestoreFromState(state, prefab);
+        }
+
+        return false;
+    }
+
+    private BaseTurret ResolveTurretPrefabByCatalogId(string turretId, int level)
+    {
+        if (string.IsNullOrWhiteSpace(turretId))
+            return null;
+
+        for (int i = 0; i < turretEntries.Count; i++)
+        {
+            TurretCatalogEntry entry = turretEntries[i];
+            if (entry == null)
+                continue;
+
+            BaseTurret[] candidates =
+            {
+                entry.level1Prefab,
+                entry.level2Prefab,
+                entry.level3Prefab
+            };
+
+            for (int j = 0; j < candidates.Length; j++)
+            {
+                BaseTurret candidate = candidates[j];
+                if (candidate != null && string.Equals(candidate.CatalogId, turretId, StringComparison.Ordinal))
+                    return GetTurretPrefabForLevel(entry, Mathf.Max(1, level));
+            }
+        }
+
+        return null;
+    }
+
     private void RefreshOilCatalog()
     {
         oilEntries.Clear();
-        Oxygen level1Prefab = null;
-        Oxygen level2Prefab = null;
+        if (registeredOilPrefabs == null || registeredOilPrefabs.Count == 0)
+            return;
 
         for (int i = 0; i < registeredOilPrefabs.Count; i++)
         {
-            Oxygen prefab = registeredOilPrefabs[i];
-            if (prefab == null)
+            OilPrefabGroup group = registeredOilPrefabs[i];
+            if (group == null)
                 continue;
 
-            if (prefab.Level <= 1 && level1Prefab == null)
-                level1Prefab = prefab;
-            else if (prefab.Level == 2 && level2Prefab == null)
-                level2Prefab = prefab;
-        }
+            Oxygen level1Prefab = group.level1Prefab;
+            Oxygen level2Prefab = group.level2Prefab;
+            Oxygen identitySource = level1Prefab != null ? level1Prefab : level2Prefab;
+            if (identitySource == null)
+                continue;
 
-        int count = Mathf.Max(0, oilShopSlotCount);
-        string baseName = level1Prefab != null ? level1Prefab.name : "Oil";
-        for (int i = 0; i < count; i++)
-        {
+            string familyId = identitySource.ShopFamilyId;
+            if (string.IsNullOrWhiteSpace(familyId))
+                continue;
+
+            string displayName = level1Prefab != null
+                ? level1Prefab.name
+                : level2Prefab.name;
+
             oilEntries.Add(new OilCatalogEntry
             {
-                id = BuildOilShopSlotId(i),
-                displayName = $"{baseName} {i + 1}",
+                id = BuildOilPurchaseEntryId(i),
+                familyId = familyId,
+                displayName = displayName,
                 level1Prefab = level1Prefab,
                 level2Prefab = level2Prefab
             });
@@ -328,12 +444,12 @@ public class ShopPlaceholderUI : ShopSectionUI
         for (int i = 0; i < buttons.Count && i < oilEntries.Count; i++)
         {
             OilCatalogEntry entry = oilEntries[i];
-            int purchasedLevel = GetOilSlotLevel(i);
+            int purchasedLevel = GetOilTypeLevel(entry);
             int nextLevel = purchasedLevel + 1;
             Oxygen nextPrefab = GetOilPrefabForLevel(entry, nextLevel);
-            bool completed = purchasedLevel >= 2;
+            bool completed = purchasedLevel >= GetMaxOilLevel(entry);
             bool canAfford = nextPrefab != null && villageManagement != null && villageManagement.CurrentOxygen >= nextPrefab.CurrentOxygenPrice;
-            bool canPlace = CanUseOilSlot(i, purchasedLevel);
+            bool canPlace = CanUseOilEntry(entry, purchasedLevel);
             buttons[i].interactable = !completed && nextPrefab != null && canAfford && canPlace;
 
             Text text = buttons[i].GetComponentInChildren<Text>();
@@ -384,7 +500,7 @@ public class ShopPlaceholderUI : ShopSectionUI
             return;
 
         OilCatalogEntry entry = oilEntries[index];
-        int purchasedLevel = GetOilSlotLevel(index);
+        int purchasedLevel = GetOilTypeLevel(entry);
         int nextLevel = purchasedLevel + 1;
         Oxygen nextPrefab = GetOilPrefabForLevel(entry, nextLevel);
         if (nextPrefab == null)
@@ -400,18 +516,19 @@ public class ShopPlaceholderUI : ShopSectionUI
         }
 
         bool success = nextLevel == 1
-            ? TryInstallOilLevel1(index, entry, nextPrefab)
-            : TryUpgradeOil(index, entry.id, nextPrefab);
+            ? TryInstallOilLevel1(entry, nextPrefab)
+            : TryUpgradeOil(entry, nextPrefab);
 
         if (!success)
         {
             SetStatus(nextLevel == 1
-                ? "이 오일 칸에 설치 가능한 path가 없습니다."
-                : $"{entry.displayName} 1레벨 설치 위치를 찾지 못했습니다.");
+                ? "설치 가능한 Oil 슬롯이 없습니다."
+                : $"{entry.displayName} {nextLevel - 1}레벨 설치 위치를 찾지 못했습니다.");
             return;
         }
 
         villageManagement.TrySpendOxygen(nextPrefab.CurrentOxygenPrice);
+        villageManagement.SetPurchasedOxygenLevel(entry.id, nextLevel);
         Shop.CloseAllShops();
         SetStatus($"{entry.displayName} {nextLevel}레벨 구매 완료");
         QueueRefresh(true);
@@ -503,21 +620,40 @@ public class ShopPlaceholderUI : ShopSectionUI
             RefreshButtons();
     }
 
-    private bool TryInstallOilLevel1(int entryIndex, OilCatalogEntry entry, Oxygen prefab)
+    private bool TryInstallOilLevel1(OilCatalogEntry entry, Oxygen prefab)
     {
-        if (!TryGetOilSlotTarget(entryIndex, out OilSlotTarget target))
+        if (entry == null || prefab == null)
             return false;
 
-        return target.wayOil != null &&
-               target.wayOil.TryInstallPurchasedOilAt(target.pathIndex, prefab, entry.id, true);
+        List<WayOil> orderedWayOils = new List<WayOil>(WayOil.RegisteredWayOils);
+        orderedWayOils.Sort(CompareWayOilOrder);
+
+        for (int i = 0; i < orderedWayOils.Count; i++)
+        {
+            WayOil wayOil = orderedWayOils[i];
+            if (wayOil != null && wayOil.TryInstallPurchasedOil(prefab, string.Empty, true, entry.id))
+                return true;
+        }
+
+        return false;
     }
 
-    private bool TryUpgradeOil(int entryIndex, string slotId, Oxygen upgradePrefab)
+    private bool TryUpgradeOil(OilCatalogEntry entry, Oxygen upgradePrefab)
     {
-        if (!TryGetOilSlotTarget(entryIndex, out OilSlotTarget target) || target.wayOil == null)
+        if (entry == null || string.IsNullOrWhiteSpace(entry.id) || upgradePrefab == null)
             return false;
 
-        return target.wayOil.TryUpgradeInstalledOilBySlotId(slotId, upgradePrefab);
+        List<WayOil> orderedWayOils = new List<WayOil>(WayOil.RegisteredWayOils);
+        orderedWayOils.Sort(CompareWayOilOrder);
+
+        for (int i = 0; i < orderedWayOils.Count; i++)
+        {
+            WayOil wayOil = orderedWayOils[i];
+            if (wayOil != null && wayOil.TryUpgradeInstalledOilByPurchaseEntryId(entry.id, upgradePrefab))
+                return true;
+        }
+
+        return false;
     }
 
     private bool TryInstallTurretLevel1(int entryIndex, BaseTurret prefab)
@@ -536,19 +672,15 @@ public class ShopPlaceholderUI : ShopSectionUI
         return slot.TryUpgradeFromShop(upgradePrefab);
     }
 
-    private bool CanUseOilSlot(int entryIndex, int purchasedLevel)
+    private bool CanUseOilEntry(OilCatalogEntry entry, int purchasedLevel)
     {
-        if (!TryGetOilSlotTarget(entryIndex, out OilSlotTarget target) || target.wayOil == null)
+        if (entry == null)
             return false;
 
-        if (!target.wayOil.IsOilPathUsable(target.pathIndex))
-            return false;
-
-        int level = target.wayOil.GetInstalledOilLevelAt(target.pathIndex);
         if (purchasedLevel <= 0)
-            return level == 0;
+            return HasAnyUsableOilSlot();
 
-        return level == purchasedLevel;
+        return GetOilTypeLevel(entry) == purchasedLevel;
     }
 
     private bool CanUseTurretSlot(int entryIndex, int purchasedLevel)
@@ -614,12 +746,14 @@ public class ShopPlaceholderUI : ShopSectionUI
 
     private static string BuildOilLabel(OilCatalogEntry entry, int purchasedLevel, Oxygen nextPrefab, bool canPlace)
     {
-        if (purchasedLevel >= 2)
+        if (purchasedLevel >= GetMaxOilLevel(entry))
             return $"{entry.displayName}\n완료";
         if (nextPrefab == null)
             return $"{entry.displayName}\n등록 필요";
         if (!canPlace && purchasedLevel == 0)
             return $"{entry.displayName}\n빈 Oil 슬롯 없음";
+        if (!canPlace)
+            return $"{entry.displayName}\n현재 설치 레벨 불일치";
         return $"{entry.displayName}\n{purchasedLevel + 1}레벨 구매 O2 {nextPrefab.CurrentOxygenPrice}";
     }
 
@@ -642,22 +776,21 @@ public class ShopPlaceholderUI : ShopSectionUI
             statusText.text = nextMessage ?? string.Empty;
     }
 
-    private static string BuildOilShopSlotId(int index)
-    {
-        return $"oil_shop_slot_{index + 1}";
-    }
-
     private static string BuildTurretShopSlotId(int index)
     {
         return $"turret_shop_slot_{index + 1}";
     }
 
-    private int GetOilSlotLevel(int entryIndex)
+    private int GetOilTypeLevel(OilCatalogEntry entry)
     {
-        if (!TryGetOilSlotTarget(entryIndex, out OilSlotTarget target) || target.wayOil == null)
+        if (entry == null || string.IsNullOrWhiteSpace(entry.id))
             return 0;
 
-        return target.wayOil.GetInstalledOilLevelAt(target.pathIndex);
+        VillageManagement villageManagement = VillageManagement.Instance;
+        if (villageManagement == null)
+            return 0;
+
+        return Mathf.Max(0, villageManagement.GetPurchasedOxygenLevel(entry.id));
     }
 
     private int GetTurretSlotLevel(int entryIndex)
@@ -679,6 +812,99 @@ public class ShopPlaceholderUI : ShopSectionUI
 
         target = cachedOilSlotTargets[entryIndex];
         return true;
+    }
+
+    private bool HasAnyUsableOilSlot()
+    {
+        List<WayOil> orderedWayOils = new List<WayOil>(WayOil.RegisteredWayOils);
+        orderedWayOils.Sort(CompareWayOilOrder);
+
+        for (int i = 0; i < orderedWayOils.Count; i++)
+        {
+            WayOil wayOil = orderedWayOils[i];
+            if (wayOil == null)
+                continue;
+
+            for (int pathIndex = 0; pathIndex < wayOil.ConnectedOilPaths.Count; pathIndex++)
+            {
+                if (wayOil.IsOilPathUsable(pathIndex) && wayOil.GetInstalledOilLevelAt(pathIndex) == 0)
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool TryFindOilSlotTargetBySlotId(string slotId, out OilSlotTarget target)
+    {
+        target = default;
+        if (string.IsNullOrWhiteSpace(slotId))
+            return false;
+
+        for (int i = 0; i < cachedOilSlotTargets.Count; i++)
+        {
+            OilSlotTarget candidate = cachedOilSlotTargets[i];
+            if (candidate.wayOil == null)
+                continue;
+
+            if (string.Equals(candidate.wayOil.GetSlotIdAt(candidate.pathIndex), slotId, StringComparison.Ordinal))
+            {
+                target = candidate;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private OilCatalogEntry FindOilEntryByCatalogId(string catalogId)
+    {
+        string normalizedId = Oxygen.BuildShopFamilyId(catalogId, catalogId);
+        for (int i = 0; i < oilEntries.Count; i++)
+        {
+            OilCatalogEntry entry = oilEntries[i];
+            if (entry != null &&
+                (string.Equals(entry.familyId, catalogId, StringComparison.Ordinal) ||
+                 string.Equals(entry.familyId, normalizedId, StringComparison.Ordinal)))
+                return entry;
+        }
+
+        return null;
+    }
+
+    private OilCatalogEntry FindOilEntryForRestore(VillageManagement.OxygenGeneratorState state)
+    {
+        if (state == null)
+            return null;
+
+        if (!string.IsNullOrWhiteSpace(state.purchaseEntryId))
+        {
+            for (int i = 0; i < oilEntries.Count; i++)
+            {
+                OilCatalogEntry entry = oilEntries[i];
+                if (entry != null && string.Equals(entry.id, state.purchaseEntryId, StringComparison.Ordinal))
+                    return entry;
+            }
+        }
+
+        return FindOilEntryByCatalogId(state.oxygenId);
+    }
+
+    private static string BuildOilPurchaseEntryId(int index)
+    {
+        return $"oil_purchase_entry_{index + 1}";
+    }
+
+    private static int GetMaxOilLevel(OilCatalogEntry entry)
+    {
+        if (entry == null)
+            return 0;
+
+        if (entry.level2Prefab != null)
+            return 2;
+        if (entry.level1Prefab != null)
+            return 1;
+        return 0;
     }
 
     private bool TryGetTurretSlot(int entryIndex, out TurretImplementation slot)

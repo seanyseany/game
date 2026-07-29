@@ -2,10 +2,17 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 [DefaultExecutionOrder(-500)]
 public class VillageManagement : MonoBehaviour
 {
+    private enum SaveMode
+    {
+        Immediate,
+        Delayed
+    }
+
     public enum ResourceType
     {
         Oxygen,
@@ -57,6 +64,7 @@ public class VillageManagement : MonoBehaviour
     {
         public string slotId;
         public string oxygenId;
+        public string purchaseEntryId;
         public int level;
         public bool isPlaced;
         public bool isProducing;
@@ -75,6 +83,8 @@ public class VillageManagement : MonoBehaviour
     {
         public int bankLevel = 1;
         public string selectedWhiteBloodCellId = string.Empty;
+        public int selectedArcadeSceneIndex = 0;
+        public int selectedArcadePlayerType = -1;
         public int currentOxygen = 0;
         public int oxygenCapacity = 100;
         public int currentEnergy = 0;
@@ -148,6 +158,7 @@ public class VillageManagement : MonoBehaviour
     [SerializeField] private bool dontDestroyOnLoad = true;
     [SerializeField] private bool autoSaveOnChange = true;
     [SerializeField] private string saveFileName = "village_save.json";
+    [SerializeField] private float delayedSaveIntervalSeconds = 2f;
 
     [Header("Arcade Reward Mapping")]
     [SerializeField] private bool awardArcadeOxygenToCurrentOxygen = true;
@@ -168,6 +179,11 @@ public class VillageManagement : MonoBehaviour
 
     private VillageSaveData saveData = new VillageSaveData();
     private bool loaded;
+    private bool hasPendingDelayedSave;
+    private float nextDelayedSaveAt;
+    private bool restoreInProgress;
+    private Coroutine restoreSceneRoutine;
+    private VillageManagementDebugProxy debugProxy;
 
     public VillageSaveData SaveData => saveData;
     public VillageManagementTestControls DebugControls => debugControls;
@@ -179,6 +195,8 @@ public class VillageManagement : MonoBehaviour
     public int EmergencyDifficulty => saveData.emergencyDifficulty;
     public int BankLevel => saveData.bankLevel;
     public string SelectedWhiteBloodCellId => saveData.selectedWhiteBloodCellId;
+    public int SelectedArcadeSceneIndex => saveData.selectedArcadeSceneIndex;
+    public int SelectedArcadePlayerType => saveData.selectedArcadePlayerType;
 
     public IReadOnlyList<BuildingState> Buildings => saveData.buildings;
     public IReadOnlyList<TurretState> Turrets => saveData.turrets;
@@ -191,6 +209,7 @@ public class VillageManagement : MonoBehaviour
     public IReadOnlyList<string> OwnedCustomerBloodIds => saveData.ownedCustomerBloodIds;
     public IReadOnlyList<string> OwnedWhiteBloodCellIds => saveData.ownedWhiteBloodCellIds;
     public IReadOnlyList<ArcadePlayerEntry> ArcadePlayers => arcadePlayers;
+    public bool IsRestoreInProgress => restoreInProgress;
 
     public static VillageManagement EnsureInstance()
     {
@@ -220,13 +239,32 @@ public class VillageManagement : MonoBehaviour
         if (dontDestroyOnLoad)
             DontDestroyOnLoad(gameObject);
 
+        SceneManager.sceneLoaded += HandleSceneLoaded;
+        SceneManager.activeSceneChanged += HandleActiveSceneChanged;
         Load();
+        EnsureDebugProxy();
         InstanceReady?.Invoke(this);
+    }
+
+    private void Start()
+    {
+        ScheduleRestoreSceneState(SceneManager.GetActiveScene());
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+        {
+            SceneManager.sceneLoaded -= HandleSceneLoaded;
+            SceneManager.activeSceneChanged -= HandleActiveSceneChanged;
+            FlushPendingSave();
+        }
     }
 
     private void Update()
     {
         ProcessDebugControls();
+        ProcessDelayedSave();
     }
 
     public void Load()
@@ -262,6 +300,11 @@ public class VillageManagement : MonoBehaviour
         EmergencyDifficultyChanged?.Invoke(saveData.emergencyDifficulty);
     }
 
+    public void FlushPendingSaveNow()
+    {
+        FlushPendingSave();
+    }
+
     public void Save()
     {
         try
@@ -280,10 +323,55 @@ public class VillageManagement : MonoBehaviour
     public void ResetSaveData()
     {
         saveData = new VillageSaveData();
+        hasPendingDelayedSave = false;
         Save();
         NotifyAllResourceSnapshots();
         SaveDataChanged?.Invoke(saveData);
         EmergencyDifficultyChanged?.Invoke(saveData.emergencyDifficulty);
+    }
+
+    public void ResetAllVillageProgress()
+    {
+        ClearPlacedVillageObjects();
+        ResetSaveData();
+    }
+
+    public void ClearPlacedVillageObjects()
+    {
+        Path[] paths = FindObjectsByType<Path>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        for (int i = 0; i < paths.Length; i++)
+        {
+            Path path = paths[i];
+            if (path != null)
+                path.ClearPlacementState();
+        }
+
+        TurretImplementation[] turretSlots = FindObjectsByType<TurretImplementation>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        for (int i = 0; i < turretSlots.Length; i++)
+        {
+            TurretImplementation slot = turretSlots[i];
+            if (slot != null && slot.CurrentTurret != null)
+                slot.RemoveTurret();
+        }
+
+        WayOil[] wayOils = FindObjectsByType<WayOil>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        for (int i = 0; i < wayOils.Length; i++)
+        {
+            if (wayOils[i] != null)
+                wayOils[i].RemoveAllInstalledOils();
+        }
+
+        saveData.buildings.Clear();
+        saveData.turrets.Clear();
+        saveData.oxygenGenerators.Clear();
+        saveData.ownedBuildingIds.Clear();
+        saveData.ownedTurretIds.Clear();
+        saveData.ownedOxygenIds.Clear();
+        saveData.turretPurchaseLevels.Clear();
+        saveData.oxygenPurchaseLevels.Clear();
+
+        SaveDataChanged?.Invoke(saveData);
+        FlushPendingSave();
     }
 
     public void ApplyArcadeResults(int oxygenReward, int energyReward)
@@ -300,7 +388,7 @@ public class VillageManagement : MonoBehaviour
         if (awardArcadeEnergyToCurrentEnergy)
             AddEnergy(energyReward);
 
-        SaveAndBroadcast();
+        SaveAndBroadcast(SaveMode.Immediate);
     }
 
     public void AddOxygen(int amount)
@@ -326,7 +414,7 @@ public class VillageManagement : MonoBehaviour
 
         saveData.currentOxygen = clamped;
         BroadcastResource(ResourceType.Oxygen);
-        SaveAndBroadcast();
+        SaveAndBroadcast(SaveMode.Delayed);
     }
 
     public void SetOxygenCapacity(int value, bool keepFillRatio = false)
@@ -343,7 +431,7 @@ public class VillageManagement : MonoBehaviour
             : Mathf.Clamp(saveData.currentOxygen, 0, saveData.oxygenCapacity);
 
         BroadcastResource(ResourceType.Oxygen);
-        SaveAndBroadcast();
+        SaveAndBroadcast(SaveMode.Immediate);
     }
 
     public void AddEnergy(int amount)
@@ -369,7 +457,7 @@ public class VillageManagement : MonoBehaviour
 
         saveData.currentEnergy = clamped;
         BroadcastResource(ResourceType.Energy);
-        SaveAndBroadcast();
+        SaveAndBroadcast(SaveMode.Delayed);
     }
 
     public void SetEnergyCapacity(int value, bool keepFillRatio = false)
@@ -386,7 +474,7 @@ public class VillageManagement : MonoBehaviour
             : Mathf.Clamp(saveData.currentEnergy, 0, saveData.energyCapacity);
 
         BroadcastResource(ResourceType.Energy);
-        SaveAndBroadcast();
+        SaveAndBroadcast(SaveMode.Immediate);
     }
 
     public void SetEmergencyDifficulty(int difficulty)
@@ -397,7 +485,7 @@ public class VillageManagement : MonoBehaviour
 
         saveData.emergencyDifficulty = clamped;
         EmergencyDifficultyChanged?.Invoke(saveData.emergencyDifficulty);
-        SaveAndBroadcast();
+        SaveAndBroadcast(SaveMode.Immediate);
     }
 
     public void SetBankLevel(int level)
@@ -407,7 +495,7 @@ public class VillageManagement : MonoBehaviour
             return;
 
         saveData.bankLevel = clamped;
-        SaveAndBroadcast();
+        SaveAndBroadcast(SaveMode.Immediate);
     }
 
     public void SetSelectedWhiteBloodCell(string id)
@@ -417,10 +505,30 @@ public class VillageManagement : MonoBehaviour
             return;
 
         saveData.selectedWhiteBloodCellId = next;
-        SaveAndBroadcast();
+        SaveAndBroadcast(SaveMode.Immediate);
     }
 
-    public void UpsertBuildingState(BuildingState state)
+    public void SetSelectedArcadeSceneIndex(int index)
+    {
+        int next = Mathf.Max(0, index);
+        if (saveData.selectedArcadeSceneIndex == next)
+            return;
+
+        saveData.selectedArcadeSceneIndex = next;
+        SaveAndBroadcast(SaveMode.Immediate);
+    }
+
+    public void SetSelectedArcadePlayerType(int playerType)
+    {
+        int next = playerType <= 0 ? -1 : Mathf.Clamp(playerType, 1, 5);
+        if (saveData.selectedArcadePlayerType == next)
+            return;
+
+        saveData.selectedArcadePlayerType = next;
+        SaveAndBroadcast(SaveMode.Immediate);
+    }
+
+    public void UpsertBuildingState(BuildingState state, bool immediate = false)
     {
         if (state == null || string.IsNullOrWhiteSpace(state.slotId))
             return;
@@ -435,10 +543,10 @@ public class VillageManagement : MonoBehaviour
             CopyBuildingState(state, existing);
         }
 
-        SaveAndBroadcast();
+        SaveAndBroadcast(immediate ? SaveMode.Immediate : GetBuildingSaveMode(existing, state));
     }
 
-    public void RemoveBuildingState(string slotId)
+    public void RemoveBuildingState(string slotId, string buildingId = null, bool saveImmediately = true)
     {
         if (string.IsNullOrWhiteSpace(slotId) || saveData.buildings == null)
             return;
@@ -446,16 +554,26 @@ public class VillageManagement : MonoBehaviour
         for (int i = saveData.buildings.Count - 1; i >= 0; i--)
         {
             BuildingState state = saveData.buildings[i];
-            if (state != null && state.slotId == slotId)
+            if (state == null || state.slotId != slotId)
+                continue;
+
+            if (!string.IsNullOrWhiteSpace(buildingId) &&
+                !string.Equals(state.buildingId, buildingId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (state != null)
             {
                 saveData.buildings.RemoveAt(i);
-                SaveAndBroadcast();
+                if (saveImmediately)
+                    SaveAndBroadcast(SaveMode.Immediate);
                 return;
             }
         }
     }
 
-    public void UpsertTurretState(TurretState state)
+    public void UpsertTurretState(TurretState state, bool immediate = false)
     {
         if (state == null || string.IsNullOrWhiteSpace(state.slotId))
             return;
@@ -470,7 +588,7 @@ public class VillageManagement : MonoBehaviour
             CopyTurretState(state, existing);
         }
 
-        SaveAndBroadcast();
+        SaveAndBroadcast(immediate ? SaveMode.Immediate : GetTurretSaveMode(existing, state));
     }
 
     public void RemoveTurretState(string slotId)
@@ -484,7 +602,7 @@ public class VillageManagement : MonoBehaviour
             if (state != null && state.slotId == slotId)
             {
                 saveData.turrets.RemoveAt(i);
-                SaveAndBroadcast();
+                SaveAndBroadcast(SaveMode.Immediate);
                 return;
             }
         }
@@ -505,7 +623,7 @@ public class VillageManagement : MonoBehaviour
             CopyOxygenGeneratorState(state, existing);
         }
 
-        SaveAndBroadcast();
+        SaveAndBroadcast(GetOxygenGeneratorSaveMode(existing, state));
     }
 
     public void RemoveOxygenGeneratorState(string slotId)
@@ -519,7 +637,7 @@ public class VillageManagement : MonoBehaviour
             if (state != null && state.slotId == slotId)
             {
                 saveData.oxygenGenerators.RemoveAt(i);
-                SaveAndBroadcast();
+                SaveAndBroadcast(SaveMode.Immediate);
                 return;
             }
         }
@@ -528,13 +646,13 @@ public class VillageManagement : MonoBehaviour
     public void SetOwnedCustomerBloodIds(IEnumerable<string> ids)
     {
         ReplaceStringList(saveData.ownedCustomerBloodIds, ids);
-        SaveAndBroadcast();
+        SaveAndBroadcast(SaveMode.Immediate);
     }
 
     public void SetOwnedWhiteBloodCellIds(IEnumerable<string> ids)
     {
         ReplaceStringList(saveData.ownedWhiteBloodCellIds, ids);
-        SaveAndBroadcast();
+        SaveAndBroadcast(SaveMode.Immediate);
     }
 
     public bool HasOwnedCustomerBlood(string id)
@@ -575,13 +693,13 @@ public class VillageManagement : MonoBehaviour
     public void SetPurchasedTurretLevel(string id, int level)
     {
         SetPurchaseLevel(saveData.turretPurchaseLevels, id, level);
-        SaveAndBroadcast();
+        SaveAndBroadcast(SaveMode.Immediate);
     }
 
     public void SetPurchasedOxygenLevel(string id, int level)
     {
         SetPurchaseLevel(saveData.oxygenPurchaseLevels, id, level);
-        SaveAndBroadcast();
+        SaveAndBroadcast(SaveMode.Immediate);
     }
 
     public bool IsArcadePlayerAvailable(int playerType)
@@ -664,12 +782,358 @@ public class VillageManagement : MonoBehaviour
         ResourceChanged?.Invoke(GetSnapshot(type));
     }
 
-    private void SaveAndBroadcast()
+    private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        if (autoSaveOnChange)
-            Save();
+        FlushPendingSave();
+        EnsureDebugProxy();
+        ScheduleRestoreSceneState(scene);
+    }
+
+    private void HandleActiveSceneChanged(Scene previousScene, Scene nextScene)
+    {
+        FlushPendingSave();
+        EnsureDebugProxy();
+    }
+
+    private void ScheduleRestoreSceneState(Scene scene)
+    {
+        if (!loaded || !scene.IsValid() || !scene.isLoaded)
+            return;
+
+        if (restoreSceneRoutine != null)
+            StopCoroutine(restoreSceneRoutine);
+
+        restoreSceneRoutine = StartCoroutine(RestoreSceneStateDeferred(scene));
+    }
+
+    private System.Collections.IEnumerator RestoreSceneStateDeferred(Scene scene)
+    {
+        yield return null;
+        yield return new WaitForEndOfFrame();
+
+        if (scene.IsValid() && scene.isLoaded)
+            RestoreSceneState(scene);
+
+        restoreSceneRoutine = null;
+    }
+
+    private void EnsureDebugProxy()
+    {
+        if (!Application.isPlaying)
+            return;
+
+        if (debugProxy == null)
+            debugProxy = FindFirstObjectByType<VillageManagementDebugProxy>(FindObjectsInactive.Include);
+
+        if (debugProxy == null)
+        {
+            GameObject proxyObject = new GameObject("VillageManagement Debug");
+            debugProxy = proxyObject.AddComponent<VillageManagementDebugProxy>();
+        }
+
+        debugProxy.Bind(this);
+    }
+
+    private void RestoreSceneState(Scene scene)
+    {
+        if (!loaded || !scene.IsValid() || !scene.isLoaded)
+            return;
+
+        restoreInProgress = true;
+        try
+        {
+            PrepareSceneForRestore();
+
+            ShopPlaceholderUI[] shopSections = FindObjectsByType<ShopPlaceholderUI>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int i = 0; i < shopSections.Length; i++)
+            {
+                if (shopSections[i] != null)
+                    shopSections[i].PrepareRuntimeRestore();
+            }
+
+            RestoreBuildingStates();
+            RestoreTurretStates(shopSections);
+            RestoreOxygenGeneratorStates(shopSections);
+            SaveDataChanged?.Invoke(saveData);
+        }
+        finally
+        {
+            restoreInProgress = false;
+        }
+    }
+
+    private void PrepareSceneForRestore()
+    {
+        if (saveData.buildings != null && saveData.buildings.Count > 0)
+        {
+            Path[] paths = FindObjectsByType<Path>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int i = 0; i < paths.Length; i++)
+            {
+                if (paths[i] != null)
+                    paths[i].PrepareForRestore();
+            }
+        }
+
+        if (saveData.turrets != null && saveData.turrets.Count > 0)
+        {
+            TurretImplementation[] turretSlots = FindObjectsByType<TurretImplementation>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int i = 0; i < turretSlots.Length; i++)
+            {
+                if (turretSlots[i] != null)
+                    turretSlots[i].PrepareForRestore();
+            }
+        }
+    }
+
+    private void RestoreBuildingStates()
+    {
+        BuildingListUI[] buildingCatalogs = FindObjectsByType<BuildingListUI>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        if (buildingCatalogs == null || buildingCatalogs.Length == 0)
+            return;
+
+        Dictionary<string, Building> prefabById = new Dictionary<string, Building>(StringComparer.Ordinal);
+        for (int i = 0; i < buildingCatalogs.Length; i++)
+        {
+            BuildingListUI catalog = buildingCatalogs[i];
+            if (catalog == null)
+                continue;
+
+            for (int stateIndex = 0; stateIndex < saveData.buildings.Count; stateIndex++)
+            {
+                BuildingState state = saveData.buildings[stateIndex];
+                if (state == null || string.IsNullOrWhiteSpace(state.buildingId) || prefabById.ContainsKey(state.buildingId))
+                    continue;
+
+                Building prefab = catalog.ResolveBuildingPrefab(state.buildingId);
+                if (prefab != null)
+                    prefabById.Add(state.buildingId, prefab);
+            }
+        }
+
+        Path[] paths = FindObjectsByType<Path>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        Dictionary<string, Path> pathById = new Dictionary<string, Path>(StringComparer.Ordinal);
+        for (int i = 0; i < paths.Length; i++)
+        {
+            Path path = paths[i];
+            if (path == null || string.IsNullOrWhiteSpace(path.PathId))
+                continue;
+
+            string normalizedPathId = NormalizeBuildingSlotId(path.PathId);
+            if (!pathById.ContainsKey(normalizedPathId))
+                pathById.Add(normalizedPathId, path);
+        }
+
+        for (int i = 0; i < saveData.buildings.Count; i++)
+        {
+            BuildingState state = saveData.buildings[i];
+            TryRestoreBuildingState(state, pathById, prefabById);
+        }
+
+        // Reconcile once more in case a swap or restore-order edge case left a path empty.
+        for (int i = 0; i < saveData.buildings.Count; i++)
+        {
+            BuildingState state = saveData.buildings[i];
+            if (state == null ||
+                string.IsNullOrWhiteSpace(state.slotId) ||
+                !pathById.TryGetValue(NormalizeBuildingSlotId(state.slotId), out Path path) ||
+                path == null)
+            {
+                continue;
+            }
+
+            Building placedBuilding = path.Building;
+            if (placedBuilding != null &&
+                string.Equals(placedBuilding.BuildingId, state.buildingId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            TryRestoreBuildingState(state, pathById, prefabById);
+        }
+    }
+
+    private bool TryRestoreBuildingState(
+        BuildingState state,
+        Dictionary<string, Path> pathById,
+        Dictionary<string, Building> prefabById)
+    {
+        if (state == null ||
+            string.IsNullOrWhiteSpace(state.slotId) ||
+            string.IsNullOrWhiteSpace(state.buildingId) ||
+            !pathById.TryGetValue(NormalizeBuildingSlotId(state.slotId), out Path path) ||
+            path == null ||
+            !prefabById.TryGetValue(state.buildingId, out Building prefab) ||
+            prefab == null)
+        {
+            return false;
+        }
+
+        return path.RestoreFromState(state, prefab);
+    }
+
+    private void RestoreTurretStates(ShopPlaceholderUI[] shopSections)
+    {
+        if (shopSections == null || shopSections.Length == 0)
+            return;
+
+        for (int i = 0; i < saveData.turrets.Count; i++)
+        {
+            TurretState state = saveData.turrets[i];
+            if (state == null)
+                continue;
+
+            for (int shopIndex = 0; shopIndex < shopSections.Length; shopIndex++)
+            {
+                ShopPlaceholderUI shopSection = shopSections[shopIndex];
+                if (shopSection != null && shopSection.TryRestoreTurretState(state))
+                    break;
+            }
+        }
+    }
+
+    private void RestoreOxygenGeneratorStates(ShopPlaceholderUI[] shopSections)
+    {
+        if (shopSections == null || shopSections.Length == 0)
+            return;
+
+        for (int i = 0; i < saveData.oxygenGenerators.Count; i++)
+        {
+            OxygenGeneratorState state = saveData.oxygenGenerators[i];
+            if (state == null)
+                continue;
+
+            for (int shopIndex = 0; shopIndex < shopSections.Length; shopIndex++)
+            {
+                ShopPlaceholderUI shopSection = shopSections[shopIndex];
+                if (shopSection != null && shopSection.TryRestoreOxygenGeneratorState(state))
+                    break;
+            }
+        }
+    }
+
+    private void SaveAndBroadcast(SaveMode mode)
+    {
+        if (mode == SaveMode.Immediate)
+            FlushPendingSave();
+        else
+            QueueDelayedSave();
 
         SaveDataChanged?.Invoke(saveData);
+    }
+
+    private void QueueDelayedSave()
+    {
+        if (!autoSaveOnChange)
+            return;
+
+        hasPendingDelayedSave = true;
+        nextDelayedSaveAt = Time.unscaledTime + Mathf.Max(0.25f, delayedSaveIntervalSeconds);
+    }
+
+    private void ProcessDelayedSave()
+    {
+        if (!hasPendingDelayedSave || !autoSaveOnChange)
+            return;
+
+        if (Time.unscaledTime < nextDelayedSaveAt)
+            return;
+
+        FlushPendingSave();
+    }
+
+    private void FlushPendingSave()
+    {
+        if (!autoSaveOnChange)
+        {
+            hasPendingDelayedSave = false;
+            return;
+        }
+
+        if (hasPendingDelayedSave)
+            hasPendingDelayedSave = false;
+
+        Save();
+    }
+
+    private void OnApplicationPause(bool pauseStatus)
+    {
+        if (pauseStatus)
+            FlushPendingSave();
+    }
+
+    private void OnApplicationFocus(bool hasFocus)
+    {
+        if (!hasFocus)
+            FlushPendingSave();
+    }
+
+    private void OnApplicationQuit()
+    {
+        FlushPendingSave();
+    }
+
+    private static SaveMode GetBuildingSaveMode(BuildingState existing, BuildingState next)
+    {
+        if (existing == null)
+            return SaveMode.Immediate;
+
+        bool structuralChanged =
+            !string.Equals(existing.buildingId, next.buildingId, StringComparison.Ordinal) ||
+            existing.level != next.level ||
+            existing.isPlaced != next.isPlaced ||
+            existing.underConstruction != next.underConstruction;
+
+        return structuralChanged ? SaveMode.Immediate : SaveMode.Delayed;
+    }
+
+    private static string NormalizeBuildingSlotId(string slotId)
+    {
+        if (string.IsNullOrWhiteSpace(slotId))
+            return string.Empty;
+
+        string trimmed = slotId.Trim();
+        int pathsIndex = trimmed.IndexOf("paths[", StringComparison.OrdinalIgnoreCase);
+        if (pathsIndex >= 0)
+        {
+            string normalized = trimmed.Substring(pathsIndex);
+            int segmentEnd = normalized.IndexOf('/');
+            if (segmentEnd < 0)
+                return "paths";
+
+            return "paths" + normalized.Substring(segmentEnd);
+        }
+
+        int plainPathsIndex = trimmed.IndexOf("paths/", StringComparison.OrdinalIgnoreCase);
+        if (plainPathsIndex >= 0)
+            return trimmed.Substring(plainPathsIndex);
+
+        return trimmed;
+    }
+
+    private static SaveMode GetTurretSaveMode(TurretState existing, TurretState next)
+    {
+        if (existing == null)
+            return SaveMode.Immediate;
+
+        bool structuralChanged =
+            !string.Equals(existing.turretId, next.turretId, StringComparison.Ordinal) ||
+            existing.level != next.level ||
+            existing.isPlaced != next.isPlaced;
+
+        return structuralChanged ? SaveMode.Immediate : SaveMode.Delayed;
+    }
+
+    private static SaveMode GetOxygenGeneratorSaveMode(OxygenGeneratorState existing, OxygenGeneratorState next)
+    {
+        if (existing == null)
+            return SaveMode.Immediate;
+
+        bool structuralChanged =
+            !string.Equals(existing.oxygenId, next.oxygenId, StringComparison.Ordinal) ||
+            existing.level != next.level ||
+            existing.isPlaced != next.isPlaced;
+
+        return structuralChanged ? SaveMode.Immediate : SaveMode.Delayed;
     }
 
     private void SanitizeSaveData()
@@ -680,6 +1144,10 @@ public class VillageManagement : MonoBehaviour
         saveData.oxygenCapacity = Mathf.Max(0, saveData.oxygenCapacity);
         saveData.energyCapacity = Mathf.Max(0, saveData.energyCapacity);
         saveData.bankLevel = Mathf.Clamp(saveData.bankLevel, 1, 3);
+        saveData.selectedArcadeSceneIndex = Mathf.Max(0, saveData.selectedArcadeSceneIndex);
+        saveData.selectedArcadePlayerType = saveData.selectedArcadePlayerType <= 0
+            ? -1
+            : Mathf.Clamp(saveData.selectedArcadePlayerType, 1, 5);
         saveData.currentOxygen = Mathf.Clamp(saveData.currentOxygen, 0, saveData.oxygenCapacity);
         saveData.currentEnergy = Mathf.Clamp(saveData.currentEnergy, 0, saveData.energyCapacity);
         saveData.emergencyDifficulty = Mathf.Clamp(saveData.emergencyDifficulty, 1, 26);
@@ -706,6 +1174,8 @@ public class VillageManagement : MonoBehaviour
             saveData.ownedWhiteBloodCellIds = new List<string>();
         if (arcadePlayers == null)
             arcadePlayers = new List<ArcadePlayerEntry>();
+
+        DeduplicateBuildingStates();
 
         for (int i = 0; i < saveData.buildings.Count; i++)
         {
@@ -750,6 +1220,42 @@ public class VillageManagement : MonoBehaviour
         SanitizeArcadePlayers();
     }
 
+    private void DeduplicateBuildingStates()
+    {
+        if (saveData.buildings == null || saveData.buildings.Count <= 1)
+            return;
+
+        Dictionary<string, BuildingState> latestBySlot = new Dictionary<string, BuildingState>(StringComparer.Ordinal);
+        List<string> order = new List<string>();
+
+        for (int i = 0; i < saveData.buildings.Count; i++)
+        {
+            BuildingState state = saveData.buildings[i];
+            if (state == null)
+                continue;
+
+            string normalizedSlotId = NormalizeBuildingSlotId(state.slotId);
+            if (string.IsNullOrWhiteSpace(normalizedSlotId))
+                continue;
+
+            state.slotId = normalizedSlotId;
+            if (!latestBySlot.ContainsKey(normalizedSlotId))
+                order.Add(normalizedSlotId);
+
+            latestBySlot[normalizedSlotId] = state;
+        }
+
+        List<BuildingState> deduplicated = new List<BuildingState>(latestBySlot.Count);
+        for (int i = 0; i < order.Count; i++)
+        {
+            string slotId = order[i];
+            if (latestBySlot.TryGetValue(slotId, out BuildingState state) && state != null)
+                deduplicated.Add(state);
+        }
+
+        saveData.buildings = deduplicated;
+    }
+
     private void ProcessDebugControls()
     {
         if (!Application.isPlaying || debugControls == null)
@@ -776,7 +1282,7 @@ public class VillageManagement : MonoBehaviour
                 state.currentSalary = state.maxSalary;
                 state.isWorking = state.maxSalary > 0;
             }
-            SaveAndBroadcast();
+            SaveAndBroadcast(SaveMode.Delayed);
         }
 
         if (debugControls.emptyAllBuildingSalary)
@@ -791,7 +1297,7 @@ public class VillageManagement : MonoBehaviour
                 state.currentSalary = 0;
                 state.isWorking = false;
             }
-            SaveAndBroadcast();
+            SaveAndBroadcast(SaveMode.Delayed);
         }
 
         if (debugControls.fillAllTurretAmmo)
@@ -805,7 +1311,7 @@ public class VillageManagement : MonoBehaviour
 
                 state.currentAmmo = state.maxAmmo;
             }
-            SaveAndBroadcast();
+            SaveAndBroadcast(SaveMode.Delayed);
         }
 
         if (debugControls.emptyAllTurretAmmo)
@@ -819,7 +1325,7 @@ public class VillageManagement : MonoBehaviour
 
                 state.currentAmmo = 0;
             }
-            SaveAndBroadcast();
+            SaveAndBroadcast(SaveMode.Delayed);
         }
 
         if (debugControls.fillEnergyToMax)
@@ -868,10 +1374,11 @@ public class VillageManagement : MonoBehaviour
 
     private BuildingState FindBuildingState(string slotId)
     {
+        string normalizedSlotId = NormalizeBuildingSlotId(slotId);
         for (int i = 0; i < saveData.buildings.Count; i++)
         {
             BuildingState item = saveData.buildings[i];
-            if (item != null && item.slotId == slotId)
+            if (item != null && NormalizeBuildingSlotId(item.slotId) == normalizedSlotId)
                 return item;
         }
 
@@ -919,7 +1426,7 @@ public class VillageManagement : MonoBehaviour
     {
         return new BuildingState
         {
-            slotId = source.slotId,
+            slotId = NormalizeBuildingSlotId(source.slotId),
             buildingId = source.buildingId,
             level = source.level,
             currentSalary = source.currentSalary,
@@ -933,7 +1440,7 @@ public class VillageManagement : MonoBehaviour
 
     private static void CopyBuildingState(BuildingState source, BuildingState target)
     {
-        target.slotId = source.slotId;
+        target.slotId = NormalizeBuildingSlotId(source.slotId);
         target.buildingId = source.buildingId;
         target.level = source.level;
         target.currentSalary = source.currentSalary;
@@ -973,6 +1480,7 @@ public class VillageManagement : MonoBehaviour
         {
             slotId = source.slotId,
             oxygenId = source.oxygenId,
+            purchaseEntryId = source.purchaseEntryId,
             level = source.level,
             isPlaced = source.isPlaced,
             isProducing = source.isProducing,
@@ -984,6 +1492,7 @@ public class VillageManagement : MonoBehaviour
     {
         target.slotId = source.slotId;
         target.oxygenId = source.oxygenId;
+        target.purchaseEntryId = source.purchaseEntryId;
         target.level = source.level;
         target.isPlaced = source.isPlaced;
         target.isProducing = source.isProducing;
@@ -996,7 +1505,7 @@ public class VillageManagement : MonoBehaviour
             return;
 
         list.Add(value);
-        SaveAndBroadcast();
+        SaveAndBroadcast(SaveMode.Immediate);
     }
 
     private void RemoveString(List<string> list, string value)
@@ -1005,7 +1514,7 @@ public class VillageManagement : MonoBehaviour
             return;
 
         if (list.Remove(value))
-            SaveAndBroadcast();
+            SaveAndBroadcast(SaveMode.Immediate);
     }
 
     private static void ReplaceStringList(List<string> target, IEnumerable<string> source)

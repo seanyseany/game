@@ -166,6 +166,27 @@ public class WayOil : MonoBehaviour
         return installedOil != null ? Mathf.Max(0, installedOil.Level) : 0;
     }
 
+    public string GetSlotIdAt(int pathIndex)
+    {
+        if (pathIndex < 0 || pathIndex >= connectedOilPaths.Count)
+            return string.Empty;
+
+        return BuildOilSlotId(pathIndex);
+    }
+
+    public bool TryGetInstalledOilAt(int pathIndex, out Oxygen installedOil)
+    {
+        EnsureInstalledOilCache();
+        if (pathIndex < 0 || pathIndex >= installedOils.Count)
+        {
+            installedOil = null;
+            return false;
+        }
+
+        installedOil = installedOils[pathIndex];
+        return installedOil != null;
+    }
+
     public Oxygen GetOilPrefab(int oilIndex)
     {
         if (oilIndex < 0 || oilIndex >= oilPrefabs.Count)
@@ -179,7 +200,7 @@ public class WayOil : MonoBehaviour
         return TryInstallPurchasedOil(oilPrefab, string.Empty, ownedAlready);
     }
 
-    public bool TryInstallPurchasedOilAt(int pathIndex, Oxygen oilPrefab, string assignedSlotId, bool ownedAlready)
+    public bool TryInstallPurchasedOilAt(int pathIndex, Oxygen oilPrefab, string assignedSlotId, bool ownedAlready, string purchaseEntryId = "")
     {
         if (oilPrefab == null)
             return false;
@@ -202,13 +223,14 @@ public class WayOil : MonoBehaviour
             if (!villageManagement.TrySpendOxygen(oilPrefab.CurrentOxygenPrice))
                 return false;
 
-            villageManagement.AddOwnedOxygen(oilPrefab.CatalogId);
+            villageManagement.AddOwnedOxygen(oilPrefab.ShopFamilyId);
         }
 
         Oxygen installedOil = Instantiate(oilPrefab, path);
         installedOils[pathIndex] = installedOil;
         installedOil.AssignSlot(string.IsNullOrWhiteSpace(assignedSlotId) ? BuildOilSlotId(pathIndex) : assignedSlotId);
-        installedOil.SetLevel(oilPrefab.Level);
+        installedOil.AssignPurchaseEntryId(purchaseEntryId);
+        installedOil.ApplySavedState(oilPrefab.Level, 0);
         installedOil.SnapBottomToWorld(path.position);
         installedOil.SetPlacementMirrored(ShouldMirrorInstalledOil(path));
         installedOil.BindWayOilSlot(this, pathIndex);
@@ -218,7 +240,7 @@ public class WayOil : MonoBehaviour
         return true;
     }
 
-    public bool TryInstallPurchasedOil(Oxygen oilPrefab, string assignedSlotId, bool ownedAlready)
+    public bool TryInstallPurchasedOil(Oxygen oilPrefab, string assignedSlotId, bool ownedAlready, string purchaseEntryId = "")
     {
         if (oilPrefab == null)
             return false;
@@ -234,7 +256,7 @@ public class WayOil : MonoBehaviour
             if (!villageManagement.TrySpendOxygen(oilPrefab.CurrentOxygenPrice))
                 return false;
 
-            villageManagement.AddOwnedOxygen(oilPrefab.CatalogId);
+            villageManagement.AddOwnedOxygen(oilPrefab.ShopFamilyId);
         }
 
         for (int i = 0; i < connectedOilPaths.Count; i++)
@@ -249,7 +271,7 @@ public class WayOil : MonoBehaviour
                 continue;
             }
 
-            return TryInstallPurchasedOilAt(i, oilPrefab, assignedSlotId, ownedAlready);
+            return TryInstallPurchasedOilAt(i, oilPrefab, assignedSlotId, ownedAlready, purchaseEntryId);
         }
 
         return false;
@@ -265,15 +287,18 @@ public class WayOil : MonoBehaviour
         {
             Oxygen installedOil = i < installedOils.Count ? installedOils[i] : null;
             Transform path = connectedOilPaths[i];
-            if (path == null || installedOil == null || installedOil.CatalogId != oxygenId)
+            if (path == null || installedOil == null || installedOil.ShopFamilyId != oxygenId)
                 continue;
 
             string slotId = installedOil.SlotId;
+            string purchaseEntryId = installedOil.PurchaseEntryId;
+            int storedOxygen = installedOil.StoredOxygen;
             Destroy(installedOil.gameObject);
 
             Oxygen replacement = Instantiate(upgradePrefab, path);
             replacement.AssignSlot(slotId);
-            replacement.SetLevel(upgradePrefab.Level);
+            replacement.AssignPurchaseEntryId(purchaseEntryId);
+            replacement.ApplySavedState(upgradePrefab.Level, storedOxygen);
             replacement.SnapBottomToWorld(path.position);
             replacement.SetPlacementMirrored(ShouldMirrorInstalledOil(path));
             replacement.BindWayOilSlot(this, i);
@@ -299,11 +324,46 @@ public class WayOil : MonoBehaviour
             if (path == null || installedOil == null || installedOil.SlotId != slotId)
                 continue;
 
+            int storedOxygen = installedOil.StoredOxygen;
             Destroy(installedOil.gameObject);
 
             Oxygen replacement = Instantiate(upgradePrefab, path);
             replacement.AssignSlot(slotId);
-            replacement.SetLevel(upgradePrefab.Level);
+            replacement.AssignPurchaseEntryId(installedOil.PurchaseEntryId);
+            replacement.ApplySavedState(upgradePrefab.Level, storedOxygen);
+            replacement.SnapBottomToWorld(path.position);
+            replacement.SetPlacementMirrored(ShouldMirrorInstalledOil(path));
+            replacement.BindWayOilSlot(this, i);
+            SetSlotRaycastEnabled(i, false);
+            replacement.PushState();
+            installedOils[i] = replacement;
+            return true;
+        }
+
+        return false;
+    }
+
+    public bool TryUpgradeInstalledOilByPurchaseEntryId(string purchaseEntryId, Oxygen upgradePrefab)
+    {
+        if (string.IsNullOrWhiteSpace(purchaseEntryId) || upgradePrefab == null)
+            return false;
+
+        EnsureInstalledOilCache();
+        for (int i = 0; i < connectedOilPaths.Count; i++)
+        {
+            Oxygen installedOil = i < installedOils.Count ? installedOils[i] : null;
+            Transform path = connectedOilPaths[i];
+            if (path == null || installedOil == null || installedOil.PurchaseEntryId != purchaseEntryId)
+                continue;
+
+            string slotId = installedOil.SlotId;
+            int storedOxygen = installedOil.StoredOxygen;
+            Destroy(installedOil.gameObject);
+
+            Oxygen replacement = Instantiate(upgradePrefab, path);
+            replacement.AssignSlot(slotId);
+            replacement.AssignPurchaseEntryId(purchaseEntryId);
+            replacement.ApplySavedState(upgradePrefab.Level, storedOxygen);
             replacement.SnapBottomToWorld(path.position);
             replacement.SetPlacementMirrored(ShouldMirrorInstalledOil(path));
             replacement.BindWayOilSlot(this, i);
@@ -354,6 +414,47 @@ public class WayOil : MonoBehaviour
 
         oilPath = installedPaths[Random.Range(0, installedPaths.Count)];
         return true;
+    }
+
+    public bool TryGetInstalledOilBySlotId(string slotId, out Oxygen installedOil)
+    {
+        installedOil = null;
+        if (string.IsNullOrWhiteSpace(slotId))
+            return false;
+
+        EnsureInstalledOilCache();
+        for (int i = 0; i < installedOils.Count; i++)
+        {
+            Oxygen candidate = installedOils[i];
+            if (candidate != null && string.Equals(candidate.SlotId, slotId, System.StringComparison.Ordinal))
+            {
+                installedOil = candidate;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public void RemoveAllInstalledOils()
+    {
+        EnsureInstalledOilCache();
+        VillageManagement villageManagement = VillageManagement.EnsureInstance();
+        for (int i = 0; i < installedOils.Count; i++)
+        {
+            Oxygen installedOil = installedOils[i];
+            if (installedOil == null)
+                continue;
+
+            if (villageManagement != null && !string.IsNullOrWhiteSpace(installedOil.SlotId))
+                villageManagement.RemoveOxygenGeneratorState(installedOil.SlotId);
+
+            Destroy(installedOil.gameObject);
+            installedOils[i] = null;
+            SetSlotRaycastEnabled(i, true);
+        }
+
+        RefreshEmployees();
     }
 
     public void RefreshEmployees()
@@ -854,6 +955,7 @@ public class WayOil : MonoBehaviour
 
         installedOils[slotIndex] = oxygen;
         oxygen.transform.SetParent(slot, false);
+        oxygen.AssignSlot(GetSlotIdAt(slotIndex));
         oxygen.BindWayOilSlot(this, slotIndex);
         oxygen.SnapBottomToWorld(slot.position);
         oxygen.SetPlacementMirrored(ShouldMirrorInstalledOil(slot));

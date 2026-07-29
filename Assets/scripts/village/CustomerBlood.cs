@@ -58,6 +58,7 @@ public class CustomerBlood : MonoBehaviour
     private bool purchaseFinished;
     private bool transitioningToCarry;
     private bool purchaseSequenceRunning;
+    private int purchaseReceiveRoutineVersion;
     private string spawnEntryId;
     private float fixedZ;
     private float lifeEndTime;
@@ -70,6 +71,7 @@ public class CustomerBlood : MonoBehaviour
     private Vector3 activeMoveTargetPosition;
     public string SpawnEntryId => spawnEntryId;
     public CustomerBlood SourcePrefab => sourcePrefab;
+    public float ReceiveItemSpawnDelay => receiveItemSpawnDelay;
 
     private void Awake()
     {
@@ -188,6 +190,9 @@ public class CustomerBlood : MonoBehaviour
         pendingPurchaseBuilding = null;
         purchaseSequenceRunning = false;
         transitioningToCarry = false;
+        purchaseReceiveRoutineVersion++;
+        if (!purchaseFinished)
+            ClearHeldItem();
         ClearActiveMoveTarget();
 
         if (!purchaseFinished)
@@ -225,11 +230,15 @@ public class CustomerBlood : MonoBehaviour
 
     public IEnumerator ReceivePurchasedItemRoutine(GameObject itemPrefab, System.Action onItemSpawned = null)
     {
+        int routineVersion = ++purchaseReceiveRoutineVersion;
         waitingAtCounter = false;
         transitioningToCarry = true;
         ApplyVisualState(VisualState.ReceivingItem);
 
         yield return new WaitForSeconds(receiveItemSpawnDelay);
+
+        if (routineVersion != purchaseReceiveRoutineVersion)
+            yield break;
 
         if (itemPrefab != null && heldItemInstance == null)
         {
@@ -245,6 +254,13 @@ public class CustomerBlood : MonoBehaviour
         onItemSpawned?.Invoke();
 
         yield return new WaitForSeconds(receiveToCarryDelay);
+
+        if (routineVersion != purchaseReceiveRoutineVersion)
+        {
+            if (!purchaseFinished)
+                ClearHeldItem();
+            yield break;
+        }
 
         purchaseFinished = true;
         transitioningToCarry = false;
@@ -486,12 +502,7 @@ public class CustomerBlood : MonoBehaviour
         }
 
         if (heldItemInstance != null)
-        {
-            VillageItemPool.Release(heldItemInstance);
-            heldItemInstance = null;
-            heldItemSpriteRenderer = null;
-            heldItemRenderers = null;
-        }
+            ClearHeldItem();
 
         if (targetBuilding != null)
             targetBuilding.NotifyCustomerLeaving(this);
@@ -507,6 +518,7 @@ public class CustomerBlood : MonoBehaviour
         purchaseFinished = false;
         transitioningToCarry = false;
         purchaseSequenceRunning = false;
+        purchaseReceiveRoutineVersion++;
         spawnEntryId = string.Empty;
         routeSequenceIndex = int.MinValue;
         currentRouteNodeIndex = -1;
@@ -633,6 +645,18 @@ public class CustomerBlood : MonoBehaviour
 
         heldItemInstance.transform.localPosition = localPosition;
         UpdateSortingOrders();
+    }
+
+    private void ClearHeldItem()
+    {
+        if (heldItemInstance != null)
+        {
+            VillageItemPool.Release(heldItemInstance);
+            heldItemInstance = null;
+        }
+
+        heldItemSpriteRenderer = null;
+        heldItemRenderers = null;
     }
 
     private void ApplyVisualState(VisualState state)
@@ -935,7 +959,7 @@ public class CustomerBlood : MonoBehaviour
             return false;
 
         Building building = path.Building;
-        return building.IsWorking && building.HasPurchasableCustomerPoint();
+        return building.IsAvailableForCustomerPurchases();
     }
 
     private static Vector3 GetClosestPointOnSegment(Vector3 start, Vector3 end, Vector3 point, out float t)

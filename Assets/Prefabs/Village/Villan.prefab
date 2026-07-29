@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 8022224888560000711}
   - component: {fileID: 3747873120865708378}
   - component: {fileID: 6532907442835500416}
+  - component: {fileID: 3935837398215740805}
   m_Layer: 0
   m_Name: Villan
   m_TagString: Untagged
@@ -127,8 +128,8 @@ CircleCollider2D:
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: 0.05025635, y: 0.05942583}
-  m_Radius: 0.63114405
+  m_Offset: {x: 0.11362041, y: -0.018781025}
+  m_Radius: 0.42921823
 --- !u!50 &3747873120865708378
 Rigidbody2D:
   serializedVersion: 5
@@ -169,6 +170,29 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Villan
   moveSpeed: 1
-  hitCount: 10
+  hitCount: 7
+  spriteRenderer: {fileID: 0}
   aimTarget: {fileID: 0}
   animator: {fileID: 0}
+--- !u!95 &3935837398215740805
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4889439008936783775}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: 305911d60ff484474aee7a12bffb7612, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0

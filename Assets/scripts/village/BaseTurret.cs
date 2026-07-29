@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.UI;
 
 public abstract class BaseTurret : MonoBehaviour
 {
@@ -18,6 +19,16 @@ public abstract class BaseTurret : MonoBehaviour
     [Header("Placement")]
     [SerializeField] protected Vector2 bottomLocalPosition;
 
+    [Header("Ammo Purchase")]
+    [SerializeField] protected int ammoPrice30 = 3;
+    [SerializeField] protected int ammoPrice60 = 6;
+    [SerializeField] protected int ammoPrice100 = 10;
+
+    [Header("Status Bar")]
+    [SerializeField] private Canvas ammoStatusBar;
+    [SerializeField] private Transform ammoStatusBarLevel1Anchor;
+    [SerializeField] private Transform ammoStatusBarLevel2Anchor;
+
     [HideInInspector] [SerializeField] protected TurretLevelData level1Data = new TurretLevelData();
     [HideInInspector] [SerializeField] protected TurretLevelData level2Data = new TurretLevelData();
     [HideInInspector] [SerializeField] protected TurretLevelData level3Data = new TurretLevelData();
@@ -29,6 +40,15 @@ public abstract class BaseTurret : MonoBehaviour
     protected GameObject reloadVisualInstance;
 
     protected string slotId;
+    private bool stateInitialized;
+    private bool isPlacementMirrored;
+    private Slider ammoStatusSlider;
+    private Image ammoStatusFillImage;
+    private Color ammoStatusNormalFillColor = Color.green;
+    private bool ammoStatusNormalFillColorCaptured;
+
+    private static readonly Color AmmoStatusLowFillColor = new Color(0.9f, 0.18f, 0.16f, 1f);
+    private const float AmmoStatusLowFillThreshold = 1f / 3f;
 
     public string CatalogId => gameObject.name.Replace("(Clone)", string.Empty).Trim();
     public string SlotId => slotId;
@@ -41,7 +61,16 @@ public abstract class BaseTurret : MonoBehaviour
 
     protected virtual void Start()
     {
-        ApplyLevel(level, false);
+        ResolveStatusBar();
+
+        RebuildReloadVisual();
+
+        RefreshStatusBar();
+    }
+
+    protected virtual void LateUpdate()
+    {
+        RefreshStatusBarAnchor();
     }
 
     public void AssignSlot(string nextSlotId)
@@ -57,22 +86,58 @@ public abstract class BaseTurret : MonoBehaviour
         level = Mathf.Clamp(targetLevel, 1, 3);
         ammoCapacity = Mathf.Max(0, GetDataForLevel(level).ammoCapacity);
         ammoCurrent = keepAmmoRatio ? Mathf.Clamp(Mathf.RoundToInt(ammoCapacity * fillRatio), 0, ammoCapacity) : ammoCapacity;
+        stateInitialized = true;
 
+        RefreshStatusBarAnchor();
         RebuildReloadVisual();
+        RefreshStatusBar();
         PushState();
+    }
+
+    public void ApplySavedState(int savedLevel, int savedCurrentAmmo, int savedMaxAmmo)
+    {
+        level = Mathf.Clamp(savedLevel, 1, 3);
+        ammoCapacity = Mathf.Max(0, GetDataForLevel(level).ammoCapacity);
+
+        int capacityLimit = savedMaxAmmo > 0 ? Mathf.Min(ammoCapacity, savedMaxAmmo) : ammoCapacity;
+        if (capacityLimit <= 0)
+            capacityLimit = ammoCapacity;
+
+        ammoCurrent = Mathf.Clamp(savedCurrentAmmo, 0, Mathf.Max(0, capacityLimit));
+        stateInitialized = true;
+
+        RefreshStatusBarAnchor();
+        RebuildReloadVisual();
+        RefreshStatusBar();
     }
 
     public void SetPlacementMirrored(bool mirrored)
     {
+        isPlacementMirrored = mirrored;
+
         Vector3 scale = transform.localScale;
         float absX = Mathf.Abs(scale.x);
         scale.x = mirrored ? -absX : absX;
         transform.localScale = scale;
+        HandlePlacementMirrorChanged(mirrored);
+        RefreshStatusBarAnchor();
+    }
+
+    protected virtual void HandlePlacementMirrorChanged(bool mirrored)
+    {
     }
 
     public bool CanRefillPercent(int percent)
     {
-        return ammoCurrent < ammoCapacity && ammoCurrent + GetAmmoAmountForPercent(percent) <= ammoCapacity;
+        int maxAmmo = Mathf.Max(0, ammoCapacity);
+        if (maxAmmo <= 0)
+            return false;
+
+        if (percent >= 100)
+            return ammoCurrent < maxAmmo;
+
+        int amountToAdd = GetAmmoAmountForPercent(percent);
+        return amountToAdd > 0 && ammoCurrent <= maxAmmo - amountToAdd;
     }
 
     public bool TryBuyAmmoPercent(int percent)
@@ -80,37 +145,51 @@ public abstract class BaseTurret : MonoBehaviour
         if (!CanRefillPercent(percent))
             return false;
 
-        TurretBullet bulletPrefab = GetBulletPrefab();
-        if (bulletPrefab == null || VillageManagement.Instance == null)
+        if (VillageManagement.Instance == null)
             return false;
 
-        int price = GetBulletPriceForPercent(percent, bulletPrefab);
+        int price = GetBulletPriceForPercent(percent);
         if (!VillageManagement.Instance.TrySpendOxygen(price))
             return false;
 
-        ammoCurrent = Mathf.Clamp(ammoCurrent + GetAmmoAmountForPercent(percent), 0, ammoCapacity);
+        if (percent >= 100)
+            ammoCurrent = ammoCapacity;
+        else
+            ammoCurrent = Mathf.Clamp(ammoCurrent + GetAmmoAmountForPercent(percent), 0, ammoCapacity);
+
         RebuildReloadVisual();
-        PushState();
+        RefreshStatusBar();
+        PushState(true);
         return true;
     }
 
     public int GetBulletPriceForPercent(int percent, TurretBullet bulletPrefab = null)
     {
-        TurretBullet source = bulletPrefab != null ? bulletPrefab : GetBulletPrefab();
-        if (source == null)
-            return 0;
-
         switch (percent)
         {
-            case 30: return source.OxygenPrice30;
-            case 60: return source.OxygenPrice60;
-            default: return source.OxygenPrice100;
+            case 30:
+                return ammoPrice30;
+            case 60:
+                return ammoPrice60;
+            default:
+                return GetFullAmmoRefillPrice();
         }
+    }
+
+    public int GetFullAmmoRefillPrice()
+    {
+        int maxAmmo = Mathf.Max(0, ammoCapacity);
+        if (maxAmmo <= 0 || ammoCurrent >= maxAmmo)
+            return 0;
+
+        int remainingAmount = Mathf.Max(0, maxAmmo - ammoCurrent);
+        float remainingRatio = remainingAmount / (float)maxAmmo;
+        return Mathf.CeilToInt(ammoPrice100 * remainingRatio);
     }
 
     public int GetAmmoAmountForPercent(int percent)
     {
-        return Mathf.CeilToInt(ammoCapacity * (percent / 100f));
+        return Mathf.CeilToInt(ammoCapacity * GetFillFraction(percent));
     }
 
     public bool CanUpgrade()
@@ -123,10 +202,26 @@ public abstract class BaseTurret : MonoBehaviour
         return GetDataForLevel(level).upgradePrefab;
     }
 
-    public virtual void PushState()
+    private static float GetFillFraction(int percent)
+    {
+        switch (percent)
+        {
+            case 30:
+                return 1f / 3f;
+            case 60:
+                return 2f / 3f;
+            default:
+                return 1f;
+        }
+    }
+
+    public virtual void PushState(bool immediate = false)
     {
         VillageManagement villageManagement = VillageManagement.EnsureInstance();
         if (villageManagement == null || string.IsNullOrWhiteSpace(slotId))
+            return;
+
+        if (villageManagement.IsRestoreInProgress)
             return;
 
         villageManagement.UpsertTurretState(new VillageManagement.TurretState
@@ -137,14 +232,107 @@ public abstract class BaseTurret : MonoBehaviour
             currentAmmo = ammoCurrent,
             maxAmmo = ammoCapacity,
             isPlaced = true
-        });
+        }, immediate);
     }
 
     protected void ConsumeAmmo(int amount)
     {
         ammoCurrent = Mathf.Max(0, ammoCurrent - amount);
         RebuildReloadVisual();
+        RefreshStatusBar();
         PushState();
+    }
+
+    protected void ResolveStatusBar()
+    {
+        if (ammoStatusBar == null)
+            ammoStatusBar = GetComponentInChildren<Canvas>(true);
+
+        ammoStatusSlider = ammoStatusBar != null ? ammoStatusBar.GetComponentInChildren<Slider>(true) : null;
+        ammoStatusFillImage = ResolveAmmoStatusFillImage();
+        if (ammoStatusFillImage != null && !ammoStatusNormalFillColorCaptured)
+        {
+            ammoStatusNormalFillColor = ammoStatusFillImage.color;
+            ammoStatusNormalFillColorCaptured = true;
+        }
+
+        RefreshStatusBarAnchor();
+    }
+
+    protected void EditorValidateStatusBar()
+    {
+        ResolveStatusBar();
+        RefreshStatusBar();
+    }
+
+    private void RefreshStatusBarAnchor()
+    {
+        if (ammoStatusBar == null)
+            return;
+
+        Transform anchor = level >= 2 && ammoStatusBarLevel2Anchor != null
+            ? ammoStatusBarLevel2Anchor
+            : ammoStatusBarLevel1Anchor;
+
+        if (anchor != null)
+        {
+            ammoStatusBar.transform.position = anchor.position;
+            ammoStatusBar.transform.rotation = Quaternion.identity;
+
+            Vector3 canvasScale = ammoStatusBar.transform.localScale;
+            float absCanvasScaleX = Mathf.Abs(Mathf.Approximately(canvasScale.x, 0f) ? 1f : canvasScale.x);
+            canvasScale.x = isPlacementMirrored ? -absCanvasScaleX : absCanvasScaleX;
+            ammoStatusBar.transform.localScale = canvasScale;
+        }
+    }
+
+    protected void RefreshStatusBar()
+    {
+        if (ammoStatusBar == null)
+            ResolveStatusBar();
+
+        if (ammoStatusBar == null)
+            return;
+
+        float normalized = ammoCapacity > 0 ? Mathf.Clamp01((float)ammoCurrent / ammoCapacity) : 0f;
+        if (ammoStatusSlider != null)
+        {
+            ammoStatusSlider.minValue = 0f;
+            ammoStatusSlider.maxValue = 1f;
+            ammoStatusSlider.wholeNumbers = false;
+            ammoStatusSlider.direction = Slider.Direction.LeftToRight;
+            ammoStatusSlider.interactable = false;
+            ammoStatusSlider.transition = Selectable.Transition.None;
+            ammoStatusSlider.value = normalized;
+        }
+
+        if (ammoStatusFillImage != null)
+        {
+            ammoStatusFillImage.color = normalized > 0f && normalized <= AmmoStatusLowFillThreshold
+                ? AmmoStatusLowFillColor
+                : ammoStatusNormalFillColor;
+        }
+
+        ammoStatusBar.gameObject.SetActive(true);
+        RefreshStatusBarAnchor();
+    }
+
+    private Image ResolveAmmoStatusFillImage()
+    {
+        if (ammoStatusSlider != null && ammoStatusSlider.fillRect != null)
+            return ammoStatusSlider.fillRect.GetComponent<Image>();
+
+        if (ammoStatusBar == null)
+            return null;
+
+        Image[] images = ammoStatusBar.GetComponentsInChildren<Image>(true);
+        for (int i = 0; i < images.Length; i++)
+        {
+            if (images[i] != null && images[i].name.ToLowerInvariant().Contains("fill"))
+                return images[i];
+        }
+
+        return null;
     }
 
     protected abstract TurretBullet GetBulletPrefab();
