@@ -524,11 +524,10 @@ public class CholesterolBomb : MonoBehaviour, IReinitializable
         if (bombHitBox != null)
         {
             bombHitBox.affectsCholesterolBomb = false;
-
-            if (!string.IsNullOrEmpty(poolTag))
-                bombHitBox.poolTag = poolTag;
-
+            bombHitBox.isMachineGunCholesterolExplosion = true;
+            bombHitBox.disableOnlyOnLifeEnd = true;
             bombHitBox.ActivateAfterDelay(0.2f);
+            bombHitBox.Activate(0.3f);
         }
 
         AnimatorAutoDespawn autoDespawn = spawned.GetComponent<AnimatorAutoDespawn>();

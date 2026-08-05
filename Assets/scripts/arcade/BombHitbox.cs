@@ -5,6 +5,8 @@ public class BombHitBox : MonoBehaviour
 {
     public string poolTag = "BombHitBox";
     public bool affectsCholesterolBomb = true;
+    public bool isMachineGunCholesterolExplosion;
+    public bool disableOnlyOnLifeEnd;
 
     private Coroutine lifeCo;
     private Coroutine delayedEnableCo;
@@ -27,6 +29,8 @@ public class BombHitBox : MonoBehaviour
 
         EnsureCachedColliders();
         SetCollidersEnabled(true);
+        isMachineGunCholesterolExplosion = false;
+        disableOnlyOnLifeEnd = false;
     }
 
     public void Activate(float lifeTime)
@@ -94,6 +98,13 @@ public class BombHitBox : MonoBehaviour
     {
         yield return new WaitForSeconds(t);
 
+        if (disableOnlyOnLifeEnd)
+        {
+            SetCollidersEnabled(false);
+            lifeCo = null;
+            yield break;
+        }
+
         if (ObjectPool.Instance != null)
         {
             if (!string.IsNullOrEmpty(poolTag) && ObjectPool.Instance.HasPool(poolTag))
@@ -126,6 +137,50 @@ public class BombHitBox : MonoBehaviour
         {
             if (cachedColliders[i] != null)
                 cachedColliders[i].enabled = enabled;
+        }
+    }
+
+    public void DisableDamageImmediately()
+    {
+        if (lifeCo != null)
+        {
+            StopCoroutine(lifeCo);
+            lifeCo = null;
+        }
+
+        if (delayedEnableCo != null)
+        {
+            StopCoroutine(delayedEnableCo);
+            delayedEnableCo = null;
+        }
+
+        EnsureCachedColliders();
+        SetCollidersEnabled(false);
+    }
+
+    public static void ClearActiveMachineGunCholesterolExplosions()
+    {
+        BombHitBox[] activeHitBoxes = FindObjectsByType<BombHitBox>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+        for (int i = 0; i < activeHitBoxes.Length; i++)
+        {
+            BombHitBox hitBox = activeHitBoxes[i];
+            if (hitBox == null || !hitBox.isMachineGunCholesterolExplosion)
+                continue;
+
+            if (hitBox.disableOnlyOnLifeEnd)
+            {
+                hitBox.DisableDamageImmediately();
+            }
+            else if (ObjectPool.Instance != null &&
+                !string.IsNullOrEmpty(hitBox.poolTag) &&
+                ObjectPool.Instance.HasPool(hitBox.poolTag))
+            {
+                ObjectPool.Instance.ReturnToPool(hitBox.poolTag, hitBox.gameObject);
+            }
+            else
+            {
+                hitBox.gameObject.SetActive(false);
+            }
         }
     }
 }

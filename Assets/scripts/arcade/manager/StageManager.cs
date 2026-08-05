@@ -1151,6 +1151,7 @@ public class StageManager : MonoBehaviour
 
     private void HandleMachineGunSequenceEnd()
     {
+        BombHitBox.ClearActiveMachineGunCholesterolExplosions();
         machineGunStagePrePauseActive = false;
         machineGunPhasePauseActive = false;
 
