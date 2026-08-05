@@ -6,7 +6,7 @@ using UnityEngine.Events;
 public class BuildingUI : MonoBehaviour
 {
     private const float PanelWidth = 300f;
-    private const float PanelHeight = 216f;
+    private const float PanelHeight = 164f;
     private const float ScreenPadding = 12f;
 
     public static BuildingUI Instance { get; private set; }
@@ -16,18 +16,15 @@ public class BuildingUI : MonoBehaviour
     [SerializeField] private Image workerImage;
     [SerializeField] private Image salaryFill;
     [SerializeField] private Button pay30Button;
-    [SerializeField] private Button pay60Button;
     [SerializeField] private Button pay100Button;
     [SerializeField] private Button removeButton;
     [SerializeField] private Button closeButton;
     [SerializeField] private TMP_Text pay30Text;
-    [SerializeField] private TMP_Text pay60Text;
     [SerializeField] private TMP_Text pay100Text;
 
     private Path boundPath;
     private Building boundBuilding;
     private UnityAction pay30Action;
-    private UnityAction pay60Action;
     private UnityAction pay100Action;
     private int openedFrame = -1;
 
@@ -52,7 +49,6 @@ public class BuildingUI : MonoBehaviour
         Instance = this;
 
         pay30Action = () => TryPay(30);
-        pay60Action = () => TryPay(60);
         pay100Action = () => TryPay(100);
         EnsureRuntimeUi();
 
@@ -110,7 +106,6 @@ public class BuildingUI : MonoBehaviour
             salaryFill.fillAmount = boundBuilding.MaxSalary > 0 ? (float)boundBuilding.CurrentSalary / boundBuilding.MaxSalary : 0f;
 
         RefreshPayButton(pay30Button, pay30Text, 30);
-        RefreshPayButton(pay60Button, pay60Text, 60);
         RefreshPayButton(pay100Button, pay100Text, 100);
         UpdatePanelPosition();
     }
@@ -141,7 +136,7 @@ public class BuildingUI : MonoBehaviour
 
         TMP_Text buttonText = button != null ? button.GetComponentInChildren<TMP_Text>() : null;
         if (buttonText != null)
-            buttonText.text = $"{percent}%  O2 {price}";
+            buttonText.text = $"{GetPayButtonLabel(percent)}  O2 {price}";
 
         if (button != null && VillageManagement.Instance != null)
         {
@@ -165,10 +160,8 @@ public class BuildingUI : MonoBehaviour
     {
         return panel != null &&
                pay30Button != null &&
-               pay60Button != null &&
                pay100Button != null &&
                pay30Text != null &&
-               pay60Text != null &&
                pay100Text != null;
     }
 
@@ -188,8 +181,7 @@ public class BuildingUI : MonoBehaviour
         panel.GetComponent<Image>().color = new Color(0.08f, 0.11f, 0.16f, 0.94f);
 
         CreateChargeRow("Charge30", panel.transform, fallbackFont, 0, out pay30Text, out pay30Button);
-        CreateChargeRow("Charge60", panel.transform, fallbackFont, 1, out pay60Text, out pay60Button);
-        CreateChargeRow("Charge100", panel.transform, fallbackFont, 2, out pay100Text, out pay100Button);
+        CreateChargeRow("Charge100", panel.transform, fallbackFont, 1, out pay100Text, out pay100Button);
 
         workerImage = null;
         salaryFill = null;
@@ -202,7 +194,7 @@ public class BuildingUI : MonoBehaviour
         RectTransform rowRect = row.GetComponent<RectTransform>();
         rowRect.SetParent(parent, false);
         float top = -12f - (index * 52f);
-        float widthFactor = index == 0 ? 1f / 3f : index == 1 ? 2f / 3f : 1f;
+        float widthFactor = index == 0 ? 1f / 3f : 1f;
         SetRect(rowRect, new Vector2(0f, 1f), new Vector2(widthFactor, 1f), new Vector2(12f, top - 42f), new Vector2(-12f, top));
 
         priceText = CreateText("Price", row.transform, fallbackFont, 14, TextAlignmentOptions.Center);
@@ -221,13 +213,15 @@ public class BuildingUI : MonoBehaviour
             case 0:
                 button.onClick.AddListener(pay30Action);
                 break;
-            case 1:
-                button.onClick.AddListener(pay60Action);
-                break;
             default:
                 button.onClick.AddListener(pay100Action);
                 break;
         }
+    }
+
+    private static string GetPayButtonLabel(int percent)
+    {
+        return percent >= 100 ? "풀" : "1/3";
     }
 
     private void UpdatePanelPosition()
@@ -331,7 +325,6 @@ public class BuildingUI : MonoBehaviour
     private void BindButtonCallbacks()
     {
         BindButton(pay30Button, pay30Action);
-        BindButton(pay60Button, pay60Action);
         BindButton(pay100Button, pay100Action);
     }
 

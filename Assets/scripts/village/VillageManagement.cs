@@ -305,12 +305,13 @@ public class VillageManagement : MonoBehaviour
         FlushPendingSave();
     }
 
-    public void Save()
+    public void Save(bool updateLastSavedUtc = true)
     {
         try
         {
             SanitizeSaveData();
-            saveData.lastSavedUtc = DateTime.UtcNow.ToString("O");
+            if (updateLastSavedUtc)
+                saveData.lastSavedUtc = DateTime.UtcNow.ToString("O");
             string json = JsonUtility.ToJson(saveData, true);
             File.WriteAllText(SavePath, json);
         }
@@ -333,7 +334,20 @@ public class VillageManagement : MonoBehaviour
     public void ResetAllVillageProgress()
     {
         ClearPlacedVillageObjects();
-        ResetSaveData();
+        saveData.bankLevel = 1;
+        saveData.selectedWhiteBloodCellId = string.Empty;
+        saveData.selectedArcadeSceneIndex = 0;
+        saveData.currentOxygen = 0;
+        saveData.currentEnergy = 0;
+        saveData.emergencyDifficulty = 1;
+        saveData.lifetimeArcadeOxygenEarned = 0;
+        saveData.lifetimeArcadeEnergyEarned = 0;
+        saveData.lastSavedUtc = string.Empty;
+
+        Save(false);
+        NotifyAllResourceSnapshots();
+        SaveDataChanged?.Invoke(saveData);
+        EmergencyDifficultyChanged?.Invoke(saveData.emergencyDifficulty);
     }
 
     public void ClearPlacedVillageObjects()

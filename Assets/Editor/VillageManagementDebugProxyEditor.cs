@@ -31,7 +31,7 @@ public class VillageManagementDebugProxyEditor : Editor
             {
                 bool confirmed = EditorUtility.DisplayDialog(
                     "Reset All Village Progress",
-                    "This will reset the entire village save back to its initial state. Continue?",
+                    "This will reset selected village progress fields and clear placed village objects. Continue?",
                     "Reset",
                     "Cancel");
 

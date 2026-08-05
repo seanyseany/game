@@ -16,7 +16,7 @@ public class VillageManagementEditor : Editor
         EditorGUILayout.LabelField("Debug Actions", EditorStyles.boldLabel);
         EditorGUILayout.HelpBox(
             "Clear Placed Village Objects removes only currently placed buildings, turrets, and oil objects.\n" +
-            "Reset All Village Progress resets the entire village save back to its initial state.",
+            "Reset All Village Progress resets only selected village progress fields and clears placed village objects.",
             MessageType.Warning);
 
         using (new EditorGUI.DisabledScope(!Application.isPlaying))
@@ -28,7 +28,7 @@ public class VillageManagementEditor : Editor
             {
                 bool confirmed = EditorUtility.DisplayDialog(
                     "Reset All Village Progress",
-                    "This will reset the entire village save back to its initial state. Continue?",
+                    "This will reset selected village progress fields and clear placed village objects. Continue?",
                     "Reset",
                     "Cancel");
 

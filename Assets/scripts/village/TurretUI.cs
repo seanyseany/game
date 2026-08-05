@@ -6,7 +6,7 @@ using UnityEngine.Events;
 public class TurretUI : MonoBehaviour
 {
     private const float PanelWidth = 300f;
-    private const float PanelHeight = 269f;
+    private const float PanelHeight = 217f;
     private const float ScreenPadding = 12f;
 
     public static TurretUI Instance { get; private set; }
@@ -14,20 +14,17 @@ public class TurretUI : MonoBehaviour
     [SerializeField] private GameObject panel;
     [SerializeField] private Image ammoFill;
     [SerializeField] private Button ammo30Button;
-    [SerializeField] private Button ammo60Button;
     [SerializeField] private Button ammo100Button;
     [SerializeField] private Button removeButton;
     [SerializeField] private Button upgradeButton;
     [SerializeField] private Button closeButton;
     [SerializeField] private TMP_Text ammo30Text;
-    [SerializeField] private TMP_Text ammo60Text;
     [SerializeField] private TMP_Text ammo100Text;
     [SerializeField] private TMP_Text upgradeText;
 
     private TurretImplementation boundImplementation;
     private BaseTurret boundTurret;
     private UnityAction ammo30Action;
-    private UnityAction ammo60Action;
     private UnityAction ammo100Action;
     private UnityAction upgradeAction;
     private int openedFrame = -1;
@@ -53,7 +50,6 @@ public class TurretUI : MonoBehaviour
         Instance = this;
 
         ammo30Action = () => TryBuyAmmo(30);
-        ammo60Action = () => TryBuyAmmo(60);
         ammo100Action = () => TryBuyAmmo(100);
         upgradeAction = () => boundImplementation?.TryUpgrade();
 
@@ -110,7 +106,6 @@ public class TurretUI : MonoBehaviour
             ammoFill.fillAmount = boundTurret.AmmoCapacity > 0 ? (float)boundTurret.AmmoCurrent / boundTurret.AmmoCapacity : 0f;
 
         RefreshAmmoButton(ammo30Button, ammo30Text, 30);
-        RefreshAmmoButton(ammo60Button, ammo60Text, 60);
         RefreshAmmoButton(ammo100Button, ammo100Text, 100);
 
         bool canUpgrade = boundTurret.CanUpgrade();
@@ -152,7 +147,7 @@ public class TurretUI : MonoBehaviour
 
         TMP_Text buttonText = button != null ? button.GetComponentInChildren<TMP_Text>() : null;
         if (buttonText != null)
-            buttonText.text = $"{percent}%  O2 {price}";
+            buttonText.text = $"{GetAmmoButtonLabel(percent)}  O2 {price}";
 
         if (button != null && VillageManagement.Instance != null)
             button.interactable = boundTurret.CanRefillPercent(percent) && VillageManagement.Instance.CurrentOxygen >= price;
@@ -173,11 +168,9 @@ public class TurretUI : MonoBehaviour
     {
         return panel != null &&
                ammo30Button != null &&
-               ammo60Button != null &&
                ammo100Button != null &&
                upgradeButton != null &&
                ammo30Text != null &&
-               ammo60Text != null &&
                ammo100Text != null &&
                upgradeText != null;
     }
@@ -197,8 +190,7 @@ public class TurretUI : MonoBehaviour
         panel.GetComponent<Image>().color = new Color(0.08f, 0.11f, 0.16f, 0.94f);
 
         CreateChargeRow("Ammo30", panel.transform, 0, out ammo30Text, out ammo30Button);
-        CreateChargeRow("Ammo60", panel.transform, 1, out ammo60Text, out ammo60Button);
-        CreateChargeRow("Ammo100", panel.transform, 2, out ammo100Text, out ammo100Button);
+        CreateChargeRow("Ammo100", panel.transform, 1, out ammo100Text, out ammo100Button);
 
         upgradeButton = CreateButton("UpgradeButton", panel.transform, new Vector2(12f, 12f), new Vector2(-12f, 42f), () => boundImplementation?.TryUpgrade());
         upgradeText = upgradeButton.GetComponentInChildren<TMP_Text>();
@@ -213,7 +205,7 @@ public class TurretUI : MonoBehaviour
         RectTransform rowRect = row.GetComponent<RectTransform>();
         rowRect.SetParent(parent, false);
         float top = -12f - (index * 52f);
-        float widthFactor = index == 0 ? 1f / 3f : index == 1 ? 2f / 3f : 1f;
+        float widthFactor = index == 0 ? 1f / 3f : 1f;
         SetRect(rowRect, new Vector2(0f, 1f), new Vector2(widthFactor, 1f), new Vector2(12f, top - 42f), new Vector2(-12f, top));
 
         priceText = CreateText("Price", row.transform, 14, TextAlignmentOptions.Center);
@@ -232,13 +224,15 @@ public class TurretUI : MonoBehaviour
             case 0:
                 button.onClick.AddListener(ammo30Action);
                 break;
-            case 1:
-                button.onClick.AddListener(ammo60Action);
-                break;
             default:
                 button.onClick.AddListener(ammo100Action);
                 break;
         }
+    }
+
+    private static string GetAmmoButtonLabel(int percent)
+    {
+        return percent >= 100 ? "풀" : "1/3";
     }
 
     private void UpdatePanelPosition()
@@ -345,7 +339,6 @@ public class TurretUI : MonoBehaviour
     private void BindButtonCallbacks()
     {
         BindButton(ammo30Button, ammo30Action);
-        BindButton(ammo60Button, ammo60Action);
         BindButton(ammo100Button, ammo100Action);
         BindButton(upgradeButton, upgradeAction);
     }
