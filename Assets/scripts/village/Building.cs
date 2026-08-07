@@ -728,6 +728,7 @@ public class Building : MonoBehaviour
             occupiedTargetPath.IsDirectDropPoint(dropPoint) &&
             occupiedDistance <= emptyDistance)
         {
+            SpecialBuilding occupiedSpecialBuilding = occupiedTargetPath.SpecialBuilding;
             if (dragOriginPath != null &&
                 dragOriginPath != occupiedTargetPath &&
                 dragOriginPath.IsAvailableForBuildingPlacement)
@@ -746,6 +747,20 @@ public class Building : MonoBehaviour
                     PushStateToVillageManagement(true);
                     displacedBuilding.PushStateToVillageManagement(true);
                     return;
+                }
+
+                if (occupiedSpecialBuilding != null)
+                {
+                    SpecialBuilding displacedSpecialBuilding = occupiedTargetPath.DetachCurrentSpecialBuilding();
+                    if (displacedSpecialBuilding != null)
+                    {
+                        currentPath = occupiedTargetPath;
+                        occupiedTargetPath.AcceptMovedBuilding(this, null, false, false);
+                        dragOriginPath.TransferActiveUpgradeTo(occupiedTargetPath, this);
+                        dragOriginPath.AcceptMovedSpecialBuilding(displacedSpecialBuilding);
+                        PushStateToVillageManagement(true);
+                        return;
+                    }
                 }
             }
 
@@ -772,6 +787,29 @@ public class Building : MonoBehaviour
                     PushStateToVillageManagement(true);
                     displacedBuilding.PushStateToVillageManagement(true);
                     return;
+                }
+
+                if (occupiedSpecialBuilding != null)
+                {
+                    SpecialBuilding displacedSpecialBuilding = occupiedTargetPath.DetachCurrentSpecialBuilding();
+                    if (displacedSpecialBuilding != null)
+                    {
+                        displacedSpecialBuilding.PrepareForRelocation();
+                        relocationPath.AcceptMovedSpecialBuilding(displacedSpecialBuilding);
+
+                        currentPath = occupiedTargetPath;
+                        occupiedTargetPath.AcceptMovedBuilding(this, null, false, false);
+                        if (dragOriginPath != null)
+                        {
+                            dragOriginPath.TransferActiveUpgradeTo(occupiedTargetPath, this);
+                            VillageManagement villageManagement = VillageManagement.EnsureInstance();
+                            if (villageManagement != null)
+                                villageManagement.RemoveBuildingState(dragOriginPath.PathId, BuildingId, false);
+                        }
+
+                        PushStateToVillageManagement(true);
+                        return;
+                    }
                 }
             }
         }

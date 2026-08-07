@@ -170,6 +170,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CustomerBlood
   moveSpeed: 0.6
+  canVisitSpecialBuilding: 0
   walkStretchFrequency: 6
   heldItemLocalPosition: {x: -0.512, y: 0.85}
   receiveItemLocalPosition: {x: -0.663, y: 1.3}
@@ -179,4 +180,10 @@ MonoBehaviour:
   receiveItemSprite: {fileID: 2989021388957054018, guid: 0b9ea3c821c5f44b79c36524bea3e2eb, type: 3}
   carryingWalkSprite: {fileID: 8439340821945741687, guid: 0b9ea3c821c5f44b79c36524bea3e2eb, type: 3}
   walkingSprite: {fileID: 5265538945385905680, guid: 0b9ea3c821c5f44b79c36524bea3e2eb, type: 3}
-  receivingToCarryingDelay: 0.5
+  receiveItemSpawnDelay: 0.2
+  receiveToCarryDelay: 0.3
+  purchasePassDistance: 0.35
+  sortingBaseOrder: 145
+  sortingOrderScale: 10
+  minimumBodySortingOrder: 100
+  maximumBodySortingOrder: 190

@@ -18,6 +18,7 @@ public class CustomerBlood : MonoBehaviour
 
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 2f;
+    [SerializeField] private bool canVisitSpecialBuilding = true;
     private float walkStretchAmount = 0.03f;
     [SerializeField] private float walkStretchFrequency = 6f;
     [SerializeField] private Vector2 heldItemLocalPosition = new Vector2(0.2f, 0.2f);
@@ -47,6 +48,7 @@ public class CustomerBlood : MonoBehaviour
     private Way currentWay;
     private Path currentPath;
     private Building targetBuilding;
+    private SpecialBuilding targetSpecialBuilding;
     private Building pendingPurchaseBuilding;
     private CustomerBlood sourcePrefab;
     private Building.QueueSlot currentQueueSlot = Building.QueueSlot.None;
@@ -58,6 +60,7 @@ public class CustomerBlood : MonoBehaviour
     private bool purchaseFinished;
     private bool transitioningToCarry;
     private bool purchaseSequenceRunning;
+    private bool hasVisitedSpecialBuildingThisTrip;
     private int purchaseReceiveRoutineVersion;
     private string spawnEntryId;
     private float fixedZ;
@@ -69,6 +72,8 @@ public class CustomerBlood : MonoBehaviour
     private readonly WaitForFixedUpdate waitForFixedUpdate = new WaitForFixedUpdate();
     private Transform activeMoveTargetTransform;
     private Vector3 activeMoveTargetPosition;
+    private Collider2D bodyCollider;
+    private SpriteRenderer[] allSpriteRenderers;
     public string SpawnEntryId => spawnEntryId;
     public CustomerBlood SourcePrefab => sourcePrefab;
     public float ReceiveItemSpawnDelay => receiveItemSpawnDelay;
@@ -81,6 +86,7 @@ public class CustomerBlood : MonoBehaviour
         EnsureSortingGroup();
 
         body = GetComponent<Rigidbody2D>();
+        bodyCollider = GetComponent<Collider2D>();
         body.interpolation = RigidbodyInterpolation2D.Interpolate;
         body.gravityScale = 0f;
         body.linearVelocity = Vector2.zero;
@@ -88,6 +94,8 @@ public class CustomerBlood : MonoBehaviour
 
         if (spriteRenderer != null)
             visualBaseScale = spriteRenderer.transform.localScale;
+
+        allSpriteRenderers = GetComponentsInChildren<SpriteRenderer>(true);
 
         UpdateSortingOrders();
     }
@@ -135,6 +143,7 @@ public class CustomerBlood : MonoBehaviour
         sourcePrefab = prefabSource;
         routeSequenceIndex = selectedRouteSequenceIndex;
         targetBuilding = path != null ? path.Building : null;
+        hasVisitedSpecialBuildingThisTrip = false;
 
         Vector3 spawnPosition = entrance != null ? entrance.SpawnWorldPosition : transform.position;
         transform.SetParent(null, true);
@@ -507,6 +516,8 @@ public class CustomerBlood : MonoBehaviour
         if (targetBuilding != null)
             targetBuilding.NotifyCustomerLeaving(this);
 
+        targetSpecialBuilding = null;
+
         targetBuilding = null;
         pendingPurchaseBuilding = null;
         currentWay = null;
@@ -524,6 +535,7 @@ public class CustomerBlood : MonoBehaviour
         currentRouteNodeIndex = -1;
         routeTravelDirection = 1;
         lifeEndTime = 0f;
+        hasVisitedSpecialBuildingThisTrip = false;
         ClearActiveMoveTarget();
         body.linearVelocity = Vector2.zero;
         facingLeft = true;
@@ -533,6 +545,7 @@ public class CustomerBlood : MonoBehaviour
         ResetWalkStretch();
         UpdateSortingOrders();
         ApplyVisualState(VisualState.Walking);
+        SetTemporaryVisibility(true);
     }
 
     private Vector3 WithFixedZ(Vector3 position)
@@ -847,6 +860,32 @@ public class CustomerBlood : MonoBehaviour
             }
         }
 
+        if (canVisitSpecialBuilding &&
+            !transitioningToCarry &&
+            !purchaseSequenceRunning &&
+            !hasVisitedSpecialBuildingThisTrip &&
+            TryChooseSpecialBuildingTargetAlongSegment(segmentStart, targetPoint, out SpecialBuilding specialBuilding, out Path specialPath, out Vector3 specialBranchPoint))
+        {
+            targetSpecialBuilding = specialBuilding;
+            currentPath = specialPath;
+
+            yield return MoveToRoutine(specialBranchPoint, false, null);
+
+            if (targetSpecialBuilding == specialBuilding && specialBuilding != null && specialBuilding.CanAcceptCustomers())
+            {
+                yield return MoveToRoutine(specialBuilding.CustomerEntrance.position, false, null);
+
+                if (targetSpecialBuilding == specialBuilding)
+                {
+                    yield return VisitSpecialBuildingRoutine(specialBuilding);
+                    yield return MoveToRoutine(specialBranchPoint, false, null);
+                }
+            }
+
+            if (targetSpecialBuilding == specialBuilding)
+                targetSpecialBuilding = null;
+        }
+
         yield return MoveToRoutine(targetPoint, false, null);
     }
 
@@ -960,6 +999,98 @@ public class CustomerBlood : MonoBehaviour
 
         Building building = path.Building;
         return building.IsAvailableForCustomerPurchases();
+    }
+
+    private bool TryChooseSpecialBuildingTargetAlongSegment(Vector3 start, Vector3 end, out SpecialBuilding specialBuilding, out Path path, out Vector3 branchPoint)
+    {
+        specialBuilding = null;
+        path = null;
+        branchPoint = end;
+
+        if (currentWay == null)
+            return false;
+
+        float detectionDistance = Mathf.Max(0.6f, purchasePassDistance);
+        float detectionSqrDistance = detectionDistance * detectionDistance;
+        float bestT = float.MaxValue;
+        var connectedPaths = currentWay.ConnectedPaths;
+        for (int i = 0; i < connectedPaths.Count; i++)
+        {
+            Path candidatePath = connectedPaths[i];
+            if (candidatePath == null)
+                continue;
+
+            SpecialBuilding candidate = candidatePath.SpecialBuilding;
+            if (candidate == null || !candidate.CanAcceptCustomers() || Random.value > candidate.VisitChance)
+                continue;
+
+            Vector3 pathPoint = WithFixedZ(candidatePath.transform.position);
+            Vector3 entrancePoint = WithFixedZ(candidate.CustomerEntrance.position);
+            Vector3 pathProjectedPoint = GetClosestPointOnSegment(start, end, pathPoint, out float pathT);
+            Vector3 entranceProjectedPoint = GetClosestPointOnSegment(start, end, entrancePoint, out float entranceT);
+
+            float pathDistance = (pathPoint - pathProjectedPoint).sqrMagnitude;
+            float entranceDistance = (entrancePoint - entranceProjectedPoint).sqrMagnitude;
+            float candidateDistance = Mathf.Min(pathDistance, entranceDistance);
+            if (candidateDistance > detectionSqrDistance)
+                continue;
+
+            float t = pathDistance <= entranceDistance ? pathT : entranceT;
+            if (t >= bestT)
+                continue;
+
+            bestT = t;
+            specialBuilding = candidate;
+            path = candidatePath;
+            branchPoint = pathDistance <= entranceDistance ? pathProjectedPoint : entranceProjectedPoint;
+        }
+
+        return specialBuilding != null && path != null;
+    }
+
+    private IEnumerator VisitSpecialBuildingRoutine(SpecialBuilding specialBuilding)
+    {
+        if (specialBuilding == null)
+            yield break;
+
+        const float visitSeconds = 20f;
+        ClearHeldItem();
+        purchaseFinished = false;
+        transitioningToCarry = false;
+        purchaseSequenceRunning = false;
+        purchaseReceiveRoutineVersion++;
+        ApplyVisualState(VisualState.Walking);
+        hasVisitedSpecialBuildingThisTrip = true;
+        SetTemporaryVisibility(false);
+        lifeEndTime += visitSeconds;
+        yield return new WaitForSeconds(visitSeconds);
+
+        if (targetSpecialBuilding != specialBuilding)
+            yield break;
+
+        Vector3 respawnPosition = WithFixedZ(specialBuilding.CustomerEntrance.position);
+        transform.position = respawnPosition;
+        if (body != null)
+            body.position = respawnPosition;
+        SetTemporaryVisibility(true);
+    }
+
+    private void SetTemporaryVisibility(bool visible)
+    {
+        if (bodyCollider != null)
+            bodyCollider.enabled = visible;
+
+        if (body != null)
+            body.simulated = visible;
+
+        if (allSpriteRenderers == null)
+            allSpriteRenderers = GetComponentsInChildren<SpriteRenderer>(true);
+
+        for (int i = 0; i < allSpriteRenderers.Length; i++)
+        {
+            if (allSpriteRenderers[i] != null)
+                allSpriteRenderers[i].enabled = visible;
+        }
     }
 
     private static Vector3 GetClosestPointOnSegment(Vector3 start, Vector3 end, Vector3 point, out float t)

@@ -19,6 +19,7 @@ public class Path : MonoBehaviour
 
     private Collider2D cachedCollider;
     private Building buildingInstance;
+    private SpecialBuilding specialBuildingInstance;
     private string pathId;
     private Coroutine constructionRoutine;
     private string activeConstructionBuildingId;
@@ -28,7 +29,8 @@ public class Path : MonoBehaviour
 
     public string PathId => pathId;
     public Building Building => buildingInstance;
-    public bool IsEmpty => buildingInstance == null && constructionRoutine == null;
+    public SpecialBuilding SpecialBuilding => specialBuildingInstance;
+    public bool IsEmpty => buildingInstance == null && specialBuildingInstance == null && constructionRoutine == null;
     public bool AllowsBuildingPlacement => allowsBuildingPlacement;
     public bool RotatePlacedPrefab180 => rotatePlacedPrefab180;
     public Vector2 TurretTargetRangeMinLocal => turretTargetRangeMinLocal;
@@ -66,7 +68,12 @@ public class Path : MonoBehaviour
     public float GetActivationScore()
     {
         if (buildingInstance == null || !buildingInstance.IsPlaced)
-            return 0f;
+        {
+            if (specialBuildingInstance == null || !specialBuildingInstance.IsPlaced)
+                return 0f;
+
+            return specialBuildingInstance.CanAcceptCustomers() ? 1f : 0.25f;
+        }
 
         return buildingInstance.IsWorking ? 2f : 0.5f;
     }
@@ -152,7 +159,7 @@ public class Path : MonoBehaviour
         for (int i = 0; i < AllPaths.Count; i++)
         {
             Path candidate = AllPaths[i];
-            if (candidate == null || candidate == originalPath || candidate.buildingInstance == null)
+            if (candidate == null || candidate == originalPath || (candidate.buildingInstance == null && candidate.specialBuildingInstance == null))
                 continue;
 
             if (!candidate.IsDirectDropPoint(worldPoint))
@@ -208,7 +215,7 @@ public class Path : MonoBehaviour
 
     public void TryBuildSelected(Building selectedPrefab)
     {
-        if (!allowsBuildingPlacement || selectedPrefab == null || constructionRoutine != null || buildingInstance != null)
+        if (!allowsBuildingPlacement || selectedPrefab == null || constructionRoutine != null || buildingInstance != null || specialBuildingInstance != null)
             return;
 
         VillageManagement villageManagement = VillageManagement.EnsureInstance();
@@ -227,6 +234,23 @@ public class Path : MonoBehaviour
         else
             PlaceBuildingImmediately(selectedPrefab, targetLevel, false);
 
+        Shop.CloseAllShops();
+    }
+
+    public void TryBuildSelected(SpecialBuilding selectedPrefab)
+    {
+        if (!allowsBuildingPlacement || selectedPrefab == null || constructionRoutine != null || buildingInstance != null || specialBuildingInstance != null)
+            return;
+
+        VillageManagement villageManagement = VillageManagement.EnsureInstance();
+        if (villageManagement == null)
+            return;
+
+        int price = Mathf.Max(0, selectedPrefab.SpecialBuildingValue);
+        if (price > 0 && !villageManagement.TrySpendOxygen(price))
+            return;
+
+        PlaceSpecialBuildingImmediately(selectedPrefab);
         Shop.CloseAllShops();
     }
 
@@ -282,6 +306,12 @@ public class Path : MonoBehaviour
             return;
         }
 
+        if (specialBuildingInstance != null)
+        {
+            RemoveCurrentSpecialBuilding();
+            return;
+        }
+
         if (constructionRoutine != null)
         {
             StopCoroutine(constructionRoutine);
@@ -316,12 +346,15 @@ public class Path : MonoBehaviour
             Destroy(buildingInstance.gameObject);
 
         buildingInstance = null;
+        if (specialBuildingInstance != null)
+            Destroy(specialBuildingInstance.gameObject);
+        specialBuildingInstance = null;
         RefreshInteractionCollider();
     }
 
     public bool RestoreFromState(VillageManagement.BuildingState state, Building buildingPrefab)
     {
-        if (state == null || buildingPrefab == null)
+        if (state == null || buildingPrefab == null || specialBuildingInstance != null)
             return false;
 
         if (!string.Equals(state.slotId, pathId, System.StringComparison.Ordinal))
@@ -354,6 +387,32 @@ public class Path : MonoBehaviour
         buildingInstance.SetSalary(state.currentSalary, state.maxSalary);
         buildingInstance.SetWorking(state.isWorking);
         buildingInstance.MarkPlaced(state.isPlaced);
+        return true;
+    }
+
+    public bool RestoreSpecialFromState(VillageManagement.BuildingState state, SpecialBuilding specialBuildingPrefab)
+    {
+        if (state == null || specialBuildingPrefab == null || buildingInstance != null)
+            return false;
+
+        if (!string.Equals(state.slotId, pathId, System.StringComparison.Ordinal))
+            return false;
+
+        if (constructionRoutine != null)
+            return false;
+
+        if (specialBuildingInstance != null)
+        {
+            Destroy(specialBuildingInstance.gameObject);
+            specialBuildingInstance = null;
+            RefreshInteractionCollider();
+        }
+
+        PlaceSpecialBuildingImmediately(specialBuildingPrefab);
+        if (specialBuildingInstance == null)
+            return false;
+
+        specialBuildingInstance.MarkPlaced(state.isPlaced);
         return true;
     }
 
@@ -419,7 +478,7 @@ public class Path : MonoBehaviour
 
     private void PlaceBuildingImmediately(Building buildingPrefab, int level, bool skipCapacityBonus)
     {
-        if (buildingPrefab == null)
+        if (buildingPrefab == null || specialBuildingInstance != null)
             return;
 
         if (buildingInstance != null)
@@ -446,6 +505,33 @@ public class Path : MonoBehaviour
         buildingInstance.PushStateToVillageManagement();
     }
 
+    private void PlaceSpecialBuildingImmediately(SpecialBuilding specialBuildingPrefab)
+    {
+        if (specialBuildingPrefab == null || buildingInstance != null || specialBuildingInstance != null)
+            return;
+
+        specialBuildingInstance = Instantiate(specialBuildingPrefab, transform, false);
+        specialBuildingInstance.AssignSlot(pathId);
+        specialBuildingInstance.MarkPlaced(true);
+        SnapSpecialBuildingToPath(specialBuildingInstance);
+        RefreshInteractionCollider();
+        PushSpecialBuildingState(true);
+    }
+
+    public void RemoveCurrentSpecialBuilding()
+    {
+        if (specialBuildingInstance == null)
+            return;
+
+        Destroy(specialBuildingInstance.gameObject);
+        specialBuildingInstance = null;
+        RefreshInteractionCollider();
+
+        VillageManagement villageManagement = VillageManagement.EnsureInstance();
+        if (villageManagement != null)
+            villageManagement.RemoveBuildingState(pathId, null, "special");
+    }
+
     public void ReleaseBuildingReference(Building building, bool removeSavedState = true)
     {
         if (buildingInstance == building)
@@ -456,6 +542,19 @@ public class Path : MonoBehaviour
             VillageManagement villageManagement = VillageManagement.EnsureInstance();
             if (removeSavedState && villageManagement != null)
                 villageManagement.RemoveBuildingState(pathId);
+        }
+    }
+
+    public void ReleaseSpecialBuildingReference(SpecialBuilding specialBuilding, bool removeSavedState = true)
+    {
+        if (specialBuildingInstance == specialBuilding)
+        {
+            specialBuildingInstance = null;
+            RefreshInteractionCollider();
+
+            VillageManagement villageManagement = VillageManagement.EnsureInstance();
+            if (removeSavedState && villageManagement != null)
+                villageManagement.RemoveBuildingState(pathId, null, "special");
         }
     }
 
@@ -504,6 +603,51 @@ public class Path : MonoBehaviour
             villageManagement.RemoveBuildingState(pathId);
 
         return detachedBuilding;
+    }
+
+    public SpecialBuilding DetachCurrentSpecialBuilding(bool removeSavedState = true)
+    {
+        if (specialBuildingInstance == null)
+            return null;
+
+        SpecialBuilding detached = specialBuildingInstance;
+        specialBuildingInstance = null;
+        RefreshInteractionCollider();
+
+        VillageManagement villageManagement = VillageManagement.EnsureInstance();
+        if (removeSavedState && villageManagement != null)
+            villageManagement.RemoveBuildingState(pathId, null, "special");
+
+        return detached;
+    }
+
+    public void AcceptMovedSpecialBuilding(
+        SpecialBuilding specialBuilding,
+        string previousSlotId = null,
+        bool saveImmediately = true,
+        bool removePreviousState = true)
+    {
+        if (specialBuilding == null)
+            return;
+
+        specialBuildingInstance = specialBuilding;
+        specialBuilding.transform.SetParent(transform, false);
+        specialBuilding.AssignSlot(pathId);
+        specialBuilding.MarkPlaced(true);
+        SnapSpecialBuildingToPath(specialBuilding);
+        RefreshInteractionCollider();
+
+        VillageManagement villageManagement = VillageManagement.EnsureInstance();
+        if (villageManagement != null &&
+            removePreviousState &&
+            !string.IsNullOrWhiteSpace(previousSlotId) &&
+            !string.Equals(previousSlotId, pathId, System.StringComparison.Ordinal))
+        {
+            villageManagement.RemoveBuildingState(previousSlotId, null, "special", false);
+        }
+
+        if (saveImmediately)
+            PushSpecialBuildingState(true);
     }
 
     public void TransferActiveUpgradeTo(Path targetPath, Building movingBuilding)
@@ -559,6 +703,8 @@ public class Path : MonoBehaviour
     {
         Building[] children = GetComponentsInChildren<Building>(true);
         buildingInstance = children.Length > 0 ? children[0] : null;
+        SpecialBuilding[] specialChildren = GetComponentsInChildren<SpecialBuilding>(true);
+        specialBuildingInstance = specialChildren.Length > 0 ? specialChildren[0] : null;
     }
 
     private void RefreshInteractionCollider()
@@ -569,7 +715,7 @@ public class Path : MonoBehaviour
         if (cachedCollider == null)
             return;
 
-        cachedCollider.enabled = buildingInstance == null && constructionRoutine == null;
+        cachedCollider.enabled = buildingInstance == null && specialBuildingInstance == null && constructionRoutine == null;
     }
 
     private BuildingUI FindBuildingUi()
@@ -606,6 +752,40 @@ public class Path : MonoBehaviour
             return;
 
         building.SnapBottomAnchorToWorld(transform.position);
+    }
+
+    private void SnapSpecialBuildingToPath(SpecialBuilding specialBuilding)
+    {
+        if (specialBuilding == null)
+            return;
+
+        specialBuilding.SnapBottomAnchorToWorld(transform.position);
+    }
+
+    private void PushSpecialBuildingState(bool immediate = false)
+    {
+        VillageManagement villageManagement = VillageManagement.EnsureInstance();
+        if (villageManagement == null || specialBuildingInstance == null)
+            return;
+
+        villageManagement.UpsertBuildingState(new VillageManagement.BuildingState
+        {
+            slotId = pathId,
+            buildingId = specialBuildingInstance.SpecialBuildingId,
+            buildingType = "special",
+            level = 1,
+            currentSalary = 0,
+            maxSalary = 0,
+            isPlaced = specialBuildingInstance.IsPlaced,
+            isWorking = false,
+            underConstruction = false,
+            constructionRemainingSeconds = 0f
+        }, immediate);
+    }
+
+    public void SaveCurrentSpecialBuildingState(bool immediate = false)
+    {
+        PushSpecialBuildingState(immediate);
     }
 
     private bool IsWithinDropRange(Vector3 worldPoint, out float distance)

@@ -11,20 +11,30 @@ public class BuildingListUI : ShopSectionUI
         Level1Constructing,
         Level1Placed,
         Level2Constructing,
-        Complete
+        Complete,
+        SpecialPlaced
+    }
+
+    private enum CatalogEntryType
+    {
+        Building,
+        SpecialBuilding
     }
 
     [Serializable]
     private sealed class BuildingCatalogEntry
     {
+        public CatalogEntryType entryType;
         public string displayName;
         public Building prefab;
+        public SpecialBuilding specialPrefab;
         public int level1Price;
         public int level2Price;
     }
 
     [Header("Building Shop")]
     [SerializeField] private List<Building> registeredBuildingPrefabs = new List<Building>();
+    [SerializeField] private List<SpecialBuilding> registeredSpecialBuildingPrefabs = new List<SpecialBuilding>();
 
     private readonly List<BuildingCatalogEntry> entries = new List<BuildingCatalogEntry>();
     private readonly List<Button> buildingButtons = new List<Button>();
@@ -79,10 +89,31 @@ public class BuildingListUI : ShopSectionUI
 
             uniqueEntries.Add(id, new BuildingCatalogEntry
             {
+                entryType = CatalogEntryType.Building,
                 displayName = prefab.DisplayName,
                 prefab = prefab,
                 level1Price = prefab.GetPurchasePriceForLevel(1),
                 level2Price = prefab.GetPurchasePriceForLevel(2)
+            });
+        }
+
+        for (int i = 0; i < registeredSpecialBuildingPrefabs.Count; i++)
+        {
+            SpecialBuilding prefab = registeredSpecialBuildingPrefabs[i];
+            if (prefab == null)
+                continue;
+
+            string id = prefab.SpecialBuildingId;
+            if (string.IsNullOrWhiteSpace(id) || uniqueEntries.ContainsKey(id))
+                continue;
+
+            uniqueEntries.Add(id, new BuildingCatalogEntry
+            {
+                entryType = CatalogEntryType.SpecialBuilding,
+                displayName = prefab.name,
+                specialPrefab = prefab,
+                level1Price = Mathf.Max(0, prefab.SpecialBuildingValue),
+                level2Price = 0
             });
         }
 
@@ -104,6 +135,25 @@ public class BuildingListUI : ShopSectionUI
             if (entry?.prefab != null &&
                 string.Equals(entry.prefab.BuildingId, buildingId, StringComparison.Ordinal))
                 return entry.prefab;
+        }
+
+        return null;
+    }
+
+    public SpecialBuilding ResolveSpecialBuildingPrefab(string specialBuildingId)
+    {
+        if (string.IsNullOrWhiteSpace(specialBuildingId))
+            return null;
+
+        RefreshCatalog();
+        for (int i = 0; i < entries.Count; i++)
+        {
+            BuildingCatalogEntry entry = entries[i];
+            if (entry?.specialPrefab != null &&
+                string.Equals(entry.specialPrefab.SpecialBuildingId, specialBuildingId, StringComparison.Ordinal))
+            {
+                return entry.specialPrefab;
+            }
         }
 
         return null;
@@ -207,10 +257,14 @@ public class BuildingListUI : ShopSectionUI
         for (int i = 0; i < buildingButtons.Count && i < entries.Count; i++)
         {
             BuildingCatalogEntry entry = entries[i];
-            BuildingPurchaseState purchaseState = GetPurchaseState(entry.prefab.BuildingId);
+            BuildingPurchaseState purchaseState = GetPurchaseState(entry);
             int nextLevel = purchaseState == BuildingPurchaseState.Level1Placed ? 2 : 1;
-            int price = nextLevel == 2 ? entry.level2Price : entry.level1Price;
-            bool canPurchase = purchaseState == BuildingPurchaseState.Level1Available || purchaseState == BuildingPurchaseState.Level1Placed;
+            int price = entry.entryType == CatalogEntryType.SpecialBuilding
+                ? entry.level1Price
+                : (nextLevel == 2 ? entry.level2Price : entry.level1Price);
+            bool canPurchase = entry.entryType == CatalogEntryType.SpecialBuilding
+                ? purchaseState == BuildingPurchaseState.Level1Available
+                : purchaseState == BuildingPurchaseState.Level1Available || purchaseState == BuildingPurchaseState.Level1Placed;
             bool canPlace = purchaseState != BuildingPurchaseState.Level1Available || Path.FindFirstEmpty() != null;
             bool canAfford = villageManagement != null && villageManagement.CurrentOxygen >= price;
 
@@ -228,9 +282,9 @@ public class BuildingListUI : ShopSectionUI
         }
 
         if (entries.Count == 0)
-            SetStatus("등록된 건물 프리팹이 없습니다.");
+            SetStatus("등록된 빌딩/특별빌딩 프리팹이 없습니다.");
         else
-            SetStatus("건물은 1렙 구매 후 2렙 구매로 전환됩니다.");
+            SetStatus("일반 건물은 1렙 후 2렙 업그레이드, 특별빌딩은 1회 구매 설치입니다.");
     }
 
     private void HandlePurchase(int index)
@@ -240,21 +294,25 @@ public class BuildingListUI : ShopSectionUI
 
         VillageManagement villageManagement = VillageManagement.EnsureInstance();
         BuildingCatalogEntry entry = entries[index];
-        BuildingPurchaseState purchaseState = GetPurchaseState(entry.prefab.BuildingId);
+        BuildingPurchaseState purchaseState = GetPurchaseState(entry);
         if (purchaseState == BuildingPurchaseState.Level1Constructing || purchaseState == BuildingPurchaseState.Level2Constructing)
         {
             SetStatus($"{entry.displayName}은 현재 건설 중입니다.");
             return;
         }
 
-        if (purchaseState == BuildingPurchaseState.Complete)
+        if (purchaseState == BuildingPurchaseState.Complete || purchaseState == BuildingPurchaseState.SpecialPlaced)
         {
-            SetStatus($"{entry.displayName}은 이미 2레벨 구매 완료입니다.");
+            SetStatus(entry.entryType == CatalogEntryType.SpecialBuilding
+                ? $"{entry.displayName}은 이미 설치되어 있습니다."
+                : $"{entry.displayName}은 이미 2레벨 구매 완료입니다.");
             return;
         }
 
         int nextLevel = purchaseState == BuildingPurchaseState.Level1Placed ? 2 : 1;
-        int price = nextLevel <= 1 ? entry.level1Price : entry.level2Price;
+        int price = entry.entryType == CatalogEntryType.SpecialBuilding
+            ? entry.level1Price
+            : (nextLevel <= 1 ? entry.level1Price : entry.level2Price);
         ShowConfirmation(index, entry.displayName, nextLevel, price);
     }
 
@@ -273,28 +331,45 @@ public class BuildingListUI : ShopSectionUI
         }
 
         BuildingCatalogEntry entry = entries[index];
-        BuildingPurchaseState purchaseState = GetPurchaseState(entry.prefab.BuildingId);
+        BuildingPurchaseState purchaseState = GetPurchaseState(entry);
         if (purchaseState == BuildingPurchaseState.Level1Constructing || purchaseState == BuildingPurchaseState.Level2Constructing)
         {
             SetStatus($"{entry.displayName}은 현재 건설 중입니다.");
             return;
         }
 
-        if (purchaseState == BuildingPurchaseState.Complete)
+        if (purchaseState == BuildingPurchaseState.Complete || purchaseState == BuildingPurchaseState.SpecialPlaced)
         {
-            SetStatus($"{entry.displayName}은 이미 2레벨 구매 완료입니다.");
+            SetStatus(entry.entryType == CatalogEntryType.SpecialBuilding
+                ? $"{entry.displayName}은 이미 설치되어 있습니다."
+                : $"{entry.displayName}은 이미 2레벨 구매 완료입니다.");
             return;
         }
 
         int nextLevel = purchaseState == BuildingPurchaseState.Level1Placed ? 2 : 1;
-        int price = nextLevel <= 1 ? entry.level1Price : entry.level2Price;
+        int price = entry.entryType == CatalogEntryType.SpecialBuilding
+            ? entry.level1Price
+            : (nextLevel <= 1 ? entry.level1Price : entry.level2Price);
         if (price > 0 && villageManagement.CurrentOxygen < price)
         {
             SetStatus($"산소가 부족합니다. 필요 O2 {price}");
             return;
         }
 
-        if (nextLevel == 1)
+        if (entry.entryType == CatalogEntryType.SpecialBuilding)
+        {
+            Path targetPath = Path.FindRandomEmpty();
+            if (targetPath == null)
+            {
+                SetStatus("빈 Path 슬롯이 없습니다.");
+                return;
+            }
+
+            HideConfirmation();
+            targetPath.TryBuildSelected(entry.specialPrefab);
+            SetStatus($"{entry.displayName} 특별빌딩 설치를 시작했습니다.");
+        }
+        else if (nextLevel == 1)
         {
             Path targetPath = Path.FindRandomEmpty();
             if (targetPath == null)
@@ -323,6 +398,36 @@ public class BuildingListUI : ShopSectionUI
         }
 
         RefreshButtons();
+    }
+
+    private BuildingPurchaseState GetPurchaseState(BuildingCatalogEntry entry)
+    {
+        if (entry == null)
+            return BuildingPurchaseState.Level1Available;
+
+        if (entry.entryType == CatalogEntryType.SpecialBuilding)
+            return GetSpecialPurchaseState(entry.specialPrefab);
+
+        return GetPurchaseState(entry.prefab != null ? entry.prefab.BuildingId : string.Empty);
+    }
+
+    private static BuildingPurchaseState GetSpecialPurchaseState(SpecialBuilding prefab)
+    {
+        if (prefab == null)
+            return BuildingPurchaseState.Level1Available;
+
+        Path[] paths = FindObjectsByType<Path>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        for (int i = 0; i < paths.Length; i++)
+        {
+            Path path = paths[i];
+            if (path == null || path.SpecialBuilding == null)
+                continue;
+
+            if (string.Equals(path.SpecialBuilding.SpecialBuildingId, prefab.SpecialBuildingId, StringComparison.Ordinal))
+                return BuildingPurchaseState.SpecialPlaced;
+        }
+
+        return BuildingPurchaseState.Level1Available;
     }
 
     private void CancelPurchase()
@@ -410,7 +515,12 @@ public class BuildingListUI : ShopSectionUI
         if (confirmationRoot != null)
             confirmationRoot.SetActive(true);
         if (confirmationText != null)
-            confirmationText.text = $"{displayName} {level}레벨을 정말 구매하시겠습니까?\nO2 {price}";
+        {
+            BuildingCatalogEntry entry = index >= 0 && index < entries.Count ? entries[index] : null;
+            confirmationText.text = entry != null && entry.entryType == CatalogEntryType.SpecialBuilding
+                ? $"{displayName} 특별빌딩을 정말 구매하시겠습니까?\nO2 {price}"
+                : $"{displayName} {level}레벨을 정말 구매하시겠습니까?\nO2 {price}";
+        }
 
         RefreshButtons();
     }
@@ -514,6 +624,18 @@ public class BuildingListUI : ShopSectionUI
 
     private static string BuildButtonLabel(BuildingCatalogEntry entry, BuildingPurchaseState purchaseState, int price, bool canPlace, bool canAfford)
     {
+        if (entry != null && entry.entryType == CatalogEntryType.SpecialBuilding)
+        {
+            string priceText = $"{entry.displayName}  특별빌딩 O2 {entry.level1Price}";
+            if (purchaseState == BuildingPurchaseState.SpecialPlaced)
+                return $"{entry.displayName}\n설치 완료";
+            if (!canPlace)
+                return $"{priceText}\n빈 슬롯 없음";
+            if (!canAfford)
+                return $"{priceText}\n구매 O2 {price} 부족";
+            return $"{priceText}\n구매 O2 {price}";
+        }
+
         if (purchaseState == BuildingPurchaseState.Level1Available)
         {
             string priceText = $"{entry.displayName}  1렙 O2 {entry.level1Price}";

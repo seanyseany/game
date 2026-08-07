@@ -39,6 +39,7 @@ public class VillageManagement : MonoBehaviour
     {
         public string slotId;
         public string buildingId;
+        public string buildingType;
         public int level;
         public int currentSalary;
         public int maxSalary;
@@ -547,7 +548,7 @@ public class VillageManagement : MonoBehaviour
         if (state == null || string.IsNullOrWhiteSpace(state.slotId))
             return;
 
-        BuildingState existing = FindBuildingState(state.slotId);
+        BuildingState existing = FindBuildingState(state.slotId, state.buildingType);
         if (existing == null)
         {
             saveData.buildings.Add(CloneBuildingState(state));
@@ -562,6 +563,11 @@ public class VillageManagement : MonoBehaviour
 
     public void RemoveBuildingState(string slotId, string buildingId = null, bool saveImmediately = true)
     {
+        RemoveBuildingState(slotId, buildingId, null, saveImmediately);
+    }
+
+    public void RemoveBuildingState(string slotId, string buildingId, string buildingType, bool saveImmediately = true)
+    {
         if (string.IsNullOrWhiteSpace(slotId) || saveData.buildings == null)
             return;
 
@@ -573,6 +579,12 @@ public class VillageManagement : MonoBehaviour
 
             if (!string.IsNullOrWhiteSpace(buildingId) &&
                 !string.Equals(state.buildingId, buildingId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(buildingType) &&
+                !string.Equals(state.buildingType, buildingType, StringComparison.Ordinal))
             {
                 continue;
             }
@@ -906,6 +918,7 @@ public class VillageManagement : MonoBehaviour
             return;
 
         Dictionary<string, Building> prefabById = new Dictionary<string, Building>(StringComparer.Ordinal);
+        Dictionary<string, SpecialBuilding> specialPrefabById = new Dictionary<string, SpecialBuilding>(StringComparer.Ordinal);
         for (int i = 0; i < buildingCatalogs.Length; i++)
         {
             BuildingListUI catalog = buildingCatalogs[i];
@@ -921,6 +934,22 @@ public class VillageManagement : MonoBehaviour
                 Building prefab = catalog.ResolveBuildingPrefab(state.buildingId);
                 if (prefab != null)
                     prefabById.Add(state.buildingId, prefab);
+            }
+
+            for (int stateIndex = 0; stateIndex < saveData.buildings.Count; stateIndex++)
+            {
+                BuildingState state = saveData.buildings[stateIndex];
+                if (state == null ||
+                    !string.Equals(state.buildingType, "special", StringComparison.Ordinal) ||
+                    string.IsNullOrWhiteSpace(state.buildingId) ||
+                    specialPrefabById.ContainsKey(state.buildingId))
+                {
+                    continue;
+                }
+
+                SpecialBuilding prefab = catalog.ResolveSpecialBuildingPrefab(state.buildingId);
+                if (prefab != null)
+                    specialPrefabById.Add(state.buildingId, prefab);
             }
         }
 
@@ -940,7 +969,7 @@ public class VillageManagement : MonoBehaviour
         for (int i = 0; i < saveData.buildings.Count; i++)
         {
             BuildingState state = saveData.buildings[i];
-            TryRestoreBuildingState(state, pathById, prefabById);
+            TryRestoreBuildingState(state, pathById, prefabById, specialPrefabById);
         }
 
         // Reconcile once more in case a swap or restore-order edge case left a path empty.
@@ -962,25 +991,35 @@ public class VillageManagement : MonoBehaviour
                 continue;
             }
 
-            TryRestoreBuildingState(state, pathById, prefabById);
+            TryRestoreBuildingState(state, pathById, prefabById, specialPrefabById);
         }
     }
 
     private bool TryRestoreBuildingState(
         BuildingState state,
         Dictionary<string, Path> pathById,
-        Dictionary<string, Building> prefabById)
+        Dictionary<string, Building> prefabById,
+        Dictionary<string, SpecialBuilding> specialPrefabById)
     {
         if (state == null ||
             string.IsNullOrWhiteSpace(state.slotId) ||
             string.IsNullOrWhiteSpace(state.buildingId) ||
             !pathById.TryGetValue(NormalizeBuildingSlotId(state.slotId), out Path path) ||
-            path == null ||
-            !prefabById.TryGetValue(state.buildingId, out Building prefab) ||
-            prefab == null)
+            path == null)
         {
             return false;
         }
+
+        if (string.Equals(state.buildingType, "special", StringComparison.Ordinal))
+        {
+            if (!specialPrefabById.TryGetValue(state.buildingId, out SpecialBuilding specialPrefab) || specialPrefab == null)
+                return false;
+
+            return path.RestoreSpecialFromState(state, specialPrefab);
+        }
+
+        if (!prefabById.TryGetValue(state.buildingId, out Building prefab) || prefab == null)
+            return false;
 
         return path.RestoreFromState(state, prefab);
     }
@@ -1197,6 +1236,8 @@ public class VillageManagement : MonoBehaviour
             if (state == null)
                 continue;
 
+            if (string.IsNullOrWhiteSpace(state.buildingType))
+                state.buildingType = "normal";
             state.maxSalary = Mathf.Max(0, state.maxSalary);
             state.currentSalary = Mathf.Clamp(state.currentSalary, 0, state.maxSalary);
             state.level = Mathf.Max(0, state.level);
@@ -1386,13 +1427,23 @@ public class VillageManagement : MonoBehaviour
         }
     }
 
-    private BuildingState FindBuildingState(string slotId)
+    private BuildingState FindBuildingState(string slotId, string buildingType = null)
     {
         string normalizedSlotId = NormalizeBuildingSlotId(slotId);
         for (int i = 0; i < saveData.buildings.Count; i++)
         {
             BuildingState item = saveData.buildings[i];
-            if (item != null && NormalizeBuildingSlotId(item.slotId) == normalizedSlotId)
+            if (item == null || NormalizeBuildingSlotId(item.slotId) != normalizedSlotId)
+                continue;
+
+            if (!string.IsNullOrWhiteSpace(buildingType) &&
+                !string.Equals(item.buildingType, buildingType, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(buildingType) ||
+                string.Equals(item.buildingType, buildingType, StringComparison.Ordinal))
                 return item;
         }
 
@@ -1442,6 +1493,7 @@ public class VillageManagement : MonoBehaviour
         {
             slotId = NormalizeBuildingSlotId(source.slotId),
             buildingId = source.buildingId,
+            buildingType = string.IsNullOrWhiteSpace(source.buildingType) ? "normal" : source.buildingType,
             level = source.level,
             currentSalary = source.currentSalary,
             maxSalary = source.maxSalary,
@@ -1456,6 +1508,7 @@ public class VillageManagement : MonoBehaviour
     {
         target.slotId = NormalizeBuildingSlotId(source.slotId);
         target.buildingId = source.buildingId;
+        target.buildingType = string.IsNullOrWhiteSpace(source.buildingType) ? "normal" : source.buildingType;
         target.level = source.level;
         target.currentSalary = source.currentSalary;
         target.maxSalary = source.maxSalary;
