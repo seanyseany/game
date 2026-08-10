@@ -213,6 +213,38 @@ public class Path : MonoBehaviour
                worldPoint.y <= maxY;
     }
 
+    public bool TryGetRandomConnectedWay(out Way way)
+    {
+        Way[] allWays = FindObjectsByType<Way>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        System.Collections.Generic.List<Way> candidates = new System.Collections.Generic.List<Way>();
+
+        for (int i = 0; i < allWays.Length; i++)
+        {
+            Way candidate = allWays[i];
+            if (candidate == null)
+                continue;
+
+            var connectedPaths = candidate.ConnectedPaths;
+            for (int pathIndex = 0; pathIndex < connectedPaths.Count; pathIndex++)
+            {
+                if (connectedPaths[pathIndex] == this)
+                {
+                    candidates.Add(candidate);
+                    break;
+                }
+            }
+        }
+
+        if (candidates.Count == 0)
+        {
+            way = null;
+            return false;
+        }
+
+        way = candidates[Random.Range(0, candidates.Count)];
+        return true;
+    }
+
     public void TryBuildSelected(Building selectedPrefab)
     {
         if (!allowsBuildingPlacement || selectedPrefab == null || constructionRoutine != null || buildingInstance != null || specialBuildingInstance != null)

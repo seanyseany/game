@@ -61,6 +61,8 @@ public class CustomerBlood : MonoBehaviour
     private bool transitioningToCarry;
     private bool purchaseSequenceRunning;
     private bool hasVisitedSpecialBuildingThisTrip;
+    private bool specialBuildingRelocatedDuringVisit;
+    private bool specialBuildingVisitEndedWithDespawn;
     private int purchaseReceiveRoutineVersion;
     private string spawnEntryId;
     private float fixedZ;
@@ -95,7 +97,7 @@ public class CustomerBlood : MonoBehaviour
         if (spriteRenderer != null)
             visualBaseScale = spriteRenderer.transform.localScale;
 
-        allSpriteRenderers = GetComponentsInChildren<SpriteRenderer>(true);
+        RefreshSpriteRendererCache();
 
         UpdateSortingOrders();
     }
@@ -196,6 +198,7 @@ public class CustomerBlood : MonoBehaviour
         waitingAtCounter = false;
         currentQueueSlot = Building.QueueSlot.None;
         targetBuilding = null;
+        targetSpecialBuilding = null;
         pendingPurchaseBuilding = null;
         purchaseSequenceRunning = false;
         transitioningToCarry = false;
@@ -275,6 +278,14 @@ public class CustomerBlood : MonoBehaviour
         transitioningToCarry = false;
         ApplyVisualState(VisualState.CarryingItem);
         UpdateHeldItemPosition(heldItemLocalPosition);
+    }
+
+    public void NotifySpecialBuildingRelocationStarted(SpecialBuilding specialBuilding)
+    {
+        if (specialBuilding == null || targetSpecialBuilding != specialBuilding)
+            return;
+
+        specialBuildingRelocatedDuringVisit = true;
     }
 
     private IEnumerator LifeCycleRoutine()
@@ -536,6 +547,8 @@ public class CustomerBlood : MonoBehaviour
         routeTravelDirection = 1;
         lifeEndTime = 0f;
         hasVisitedSpecialBuildingThisTrip = false;
+        specialBuildingRelocatedDuringVisit = false;
+        specialBuildingVisitEndedWithDespawn = false;
         ClearActiveMoveTarget();
         body.linearVelocity = Vector2.zero;
         facingLeft = true;
@@ -670,6 +683,7 @@ public class CustomerBlood : MonoBehaviour
 
         heldItemSpriteRenderer = null;
         heldItemRenderers = null;
+        RefreshSpriteRendererCache();
     }
 
     private void ApplyVisualState(VisualState state)
@@ -878,6 +892,8 @@ public class CustomerBlood : MonoBehaviour
                 if (targetSpecialBuilding == specialBuilding)
                 {
                     yield return VisitSpecialBuildingRoutine(specialBuilding);
+                    if (specialBuildingVisitEndedWithDespawn)
+                        yield break;
                     yield return MoveToRoutine(specialBranchPoint, false, null);
                 }
             }
@@ -1061,36 +1077,112 @@ public class CustomerBlood : MonoBehaviour
         purchaseReceiveRoutineVersion++;
         ApplyVisualState(VisualState.Walking);
         hasVisitedSpecialBuildingThisTrip = true;
+        specialBuildingRelocatedDuringVisit = false;
+        specialBuildingVisitEndedWithDespawn = false;
+        specialBuilding.RegisterInsideCustomer(this);
         SetTemporaryVisibility(false);
         lifeEndTime += visitSeconds;
         yield return new WaitForSeconds(visitSeconds);
 
         if (targetSpecialBuilding != specialBuilding)
+        {
+            specialBuilding.UnregisterInsideCustomer(this);
             yield break;
+        }
+
+        while (specialBuilding != null && specialBuilding.IsRelocating)
+            yield return null;
+
+        if (targetSpecialBuilding != specialBuilding)
+        {
+            specialBuilding.UnregisterInsideCustomer(this);
+            yield break;
+        }
+
+        if (specialBuildingRelocatedDuringVisit)
+        {
+            specialBuilding.UnregisterInsideCustomer(this);
+            SetTemporaryVisibility(true);
+            Vector3 exitStartPosition = WithFixedZ(specialBuilding.CustomerEntrance.position);
+            transform.position = exitStartPosition;
+            if (body != null)
+                body.position = exitStartPosition;
+            yield return ExitRelocatedSpecialBuildingAndDespawn(specialBuilding);
+            yield break;
+        }
 
         Vector3 respawnPosition = WithFixedZ(specialBuilding.CustomerEntrance.position);
         transform.position = respawnPosition;
         if (body != null)
             body.position = respawnPosition;
         SetTemporaryVisibility(true);
+        specialBuilding.UnregisterInsideCustomer(this);
     }
 
     private void SetTemporaryVisibility(bool visible)
     {
+        RefreshSpriteRendererCache();
+
         if (bodyCollider != null)
             bodyCollider.enabled = visible;
 
         if (body != null)
             body.simulated = visible;
 
-        if (allSpriteRenderers == null)
-            allSpriteRenderers = GetComponentsInChildren<SpriteRenderer>(true);
-
         for (int i = 0; i < allSpriteRenderers.Length; i++)
         {
             if (allSpriteRenderers[i] != null)
                 allSpriteRenderers[i].enabled = visible;
         }
+
+        if (spriteRenderer != null)
+            spriteRenderer.enabled = visible;
+    }
+
+    private void RefreshSpriteRendererCache()
+    {
+        allSpriteRenderers = GetComponentsInChildren<SpriteRenderer>(true);
+    }
+
+    private IEnumerator ExitRelocatedSpecialBuildingAndDespawn(SpecialBuilding specialBuilding)
+    {
+        if (specialBuilding == null || specialBuilding.CurrentPath == null)
+        {
+            specialBuildingVisitEndedWithDespawn = true;
+            ownerEntranceManagement?.RecycleCustomer(this);
+            yield break;
+        }
+
+        Path installedPath = specialBuilding.CurrentPath;
+        if (!installedPath.TryGetRandomConnectedWay(out Way exitWay) ||
+            exitWay == null ||
+            !exitWay.TryGetSpawnEntrance(out Entrance exitEntrance))
+        {
+            specialBuildingVisitEndedWithDespawn = true;
+            ownerEntranceManagement?.RecycleCustomer(this);
+            yield break;
+        }
+
+        int exitRouteSequenceIndex = exitWay.GetRandomRouteSequenceIndex();
+        if (exitRouteSequenceIndex != int.MinValue)
+        {
+            int closestNodeIndex = exitWay.GetClosestRouteNodeIndex(exitRouteSequenceIndex, transform.position);
+            while (closestNodeIndex >= 0)
+            {
+                Vector3 nodePoint = transform.position;
+                if (exitWay.TryGetRouteNode(exitRouteSequenceIndex, closestNodeIndex, out nodePoint))
+                    yield return MoveToRoutine(nodePoint, false, null);
+
+                closestNodeIndex = exitWay.GetPreviousRouteNodeIndexNoLoop(exitRouteSequenceIndex, closestNodeIndex);
+            }
+        }
+
+        if (exitEntrance != null)
+            yield return MoveToRoutine(exitEntrance.DespawnWorldPosition, false, null);
+
+        targetSpecialBuilding = null;
+        specialBuildingVisitEndedWithDespawn = true;
+        ownerEntranceManagement?.RecycleCustomer(this);
     }
 
     private static Vector3 GetClosestPointOnSegment(Vector3 start, Vector3 end, Vector3 point, out float t)

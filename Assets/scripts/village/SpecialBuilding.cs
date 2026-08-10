@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.Rendering;
+using System.Collections.Generic;
 
 public class SpecialBuilding : MonoBehaviour
 {
@@ -33,9 +34,11 @@ public class SpecialBuilding : MonoBehaviour
     private bool tapPending;
     private bool pointerHeld;
     private bool isDragging;
+    private bool isRelocating;
     private bool isPlaced = true;
     private string originalSortingLayerName;
     private int originalSortingOrder;
+    private readonly HashSet<CustomerBlood> insideCustomers = new HashSet<CustomerBlood>();
 
     public string SlotId => slotId;
     public string SpecialBuildingId => string.IsNullOrWhiteSpace(specialBuildingId) ? SanitizeId(name) : specialBuildingId;
@@ -46,6 +49,8 @@ public class SpecialBuilding : MonoBehaviour
     public Transform BottomAnchor => bottomAnchor != null ? bottomAnchor : transform;
     public bool IsPlaced => isPlaced;
     public bool IsDragging => isDragging;
+    public bool IsRelocating => isRelocating;
+    public Path CurrentPath => currentPath;
 
     private void Awake()
     {
@@ -118,6 +123,18 @@ public class SpecialBuilding : MonoBehaviour
         return isPlaced && !isDragging && CustomerEntrance != null;
     }
 
+    public void RegisterInsideCustomer(CustomerBlood customer)
+    {
+        if (customer != null)
+            insideCustomers.Add(customer);
+    }
+
+    public void UnregisterInsideCustomer(CustomerBlood customer)
+    {
+        if (customer != null)
+            insideCustomers.Remove(customer);
+    }
+
     public void PrepareForRelocation()
     {
     }
@@ -149,6 +166,7 @@ public class SpecialBuilding : MonoBehaviour
             return;
 
         isDragging = true;
+        SetRelocatingState(true);
         tapPending = false;
         transform.localScale = initialScale * DragScaleMultiplier;
         RaiseSortingForDrag();
@@ -200,6 +218,7 @@ public class SpecialBuilding : MonoBehaviour
                     dragOriginPath.AcceptMovedSpecialBuilding(displaced, null, false, false);
                     occupiedTargetPath.SaveCurrentSpecialBuildingState(true);
                     dragOriginPath.SaveCurrentSpecialBuildingState(true);
+                    SetRelocatingState(false);
                     return;
                 }
 
@@ -216,6 +235,7 @@ public class SpecialBuilding : MonoBehaviour
                         occupiedTargetPath.TransferActiveUpgradeTo(dragOriginPath, displacedBuilding);
                         occupiedTargetPath.SaveCurrentSpecialBuildingState(true);
                         displacedBuilding.PushStateToVillageManagement(true);
+                        SetRelocatingState(false);
                         return;
                     }
                 }
@@ -239,6 +259,7 @@ public class SpecialBuilding : MonoBehaviour
                         if (villageManagement != null)
                             villageManagement.RemoveBuildingState(dragOriginPath.PathId, null, "special", false);
                     }
+                    SetRelocatingState(false);
                     return;
                 }
 
@@ -254,6 +275,7 @@ public class SpecialBuilding : MonoBehaviour
                         currentPath = occupiedTargetPath;
                         occupiedTargetPath.AcceptMovedSpecialBuilding(this, null, false, false);
                         occupiedTargetPath.SaveCurrentSpecialBuildingState(true);
+                        SetRelocatingState(false);
                         return;
                     }
                 }
@@ -271,6 +293,7 @@ public class SpecialBuilding : MonoBehaviour
                 if (villageManagement != null)
                     villageManagement.RemoveBuildingState(dragOriginPath.PathId, null, "special", false);
             }
+            SetRelocatingState(false);
             return;
         }
 
@@ -279,10 +302,12 @@ public class SpecialBuilding : MonoBehaviour
             currentPath = dragOriginPath;
             dragOriginPath.AcceptMovedSpecialBuilding(this, null, false, false);
             dragOriginPath.SaveCurrentSpecialBuildingState(true);
+            SetRelocatingState(false);
         }
         else
         {
             transform.position = dragOriginWorldPosition;
+            SetRelocatingState(false);
         }
     }
 
@@ -367,6 +392,24 @@ public class SpecialBuilding : MonoBehaviour
         sortingGroup.sortingLayerName = originalSortingLayerName;
         sortingGroup.sortingOrder = originalSortingOrder;
         sortingGroup.enabled = false;
+    }
+
+    private void SetRelocatingState(bool relocating)
+    {
+        if (isRelocating == relocating)
+            return;
+
+        isRelocating = relocating;
+        if (!relocating)
+            return;
+
+        CustomerBlood[] customers = new CustomerBlood[insideCustomers.Count];
+        insideCustomers.CopyTo(customers);
+        for (int i = 0; i < customers.Length; i++)
+        {
+            if (customers[i] != null)
+                customers[i].NotifySpecialBuildingRelocationStarted(this);
+        }
     }
 
     private void EnsureInteriorInstance()
