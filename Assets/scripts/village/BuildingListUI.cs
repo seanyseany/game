@@ -30,7 +30,6 @@ public class BuildingListUI : ShopSectionUI
         public string displayName;
         public Building prefab;
         public SpecialBuilding specialPrefab;
-        public int liftTokenIndex = -1;
         public int level1Price;
         public int level2Price;
     }
@@ -128,16 +127,12 @@ public class BuildingListUI : ShopSectionUI
 
         if (registeredLiftSpot != null)
         {
-            for (int i = 0; i < registeredLiftSpot.TotalLiftCount; i++)
+            entries.Add(new BuildingCatalogEntry
             {
-                entries.Add(new BuildingCatalogEntry
-                {
-                    entryType = CatalogEntryType.LiftToken,
-                    displayName = $"Lift {i + 1}",
-                    liftTokenIndex = i,
-                    level1Price = registeredLiftSpot.GetLiftPrice(i)
-                });
-            }
+                entryType = CatalogEntryType.LiftToken,
+                displayName = "Lift",
+                level1Price = registeredLiftSpot.GetLiftPrice(0)
+            });
         }
 
         entries.Sort((left, right) => string.Compare(left.displayName, right.displayName, StringComparison.Ordinal));
@@ -311,7 +306,9 @@ public class BuildingListUI : ShopSectionUI
             BuildingCatalogEntry entry = entries[i];
             BuildingPurchaseState purchaseState = GetPurchaseState(entry);
             int nextLevel = purchaseState == BuildingPurchaseState.Level1Placed ? 2 : 1;
-            int price = entry.entryType == CatalogEntryType.SpecialBuilding
+            int price = entry.entryType == CatalogEntryType.LiftToken
+                ? GetNextLiftPrice()
+                : entry.entryType == CatalogEntryType.SpecialBuilding
                 ? entry.level1Price
                 : (nextLevel == 2 ? entry.level2Price : entry.level1Price);
             bool canPurchase = entry.entryType == CatalogEntryType.SpecialBuilding
@@ -327,7 +324,9 @@ public class BuildingListUI : ShopSectionUI
             buildingButtons[i].interactable = canPurchase && canPlace && canAfford;
             Text label = buildingButtons[i].GetComponentInChildren<Text>();
             if (label != null)
-                label.text = BuildButtonLabel(entry, purchaseState, price, canPlace, canAfford);
+                label.text = entry.entryType == CatalogEntryType.LiftToken
+                    ? BuildLiftButtonLabel(entry, purchaseState, price, canPlace, canAfford)
+                    : BuildStandardButtonLabel(entry, purchaseState, price, canPlace, canAfford);
         }
 
         bool confirmationActive = confirmationRoot != null && confirmationRoot.activeSelf;
@@ -340,7 +339,7 @@ public class BuildingListUI : ShopSectionUI
         if (entries.Count == 0)
             SetStatus("등록된 빌딩/특별빌딩 프리팹이 없습니다.");
         else
-            SetStatus("일반 건물은 1렙 후 2렙 업그레이드, 특별빌딩은 1회 구매 설치, Lift는 비활성 슬롯을 랜덤 활성화합니다.");
+            SetStatus("일반 건물은 1렙 후 2렙 업그레이드, 특별빌딩은 1회 구매 설치, Lift는 구매할 때마다 빈 리프트 스팟 5개 중 한 곳에 랜덤 설치됩니다.");
     }
 
     private void HandlePurchase(int index)
@@ -361,7 +360,7 @@ public class BuildingListUI : ShopSectionUI
 
         if (entry.entryType == CatalogEntryType.LiftToken)
         {
-            int liftPrice = entry.level1Price;
+            int liftPrice = GetNextLiftPrice();
             ShowConfirmation(index, entry.displayName, 1, liftPrice);
             return;
         }
@@ -407,7 +406,7 @@ public class BuildingListUI : ShopSectionUI
 
         if (entry.entryType == CatalogEntryType.LiftToken)
         {
-            int liftPrice = entry.level1Price;
+            int liftPrice = GetNextLiftPrice();
             if (liftPrice > 0 && villageManagement.CurrentOxygen < liftPrice)
             {
                 SetStatus($"산소가 부족합니다. 필요 O2 {liftPrice}");
@@ -425,7 +424,7 @@ public class BuildingListUI : ShopSectionUI
 
             HideConfirmation();
             Shop.CloseAllShops();
-            SetStatus($"{entry.displayName} 구매 완료");
+            SetStatus($"{entry.displayName} 설치 완료. 빈 리프트 스팟 중 한 곳에 랜덤 배치되었습니다.");
             RefreshButtons();
             return;
         }
@@ -542,7 +541,7 @@ public class BuildingListUI : ShopSectionUI
         GameObject buttonObject = new GameObject("BuildingButton", typeof(RectTransform));
         RectTransform rect = buttonObject.GetComponent<RectTransform>();
         rect.SetParent(parent, false);
-        rect.sizeDelta = new Vector2(0f, 84f);
+        rect.sizeDelta = new Vector2(0f, 104f);
 
         Image image = buttonObject.AddComponent<Image>();
         image.color = new Color(0.18f, 0.24f, 0.32f, 1f);
@@ -556,7 +555,7 @@ public class BuildingListUI : ShopSectionUI
         button.colors = colors;
 
         LayoutElement layout = buttonObject.AddComponent<LayoutElement>();
-        layout.preferredHeight = 84f;
+        layout.preferredHeight = 104f;
 
         GameObject textObject = new GameObject("Label", typeof(RectTransform));
         RectTransform textRect = textObject.GetComponent<RectTransform>();
@@ -616,8 +615,8 @@ public class BuildingListUI : ShopSectionUI
             confirmationText.text = entry != null && entry.entryType == CatalogEntryType.SpecialBuilding
                 ? $"{displayName} 특별빌딩을 정말 구매하시겠습니까?\nO2 {price}"
                 : entry != null && entry.entryType == CatalogEntryType.LiftToken
-                    ? $"{displayName} 토큰을 정말 구매하시겠습니까?\nO2 {price}"
-                : $"{displayName} {level}레벨을 정말 구매하시겠습니까?\nO2 {price}";
+                    ? $"{displayName}를 정말 구매하시겠습니까?\n구매 시 빈 리프트 스팟 중 한 곳에 랜덤 설치됩니다.\nO2 {price}"
+                    : $"{displayName} {level}레벨을 정말 구매하시겠습니까?\nO2 {price}";
         }
 
         RefreshButtons();
@@ -734,6 +733,28 @@ public class BuildingListUI : ShopSectionUI
         return BuildingPurchaseState.LiftAvailable;
     }
 
+    private int GetNextLiftPrice()
+    {
+        EnsureLiftSpotReference();
+        if (registeredLiftSpot == null)
+            return 0;
+
+        int activeCount = Mathf.Clamp(registeredLiftSpot.GetActiveLiftCount(), 0, Mathf.Max(registeredLiftSpot.TotalLiftCount - 1, 0));
+        return registeredLiftSpot.GetLiftPrice(activeCount);
+    }
+
+    private int GetInstalledLiftCount()
+    {
+        EnsureLiftSpotReference();
+        return registeredLiftSpot != null ? registeredLiftSpot.GetActiveLiftCount() : 0;
+    }
+
+    private int GetTotalLiftCount()
+    {
+        EnsureLiftSpotReference();
+        return registeredLiftSpot != null ? registeredLiftSpot.TotalLiftCount : 0;
+    }
+
     private void EnsureLiftSpotReference()
     {
         if (registeredLiftSpot != null)
@@ -742,7 +763,7 @@ public class BuildingListUI : ShopSectionUI
         registeredLiftSpot = FindFirstObjectByType<LiftSpot>(FindObjectsInactive.Include);
     }
 
-    private static string BuildButtonLabel(BuildingCatalogEntry entry, BuildingPurchaseState purchaseState, int price, bool canPlace, bool canAfford)
+    private static string BuildStandardButtonLabel(BuildingCatalogEntry entry, BuildingPurchaseState purchaseState, int price, bool canPlace, bool canAfford)
     {
         if (entry != null && entry.entryType == CatalogEntryType.SpecialBuilding)
         {
@@ -791,6 +812,27 @@ public class BuildingListUI : ShopSectionUI
             return $"{entry.displayName}\n2렙 건설 중";
 
         return $"{entry.displayName}\n구매 완료";
+    }
+
+    private string BuildLiftButtonLabel(BuildingCatalogEntry entry, BuildingPurchaseState purchaseState, int price, bool canPlace, bool canAfford)
+    {
+        if (entry != null && entry.entryType == CatalogEntryType.LiftToken)
+        {
+            int installedCount = GetInstalledLiftCount();
+            int totalCount = GetTotalLiftCount();
+            string title = $"{entry.displayName} {installedCount}/{totalCount}";
+            string priceText = $"{title}  O2 {price}";
+
+            if (purchaseState == BuildingPurchaseState.Complete)
+                return $"{title}\n모든 리프트 설치 완료";
+            if (!canPlace)
+                return $"{priceText}\n설치 가능한 빈 리프트 스팟 없음";
+            if (!canAfford)
+                return $"{priceText}\n설치: 빈 스팟 중 랜덤\n구매 O2 {price} 부족";
+            return $"{priceText}\n설치: 빈 스팟 중 랜덤";
+        }
+
+        return BuildStandardButtonLabel(entry, purchaseState, price, canPlace, canAfford);
     }
 
     private static Text CreateText(string name, Transform parent, Font font, int fontSize, TextAnchor alignment)

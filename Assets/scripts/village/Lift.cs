@@ -39,6 +39,9 @@ public class Lift : MonoBehaviour, IColliderPointerTarget
     [SerializeField] private float platformMoveSpeed = 2f;
     [SerializeField] private float customerRideChance = 0.7f;
 
+    [Header("Interaction")]
+    [SerializeField] private bool allowPointerRelocation = false;
+
     private readonly List<PlatformState> platforms = new List<PlatformState>(2);
     private LiftSpot ownerLiftSpot;
     private bool registered;
@@ -518,6 +521,9 @@ public class Lift : MonoBehaviour, IColliderPointerTarget
 
     private bool CanStartPointerInteraction()
     {
+        if (!allowPointerRelocation)
+            return false;
+
         if (!IsOperational || ownerLiftSpot == null)
             return false;
 
