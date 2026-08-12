@@ -270,7 +270,7 @@ public class Building : MonoBehaviour
 
     public bool HasQueueCapacity()
     {
-        return counterCustomer == null || queueCustomer1 == null || queueCustomer2 == null;
+        return counterCustomer == null;
     }
 
     public bool IsAvailableForCustomerPurchases()
@@ -383,41 +383,11 @@ public class Building : MonoBehaviour
             return true;
         }
 
-        if (queueCustomer1 == customer)
-        {
-            slot = QueueSlot.Line1;
-            target = Line1Point;
-            return true;
-        }
-
-        if (queueCustomer2 == customer)
-        {
-            slot = QueueSlot.Line2;
-            target = Line2Point;
-            return true;
-        }
-
         if (counterCustomer == null)
         {
             counterCustomer = customer;
             slot = QueueSlot.Counter;
             target = CustomerPoint;
-            return true;
-        }
-
-        if (queueCustomer1 == null)
-        {
-            queueCustomer1 = customer;
-            slot = QueueSlot.Line1;
-            target = Line1Point;
-            return true;
-        }
-
-        if (queueCustomer2 == null)
-        {
-            queueCustomer2 = customer;
-            slot = QueueSlot.Line2;
-            target = Line2Point;
             return true;
         }
 
@@ -627,32 +597,6 @@ public class Building : MonoBehaviour
 
     private void PromoteQueue()
     {
-        if (queueCustomer1 == null && queueCustomer2 != null)
-        {
-            queueCustomer1 = queueCustomer2;
-            queueCustomer2 = null;
-            queueCustomer1.MoveToQueueSlot(this, QueueSlot.Line1, Line1Point.position);
-        }
-
-        if (counterCustomer == null && queueCustomer1 != null)
-        {
-            counterCustomer = queueCustomer1;
-            queueCustomer1 = queueCustomer2;
-            queueCustomer2 = null;
-
-            counterCustomer.MoveToQueueSlot(this, QueueSlot.Counter, CustomerPoint.position);
-
-            if (queueCustomer1 != null)
-                queueCustomer1.MoveToQueueSlot(this, QueueSlot.Line1, Line1Point.position);
-        }
-
-        if (queueCustomer1 == null && queueCustomer2 != null)
-        {
-            queueCustomer1 = queueCustomer2;
-            queueCustomer2 = null;
-            queueCustomer1.MoveToQueueSlot(this, QueueSlot.Line1, Line1Point.position);
-        }
-
         TryStartService();
     }
 

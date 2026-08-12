@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -6,6 +7,9 @@ using UnityEngine.Rendering;
 [RequireComponent(typeof(Collider2D))]
 public class CustomerBlood : MonoBehaviour
 {
+    private const float LiftUseBlockAfterSpawnSeconds = 5f;
+    private const int MaxLiftUsesPerTrip = 2;
+
     private static readonly System.Collections.Generic.HashSet<CustomerBlood> ActiveCustomers =
         new System.Collections.Generic.HashSet<CustomerBlood>();
 
@@ -63,10 +67,14 @@ public class CustomerBlood : MonoBehaviour
     private bool hasVisitedSpecialBuildingThisTrip;
     private bool specialBuildingRelocatedDuringVisit;
     private bool specialBuildingVisitEndedWithDespawn;
+    private bool liftTravelEndedWithDespawn;
+    private int liftUseCountThisTrip;
+    private Lift lastUsedLiftThisTrip;
     private int purchaseReceiveRoutineVersion;
     private string spawnEntryId;
     private float fixedZ;
     private float lifeEndTime;
+    private float spawnedAtTime;
     private int routeSequenceIndex = int.MinValue;
     private int currentRouteNodeIndex = -1;
     private int routeTravelDirection = 1;
@@ -146,6 +154,9 @@ public class CustomerBlood : MonoBehaviour
         routeSequenceIndex = selectedRouteSequenceIndex;
         targetBuilding = path != null ? path.Building : null;
         hasVisitedSpecialBuildingThisTrip = false;
+        liftUseCountThisTrip = 0;
+        lastUsedLiftThisTrip = null;
+        spawnedAtTime = Time.time;
 
         Vector3 spawnPosition = entrance != null ? entrance.SpawnWorldPosition : transform.position;
         transform.SetParent(null, true);
@@ -296,7 +307,12 @@ public class CustomerBlood : MonoBehaviour
         ApplyVisualState(VisualState.Walking);
 
         while (Time.time < lifeEndTime)
+        {
             yield return RoamUntil(lifeEndTime);
+
+            if (liftTravelEndedWithDespawn)
+                yield break;
+        }
 
         yield return ReturnToEntranceAndDespawn();
     }
@@ -305,8 +321,16 @@ public class CustomerBlood : MonoBehaviour
     {
         yield return ReturnToWayAndResumeRoutine();
 
+        if (liftTravelEndedWithDespawn)
+            yield break;
+
         while (Time.time < lifeEndTime)
+        {
             yield return RoamUntil(lifeEndTime);
+
+            if (liftTravelEndedWithDespawn)
+                yield break;
+        }
 
         yield return ReturnToEntranceAndDespawn();
     }
@@ -334,6 +358,9 @@ public class CustomerBlood : MonoBehaviour
         {
             yield return MoveToRoutine(currentPath.GetRandomWorldPointOnPath(), false, null);
         }
+
+        if (liftTravelEndedWithDespawn)
+            yield break;
 
         if (Time.time < endTime)
         {
@@ -549,6 +576,10 @@ public class CustomerBlood : MonoBehaviour
         hasVisitedSpecialBuildingThisTrip = false;
         specialBuildingRelocatedDuringVisit = false;
         specialBuildingVisitEndedWithDespawn = false;
+        liftTravelEndedWithDespawn = false;
+        liftUseCountThisTrip = 0;
+        lastUsedLiftThisTrip = null;
+        spawnedAtTime = 0f;
         ClearActiveMoveTarget();
         body.linearVelocity = Vector2.zero;
         facingLeft = true;
@@ -627,6 +658,8 @@ public class CustomerBlood : MonoBehaviour
         if (currentWay == null || routeNodeIndex < 0)
             yield break;
 
+        Way originalWay = currentWay;
+        int originalRouteSequenceIndex = routeSequenceIndex;
         Vector3 worldPoint = transform.position;
         Transform routeNode = currentWay.GetRouteNodeTransform(routeSequenceIndex, routeNodeIndex);
         if (routeNode == null && !currentWay.TryGetRouteNode(routeSequenceIndex, routeNodeIndex, out worldPoint))
@@ -635,7 +668,11 @@ public class CustomerBlood : MonoBehaviour
         Vector3 targetPoint = routeNode != null ? routeNode.position : worldPoint;
         yield return TravelWaySegmentRoutine(targetPoint);
 
-        currentRouteNodeIndex = routeNodeIndex;
+        if (liftTravelEndedWithDespawn)
+            yield break;
+
+        if (currentWay == originalWay && routeSequenceIndex == originalRouteSequenceIndex)
+            currentRouteNodeIndex = routeNodeIndex;
     }
 
     private void UpdateFacing(float deltaX)
@@ -784,6 +821,7 @@ public class CustomerBlood : MonoBehaviour
     {
         Vector3 segmentStart = transform.position;
         targetPoint = WithFixedZ(targetPoint);
+        liftTravelEndedWithDespawn = false;
 
         if (!purchaseFinished &&
             !transitioningToCarry &&
@@ -900,6 +938,31 @@ public class CustomerBlood : MonoBehaviour
 
             if (targetSpecialBuilding == specialBuilding)
                 targetSpecialBuilding = null;
+        }
+
+        if (!transitioningToCarry &&
+            !purchaseSequenceRunning &&
+            CanUseLift() &&
+            currentWay != null &&
+            Lift.TryChooseLiftAlongSegment(currentWay, segmentStart, targetPoint, lastUsedLiftThisTrip, out Lift lift, out int liftSide, out Vector3 liftBranchPoint))
+        {
+            yield return MoveToRoutine(liftBranchPoint, false, null);
+
+            bool liftSucceeded = false;
+            int destinationSide = liftSide;
+            yield return lift.TransportCustomer(this, liftSide, transform.position, (success, arrivedSide) =>
+            {
+                liftSucceeded = success;
+                destinationSide = arrivedSide;
+            });
+
+            if (liftSucceeded)
+            {
+                liftUseCountThisTrip++;
+                lastUsedLiftThisTrip = lift;
+                yield return ExitLiftWayRoutine(lift, destinationSide);
+                yield break;
+            }
         }
 
         yield return MoveToRoutine(targetPoint, false, null);
@@ -1062,6 +1125,142 @@ public class CustomerBlood : MonoBehaviour
         }
 
         return specialBuilding != null && path != null;
+    }
+
+    public IEnumerator MoveDirectToPointRoutine(Vector3 worldPoint)
+    {
+        yield return MoveToRoutine(worldPoint, false, null);
+    }
+
+    public void AttachToCarrier(Transform carrier, Vector3 localPosition)
+    {
+        ClearActiveMoveTarget();
+        waitingAtCounter = false;
+
+        if (body != null)
+        {
+            body.linearVelocity = Vector2.zero;
+            body.simulated = false;
+        }
+
+        if (bodyCollider != null)
+            bodyCollider.enabled = false;
+
+        transform.SetParent(carrier, true);
+        transform.localPosition = new Vector3(localPosition.x, localPosition.y, 0f);
+        ResetWalkStretch();
+        UpdateSortingOrders();
+    }
+
+    public void DetachFromCarrier(Vector3 worldPosition)
+    {
+        transform.SetParent(null, true);
+        Vector3 detachedPosition = WithFixedZ(worldPosition);
+        transform.position = detachedPosition;
+
+        if (body != null)
+        {
+            body.simulated = true;
+            body.position = detachedPosition;
+            body.linearVelocity = Vector2.zero;
+        }
+
+        if (bodyCollider != null)
+            bodyCollider.enabled = true;
+
+        ResetWalkStretch();
+        UpdateSortingOrders();
+    }
+
+    private IEnumerator ExitLiftWayRoutine(Lift lift, int destinationSide)
+    {
+        if (lift == null || !lift.TryGetConnectedWay(destinationSide, out Way destinationWay) || destinationWay == null)
+            yield break;
+
+        currentWay = destinationWay;
+        currentPath = null;
+        targetBuilding = null;
+        pendingPurchaseBuilding = null;
+        targetSpecialBuilding = null;
+
+        if (!destinationWay.TryGetSpawnEntrance(out Entrance destinationEntrance))
+            destinationEntrance = null;
+
+        if (!TryGetClosestRouteNode(destinationWay, transform.position, out int destinationSequenceIndex, out int closestNodeIndex))
+        {
+            if (destinationEntrance != null)
+                yield return MoveToRoutine(destinationEntrance.DespawnWorldPosition, false, null);
+
+            liftTravelEndedWithDespawn = true;
+            ownerEntranceManagement?.RecycleCustomer(this);
+            yield break;
+        }
+
+        routeSequenceIndex = destinationSequenceIndex;
+        currentRouteNodeIndex = closestNodeIndex;
+        routeTravelDirection = -1;
+
+        Vector3 closestPoint = transform.position;
+        if (destinationWay.TryGetRouteNode(destinationSequenceIndex, closestNodeIndex, out closestPoint))
+            yield return TravelWaySegmentRoutine(closestPoint);
+
+        if (liftTravelEndedWithDespawn)
+            yield break;
+
+        int exitNodeIndex = destinationWay.GetPreviousRouteNodeIndexNoLoop(destinationSequenceIndex, closestNodeIndex);
+        while (exitNodeIndex >= 0)
+        {
+            Vector3 nodePoint = transform.position;
+            if (destinationWay.TryGetRouteNode(destinationSequenceIndex, exitNodeIndex, out nodePoint))
+                yield return TravelWaySegmentRoutine(nodePoint);
+
+            if (liftTravelEndedWithDespawn)
+                yield break;
+
+            currentRouteNodeIndex = exitNodeIndex;
+            exitNodeIndex = destinationWay.GetPreviousRouteNodeIndexNoLoop(destinationSequenceIndex, exitNodeIndex);
+        }
+
+        if (destinationEntrance != null)
+            yield return MoveToRoutine(destinationEntrance.DespawnWorldPosition, false, null);
+
+        liftTravelEndedWithDespawn = true;
+        ownerEntranceManagement?.RecycleCustomer(this);
+    }
+
+    private static bool TryGetClosestRouteNode(Way way, Vector3 worldPosition, out int sequenceIndex, out int nodeIndex)
+    {
+        sequenceIndex = int.MinValue;
+        nodeIndex = -1;
+        if (way == null)
+            return false;
+
+        float bestDistance = float.MaxValue;
+        IReadOnlyList<Way.RouteSequence> sequences = way.RouteSequences;
+        for (int i = 0; i < sequences.Count; i++)
+        {
+            int candidateNodeIndex = way.GetClosestRouteNodeIndex(i, worldPosition);
+            if (candidateNodeIndex < 0 || !way.TryGetRouteNode(i, candidateNodeIndex, out Vector3 nodePoint))
+                continue;
+
+            float distance = (nodePoint - worldPosition).sqrMagnitude;
+            if (distance >= bestDistance)
+                continue;
+
+            bestDistance = distance;
+            sequenceIndex = i;
+            nodeIndex = candidateNodeIndex;
+        }
+
+        return sequenceIndex != int.MinValue && nodeIndex >= 0;
+    }
+
+    private bool CanUseLift()
+    {
+        if (liftUseCountThisTrip >= MaxLiftUsesPerTrip)
+            return false;
+
+        return Time.time >= spawnedAtTime + LiftUseBlockAfterSpawnSeconds;
     }
 
     private IEnumerator VisitSpecialBuildingRoutine(SpecialBuilding specialBuilding)

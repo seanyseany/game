@@ -73,6 +73,13 @@ public class VillageManagement : MonoBehaviour
     }
 
     [Serializable]
+    public class LiftState
+    {
+        public string liftId;
+        public bool isActive;
+    }
+
+    [Serializable]
     public class PurchaseLevelState
     {
         public string id;
@@ -94,6 +101,7 @@ public class VillageManagement : MonoBehaviour
         public List<BuildingState> buildings = new List<BuildingState>();
         public List<TurretState> turrets = new List<TurretState>();
         public List<OxygenGeneratorState> oxygenGenerators = new List<OxygenGeneratorState>();
+        public List<LiftState> lifts = new List<LiftState>();
         public List<PurchaseLevelState> turretPurchaseLevels = new List<PurchaseLevelState>();
         public List<PurchaseLevelState> oxygenPurchaseLevels = new List<PurchaseLevelState>();
         public List<string> ownedBuildingIds = new List<string>();
@@ -202,6 +210,7 @@ public class VillageManagement : MonoBehaviour
     public IReadOnlyList<BuildingState> Buildings => saveData.buildings;
     public IReadOnlyList<TurretState> Turrets => saveData.turrets;
     public IReadOnlyList<OxygenGeneratorState> OxygenGenerators => saveData.oxygenGenerators;
+    public IReadOnlyList<LiftState> Lifts => saveData.lifts;
     public IReadOnlyList<string> OwnedBuildingIds => saveData.ownedBuildingIds;
     public IReadOnlyList<string> OwnedTurretIds => saveData.ownedTurretIds;
     public IReadOnlyList<string> OwnedOxygenIds => saveData.ownedOxygenIds;
@@ -376,9 +385,25 @@ public class VillageManagement : MonoBehaviour
                 wayOils[i].RemoveAllInstalledOils();
         }
 
+        LiftSpot[] liftSpots = FindObjectsByType<LiftSpot>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        for (int i = 0; i < liftSpots.Length; i++)
+        {
+            LiftSpot liftSpot = liftSpots[i];
+            if (liftSpot == null)
+                continue;
+
+            IReadOnlyList<Lift> lifts = liftSpot.RegisteredLifts;
+            for (int liftIndex = 0; liftIndex < lifts.Count; liftIndex++)
+            {
+                if (lifts[liftIndex] != null)
+                    lifts[liftIndex].ApplyRuntimeActive(false);
+            }
+        }
+
         saveData.buildings.Clear();
         saveData.turrets.Clear();
         saveData.oxygenGenerators.Clear();
+        saveData.lifts.Clear();
         saveData.ownedBuildingIds.Clear();
         saveData.ownedTurretIds.Clear();
         saveData.ownedOxygenIds.Clear();
@@ -669,6 +694,20 @@ public class VillageManagement : MonoBehaviour
         }
     }
 
+    public void UpsertLiftState(LiftState state)
+    {
+        if (state == null || string.IsNullOrWhiteSpace(state.liftId))
+            return;
+
+        LiftState existing = FindLiftState(state.liftId);
+        if (existing == null)
+            saveData.lifts.Add(CloneLiftState(state));
+        else
+            CopyLiftState(state, existing);
+
+        SaveAndBroadcast(SaveMode.Immediate);
+    }
+
     public void SetOwnedCustomerBloodIds(IEnumerable<string> ids)
     {
         ReplaceStringList(saveData.ownedCustomerBloodIds, ids);
@@ -877,9 +916,17 @@ public class VillageManagement : MonoBehaviour
                     shopSections[i].PrepareRuntimeRestore();
             }
 
+            LiftSpot[] liftSpots = FindObjectsByType<LiftSpot>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int i = 0; i < liftSpots.Length; i++)
+            {
+                if (liftSpots[i] != null)
+                    liftSpots[i].PrepareRuntimeRestore();
+            }
+
             RestoreBuildingStates();
             RestoreTurretStates(shopSections);
             RestoreOxygenGeneratorStates(shopSections);
+            RestoreLiftStates(liftSpots);
             SaveDataChanged?.Invoke(saveData);
         }
         finally
@@ -1064,6 +1111,26 @@ public class VillageManagement : MonoBehaviour
         }
     }
 
+    private void RestoreLiftStates(LiftSpot[] liftSpots)
+    {
+        if (liftSpots == null || liftSpots.Length == 0 || saveData.lifts == null)
+            return;
+
+        for (int i = 0; i < saveData.lifts.Count; i++)
+        {
+            LiftState state = saveData.lifts[i];
+            if (state == null)
+                continue;
+
+            for (int spotIndex = 0; spotIndex < liftSpots.Length; spotIndex++)
+            {
+                LiftSpot liftSpot = liftSpots[spotIndex];
+                if (liftSpot != null && liftSpot.TryRestoreLiftState(state))
+                    break;
+            }
+        }
+    }
+
     private void SaveAndBroadcast(SaveMode mode)
     {
         if (mode == SaveMode.Immediate)
@@ -1211,6 +1278,8 @@ public class VillageManagement : MonoBehaviour
             saveData.turrets = new List<TurretState>();
         if (saveData.oxygenGenerators == null)
             saveData.oxygenGenerators = new List<OxygenGeneratorState>();
+        if (saveData.lifts == null)
+            saveData.lifts = new List<LiftState>();
         if (saveData.turretPurchaseLevels == null)
             saveData.turretPurchaseLevels = new List<PurchaseLevelState>();
         if (saveData.oxygenPurchaseLevels == null)
@@ -1263,6 +1332,15 @@ public class VillageManagement : MonoBehaviour
 
             state.level = Mathf.Max(0, state.level);
             state.storedOxygen = Mathf.Max(0, state.storedOxygen);
+        }
+
+        for (int i = 0; i < saveData.lifts.Count; i++)
+        {
+            LiftState state = saveData.lifts[i];
+            if (state == null)
+                continue;
+
+            state.liftId = string.IsNullOrWhiteSpace(state.liftId) ? string.Empty : state.liftId.Trim();
         }
 
         RemoveInvalidStrings(saveData.ownedBuildingIds);
@@ -1474,6 +1552,18 @@ public class VillageManagement : MonoBehaviour
         return null;
     }
 
+    private LiftState FindLiftState(string liftId)
+    {
+        for (int i = 0; i < saveData.lifts.Count; i++)
+        {
+            LiftState item = saveData.lifts[i];
+            if (item != null && string.Equals(item.liftId, liftId, StringComparison.Ordinal))
+                return item;
+        }
+
+        return null;
+    }
+
     private ArcadePlayerEntry FindArcadePlayerEntry(int playerType)
     {
         playerType = Mathf.Clamp(playerType, 1, 5);
@@ -1555,6 +1645,15 @@ public class VillageManagement : MonoBehaviour
         };
     }
 
+    private static LiftState CloneLiftState(LiftState source)
+    {
+        return new LiftState
+        {
+            liftId = source.liftId,
+            isActive = source.isActive
+        };
+    }
+
     private static void CopyOxygenGeneratorState(OxygenGeneratorState source, OxygenGeneratorState target)
     {
         target.slotId = source.slotId;
@@ -1564,6 +1663,12 @@ public class VillageManagement : MonoBehaviour
         target.isPlaced = source.isPlaced;
         target.isProducing = source.isProducing;
         target.storedOxygen = source.storedOxygen;
+    }
+
+    private static void CopyLiftState(LiftState source, LiftState target)
+    {
+        target.liftId = source.liftId;
+        target.isActive = source.isActive;
     }
 
     private void AddUniqueString(List<string> list, string value)

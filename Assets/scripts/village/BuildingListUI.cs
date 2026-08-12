@@ -12,13 +12,15 @@ public class BuildingListUI : ShopSectionUI
         Level1Placed,
         Level2Constructing,
         Complete,
-        SpecialPlaced
+        SpecialPlaced,
+        LiftAvailable
     }
 
     private enum CatalogEntryType
     {
         Building,
-        SpecialBuilding
+        SpecialBuilding,
+        LiftToken
     }
 
     [Serializable]
@@ -28,6 +30,7 @@ public class BuildingListUI : ShopSectionUI
         public string displayName;
         public Building prefab;
         public SpecialBuilding specialPrefab;
+        public int liftTokenIndex = -1;
         public int level1Price;
         public int level2Price;
     }
@@ -35,11 +38,13 @@ public class BuildingListUI : ShopSectionUI
     [Header("Building Shop")]
     [SerializeField] private List<Building> registeredBuildingPrefabs = new List<Building>();
     [SerializeField] private List<SpecialBuilding> registeredSpecialBuildingPrefabs = new List<SpecialBuilding>();
+    [SerializeField] private LiftSpot registeredLiftSpot;
 
     private readonly List<BuildingCatalogEntry> entries = new List<BuildingCatalogEntry>();
     private readonly List<Button> buildingButtons = new List<Button>();
 
     private GameObject rootObject;
+    private ScrollRect listScrollRect;
     private RectTransform listRoot;
     private Text statusText;
     private GameObject confirmationRoot;
@@ -74,6 +79,7 @@ public class BuildingListUI : ShopSectionUI
 
     private void RefreshCatalog()
     {
+        EnsureLiftSpotReference();
         entries.Clear();
         Dictionary<string, BuildingCatalogEntry> uniqueEntries = new Dictionary<string, BuildingCatalogEntry>(StringComparer.Ordinal);
 
@@ -119,6 +125,20 @@ public class BuildingListUI : ShopSectionUI
 
         foreach (BuildingCatalogEntry entry in uniqueEntries.Values)
             entries.Add(entry);
+
+        if (registeredLiftSpot != null)
+        {
+            for (int i = 0; i < registeredLiftSpot.TotalLiftCount; i++)
+            {
+                entries.Add(new BuildingCatalogEntry
+                {
+                    entryType = CatalogEntryType.LiftToken,
+                    displayName = $"Lift {i + 1}",
+                    liftTokenIndex = i,
+                    level1Price = registeredLiftSpot.GetLiftPrice(i)
+                });
+            }
+        }
 
         entries.Sort((left, right) => string.Compare(left.displayName, right.displayName, StringComparison.Ordinal));
     }
@@ -198,24 +218,54 @@ public class BuildingListUI : ShopSectionUI
 
         statusText = statusObject.AddComponent<Text>();
         statusText.font = font;
-        statusText.fontSize = 24;
+        statusText.fontSize = 20;
         statusText.alignment = TextAnchor.MiddleLeft;
         statusText.color = Color.white;
+        statusText.horizontalOverflow = HorizontalWrapMode.Wrap;
+        statusText.verticalOverflow = VerticalWrapMode.Overflow;
+        statusText.raycastTarget = false;
 
-        GameObject listObject = new GameObject("List", typeof(RectTransform));
-        listRoot = listObject.GetComponent<RectTransform>();
-        listRoot.SetParent(root.transform, false);
-        listRoot.anchorMin = new Vector2(0f, 0f);
+        GameObject scrollObject = new GameObject("ListScrollView", typeof(RectTransform), typeof(Image), typeof(Mask), typeof(ScrollRect));
+        RectTransform scrollRectTransform = scrollObject.GetComponent<RectTransform>();
+        scrollRectTransform.SetParent(root.transform, false);
+        scrollRectTransform.anchorMin = new Vector2(0f, 0f);
+        scrollRectTransform.anchorMax = new Vector2(1f, 1f);
+        scrollRectTransform.offsetMin = new Vector2(20f, 110f);
+        scrollRectTransform.offsetMax = new Vector2(-20f, -110f);
+
+        Image scrollImage = scrollObject.GetComponent<Image>();
+        scrollImage.color = new Color(0f, 0f, 0f, 0.08f);
+        scrollImage.raycastTarget = true;
+
+        Mask scrollMask = scrollObject.GetComponent<Mask>();
+        scrollMask.showMaskGraphic = false;
+
+        listScrollRect = scrollObject.GetComponent<ScrollRect>();
+        listScrollRect.horizontal = false;
+        listScrollRect.vertical = true;
+        listScrollRect.scrollSensitivity = 30f;
+
+        GameObject contentObject = new GameObject("List", typeof(RectTransform));
+        listRoot = contentObject.GetComponent<RectTransform>();
+        listRoot.SetParent(scrollObject.transform, false);
+        listRoot.anchorMin = new Vector2(0f, 1f);
         listRoot.anchorMax = new Vector2(1f, 1f);
-        listRoot.offsetMin = new Vector2(20f, 110f);
-        listRoot.offsetMax = new Vector2(-20f, -110f);
+        listRoot.pivot = new Vector2(0.5f, 1f);
+        listRoot.offsetMin = Vector2.zero;
+        listRoot.offsetMax = Vector2.zero;
 
-        VerticalLayoutGroup layout = listObject.AddComponent<VerticalLayoutGroup>();
+        listScrollRect.viewport = scrollRectTransform;
+        listScrollRect.content = listRoot;
+
+        VerticalLayoutGroup layout = contentObject.AddComponent<VerticalLayoutGroup>();
         layout.spacing = 14f;
         layout.childControlWidth = true;
-        layout.childControlHeight = false;
+        layout.childControlHeight = true;
         layout.childForceExpandWidth = true;
         layout.childForceExpandHeight = false;
+
+        ContentSizeFitter fitter = contentObject.AddComponent<ContentSizeFitter>();
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
         BuildConfirmation(root.transform, font);
         RebuildButtons();
@@ -250,6 +300,8 @@ public class BuildingListUI : ShopSectionUI
         if (rootObject == null)
             return;
 
+        EnsureLiftSpotReference();
+
         if (buildingButtons.Count != entries.Count)
             RebuildButtons();
 
@@ -264,8 +316,12 @@ public class BuildingListUI : ShopSectionUI
                 : (nextLevel == 2 ? entry.level2Price : entry.level1Price);
             bool canPurchase = entry.entryType == CatalogEntryType.SpecialBuilding
                 ? purchaseState == BuildingPurchaseState.Level1Available
-                : purchaseState == BuildingPurchaseState.Level1Available || purchaseState == BuildingPurchaseState.Level1Placed;
-            bool canPlace = purchaseState != BuildingPurchaseState.Level1Available || Path.FindFirstEmpty() != null;
+                : entry.entryType == CatalogEntryType.LiftToken
+                    ? purchaseState == BuildingPurchaseState.LiftAvailable
+                    : purchaseState == BuildingPurchaseState.Level1Available || purchaseState == BuildingPurchaseState.Level1Placed;
+            bool canPlace = entry.entryType == CatalogEntryType.LiftToken
+                ? registeredLiftSpot != null && registeredLiftSpot.GetActiveLiftCount() < registeredLiftSpot.TotalLiftCount
+                : purchaseState != BuildingPurchaseState.Level1Available || Path.FindFirstEmpty() != null;
             bool canAfford = villageManagement != null && villageManagement.CurrentOxygen >= price;
 
             buildingButtons[i].interactable = canPurchase && canPlace && canAfford;
@@ -284,11 +340,13 @@ public class BuildingListUI : ShopSectionUI
         if (entries.Count == 0)
             SetStatus("등록된 빌딩/특별빌딩 프리팹이 없습니다.");
         else
-            SetStatus("일반 건물은 1렙 후 2렙 업그레이드, 특별빌딩은 1회 구매 설치입니다.");
+            SetStatus("일반 건물은 1렙 후 2렙 업그레이드, 특별빌딩은 1회 구매 설치, Lift는 비활성 슬롯을 랜덤 활성화합니다.");
     }
 
     private void HandlePurchase(int index)
     {
+        EnsureLiftSpotReference();
+
         if (index < 0 || index >= entries.Count)
             return;
 
@@ -298,6 +356,13 @@ public class BuildingListUI : ShopSectionUI
         if (purchaseState == BuildingPurchaseState.Level1Constructing || purchaseState == BuildingPurchaseState.Level2Constructing)
         {
             SetStatus($"{entry.displayName}은 현재 건설 중입니다.");
+            return;
+        }
+
+        if (entry.entryType == CatalogEntryType.LiftToken)
+        {
+            int liftPrice = entry.level1Price;
+            ShowConfirmation(index, entry.displayName, 1, liftPrice);
             return;
         }
 
@@ -318,6 +383,8 @@ public class BuildingListUI : ShopSectionUI
 
     private void ConfirmPurchase()
     {
+        EnsureLiftSpotReference();
+
         int index = pendingPurchaseIndex;
 
         if (index < 0 || index >= entries.Count)
@@ -335,6 +402,31 @@ public class BuildingListUI : ShopSectionUI
         if (purchaseState == BuildingPurchaseState.Level1Constructing || purchaseState == BuildingPurchaseState.Level2Constructing)
         {
             SetStatus($"{entry.displayName}은 현재 건설 중입니다.");
+            return;
+        }
+
+        if (entry.entryType == CatalogEntryType.LiftToken)
+        {
+            int liftPrice = entry.level1Price;
+            if (liftPrice > 0 && villageManagement.CurrentOxygen < liftPrice)
+            {
+                SetStatus($"산소가 부족합니다. 필요 O2 {liftPrice}");
+                return;
+            }
+
+            if (registeredLiftSpot == null || !registeredLiftSpot.TryActivateRandomInactiveLift())
+            {
+                SetStatus("활성화 가능한 Lift 슬롯이 없습니다.");
+                return;
+            }
+
+            if (liftPrice > 0)
+                villageManagement.TrySpendOxygen(liftPrice);
+
+            HideConfirmation();
+            Shop.CloseAllShops();
+            SetStatus($"{entry.displayName} 구매 완료");
+            RefreshButtons();
             return;
         }
 
@@ -404,6 +496,9 @@ public class BuildingListUI : ShopSectionUI
     {
         if (entry == null)
             return BuildingPurchaseState.Level1Available;
+
+        if (entry.entryType == CatalogEntryType.LiftToken)
+            return GetLiftPurchaseState(entry);
 
         if (entry.entryType == CatalogEntryType.SpecialBuilding)
             return GetSpecialPurchaseState(entry.specialPrefab);
@@ -476,6 +571,7 @@ public class BuildingListUI : ShopSectionUI
         text.fontSize = 28;
         text.alignment = TextAnchor.MiddleLeft;
         text.color = Color.white;
+        text.raycastTarget = false;
 
         return button;
     }
@@ -519,6 +615,8 @@ public class BuildingListUI : ShopSectionUI
             BuildingCatalogEntry entry = index >= 0 && index < entries.Count ? entries[index] : null;
             confirmationText.text = entry != null && entry.entryType == CatalogEntryType.SpecialBuilding
                 ? $"{displayName} 특별빌딩을 정말 구매하시겠습니까?\nO2 {price}"
+                : entry != null && entry.entryType == CatalogEntryType.LiftToken
+                    ? $"{displayName} 토큰을 정말 구매하시겠습니까?\nO2 {price}"
                 : $"{displayName} {level}레벨을 정말 구매하시겠습니까?\nO2 {price}";
         }
 
@@ -622,6 +720,28 @@ public class BuildingListUI : ShopSectionUI
         return null;
     }
 
+    private BuildingPurchaseState GetLiftPurchaseState(BuildingCatalogEntry entry)
+    {
+        EnsureLiftSpotReference();
+
+        if (entry == null || registeredLiftSpot == null)
+            return BuildingPurchaseState.Complete;
+
+        int activeCount = registeredLiftSpot.GetActiveLiftCount();
+        if (activeCount >= registeredLiftSpot.TotalLiftCount)
+            return BuildingPurchaseState.Complete;
+
+        return BuildingPurchaseState.LiftAvailable;
+    }
+
+    private void EnsureLiftSpotReference()
+    {
+        if (registeredLiftSpot != null)
+            return;
+
+        registeredLiftSpot = FindFirstObjectByType<LiftSpot>(FindObjectsInactive.Include);
+    }
+
     private static string BuildButtonLabel(BuildingCatalogEntry entry, BuildingPurchaseState purchaseState, int price, bool canPlace, bool canAfford)
     {
         if (entry != null && entry.entryType == CatalogEntryType.SpecialBuilding)
@@ -631,6 +751,16 @@ public class BuildingListUI : ShopSectionUI
                 return $"{entry.displayName}\n설치 완료";
             if (!canPlace)
                 return $"{priceText}\n빈 슬롯 없음";
+            if (!canAfford)
+                return $"{priceText}\n구매 O2 {price} 부족";
+            return $"{priceText}\n구매 O2 {price}";
+        }
+
+        if (entry != null && entry.entryType == CatalogEntryType.LiftToken)
+        {
+            string priceText = $"{entry.displayName}  O2 {entry.level1Price}";
+            if (purchaseState == BuildingPurchaseState.Complete)
+                return $"{entry.displayName}\n구매 완료";
             if (!canAfford)
                 return $"{priceText}\n구매 O2 {price} 부족";
             return $"{priceText}\n구매 O2 {price}";

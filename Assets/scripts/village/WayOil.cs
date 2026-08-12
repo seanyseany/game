@@ -34,6 +34,12 @@ public class WayOil : MonoBehaviour
     [SerializeField] private float respawnCooldownMin = 3f;
     [SerializeField] private float respawnCooldownMax = 5f;
     [SerializeField] private float employeeReductionDelay = 1f;
+    [SerializeField] private float installedOilStopChance = 0.7f;
+    [SerializeField] private float installedOilStopDelayMin = 0f;
+    [SerializeField] private float installedOilStopDelayMax = 1f;
+    [SerializeField] private float installedOilStopDurationMin = 3f;
+    [SerializeField] private float installedOilStopDurationMax = 5f;
+    [SerializeField] private float installedOilStopDetectionRadius = 1.5f;
 
     private sealed class EmployeeState
     {
@@ -436,6 +442,56 @@ public class WayOil : MonoBehaviour
         return false;
     }
 
+    private bool TryGetInstalledOilStopSlotIndex(Vector3 worldPoint, out int slotIndex)
+    {
+        EnsureInstalledOilCache();
+
+        float detectionRadius = Mathf.Max(0.05f, installedOilStopDetectionRadius);
+        float detectionSqrDistance = detectionRadius * detectionRadius;
+        float bestSqrDistance = float.MaxValue;
+        slotIndex = -1;
+
+        for (int i = 0; i < connectedOilPaths.Count; i++)
+        {
+            Transform path = connectedOilPaths[i];
+            if (path == null || HasBuildingOnSlot(path) || i >= installedOils.Count || installedOils[i] == null)
+                continue;
+
+            Vector3 delta = path.position - worldPoint;
+            delta.z = 0f;
+            float sqrDistance = delta.sqrMagnitude;
+            if (sqrDistance > detectionSqrDistance || sqrDistance >= bestSqrDistance)
+                continue;
+
+            bestSqrDistance = sqrDistance;
+            slotIndex = i;
+        }
+
+        return slotIndex >= 0;
+    }
+
+    private void TryScheduleInstalledOilPause(EmployeeState employee, Vector3 worldPoint)
+    {
+        if (employee == null || employee.instance == null || employee.oilStaff == null || employee.retiring)
+            return;
+
+        if (!TryGetInstalledOilStopSlotIndex(worldPoint, out _))
+            return;
+
+        float stopChance = Mathf.Clamp01(installedOilStopChance);
+        if (stopChance <= 0f || Random.value > stopChance)
+            return;
+
+        float delay = Random.Range(
+            Mathf.Max(0f, installedOilStopDelayMin),
+            Mathf.Max(Mathf.Max(0f, installedOilStopDelayMin), installedOilStopDelayMax));
+        float duration = Random.Range(
+            Mathf.Max(0f, installedOilStopDurationMin),
+            Mathf.Max(Mathf.Max(0f, installedOilStopDurationMin), installedOilStopDurationMax));
+
+        employee.oilStaff.SchedulePause(delay, duration);
+    }
+
     public void RemoveAllInstalledOils()
     {
         EnsureInstalledOilCache();
@@ -705,11 +761,13 @@ public class WayOil : MonoBehaviour
             {
                 yield return employee.oilStaff.MoveToTransformRoutine(routeNode, routeNode.position);
                 employee.currentRouteNodeIndex = nextNodeIndex;
+                TryScheduleInstalledOilPause(employee, routeNode.position);
             }
             else if (nextNodeIndex >= 0 && TryGetRouteNode(employee.routeSequenceIndex, nextNodeIndex, out Vector3 routePoint))
             {
                 yield return employee.oilStaff.MoveToRoutine(routePoint);
                 employee.currentRouteNodeIndex = nextNodeIndex;
+                TryScheduleInstalledOilPause(employee, routePoint);
             }
             else
             {
