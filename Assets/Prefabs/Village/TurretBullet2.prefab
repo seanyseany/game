@@ -11,9 +11,9 @@ GameObject:
   - component: {fileID: 4601204032768292572}
   - component: {fileID: 4730662540530897303}
   - component: {fileID: -5633409267818508645}
-  - component: {fileID: 688240199145648611}
   - component: {fileID: 6184693417664744656}
   - component: {fileID: 7634147591771619358}
+  - component: {fileID: 5541533056734092633}
   m_Layer: 0
   m_Name: TurretBullet2
   m_TagString: Untagged
@@ -83,7 +83,7 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 120
+  m_SortingOrder: 80
   m_Sprite: {fileID: -3022287895592236789, guid: a1ec41b017a8e4a2c9d09b8f9e16d71c, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -117,43 +117,6 @@ Animator:
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
   m_WriteDefaultValuesOnDisable: 0
---- !u!70 &688240199145648611
-CapsuleCollider2D:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 966170658793099654}
-  m_Enabled: 1
-  serializedVersion: 3
-  m_Density: 1
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_ForceSendLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  m_ForceReceiveLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  m_ContactCaptureLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  m_CallbackLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  m_IsTrigger: 1
-  m_UsedByEffector: 0
-  m_CompositeOperation: 0
-  m_CompositeOrder: 0
-  m_Offset: {x: 0.117450714, y: 0.015493393}
-  m_Size: {x: 0.9920616, y: 1.2969093}
-  m_Direction: 0
 --- !u!50 &6184693417664744656
 Rigidbody2D:
   serializedVersion: 5
@@ -196,10 +159,47 @@ MonoBehaviour:
   oxygenPrice30: 3
   oxygenPrice60: 6
   oxygenPrice100: 10
-  hitCount: 2
+  hitCount: 7
   spawnSpeed: 0
   moveSpeed: 5.8
   spawnRotationOffsetZ: 180
+--- !u!70 &5541533056734092633
+CapsuleCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 966170658793099654}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 1
+  m_UsedByEffector: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
+  m_Offset: {x: -0.000000028472241, y: 0.011157558}
+  m_Size: {x: 0.8000003, y: 0.33136472}
+  m_Direction: 1
 --- !u!1 &1102788348393870560
 GameObject:
   m_ObjectHideFlags: 0
@@ -5003,7 +5003,7 @@ ParticleSystemRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 119
+  m_SortingOrder: 79
   m_RenderMode: 0
   m_MeshDistribution: 0
   m_SortMode: 0

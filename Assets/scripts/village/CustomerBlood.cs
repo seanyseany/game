@@ -70,6 +70,7 @@ public class CustomerBlood : MonoBehaviour
     private bool liftTravelEndedWithDespawn;
     private int liftUseCountThisTrip;
     private Lift lastUsedLiftThisTrip;
+    private Path enteredSpecialBuildingPath;
     private int purchaseReceiveRoutineVersion;
     private string spawnEntryId;
     private float fixedZ;
@@ -157,6 +158,7 @@ public class CustomerBlood : MonoBehaviour
         liftUseCountThisTrip = 0;
         lastUsedLiftThisTrip = null;
         spawnedAtTime = Time.time;
+        enteredSpecialBuildingPath = null;
 
         Vector3 spawnPosition = entrance != null ? entrance.SpawnWorldPosition : transform.position;
         transform.SetParent(null, true);
@@ -580,6 +582,7 @@ public class CustomerBlood : MonoBehaviour
         liftUseCountThisTrip = 0;
         lastUsedLiftThisTrip = null;
         spawnedAtTime = 0f;
+        enteredSpecialBuildingPath = null;
         ClearActiveMoveTarget();
         body.linearVelocity = Vector2.zero;
         facingLeft = true;
@@ -923,10 +926,17 @@ public class CustomerBlood : MonoBehaviour
 
             yield return MoveToRoutine(specialBranchPoint, false, null);
 
-            if (targetSpecialBuilding == specialBuilding && specialBuilding != null && specialBuilding.CanAcceptCustomers())
+            bool reachedSpecialEntrance = false;
+            if (IsSpecialBuildingVisitApproachValid(specialBuilding, specialPath))
             {
-                yield return MoveToRoutine(specialBuilding.CustomerEntrance.position, false, null);
+                yield return MoveToSpecialBuildingEntranceRoutine(
+                    specialBuilding,
+                    specialPath,
+                    success => reachedSpecialEntrance = success);
+            }
 
+            if (reachedSpecialEntrance && IsSpecialBuildingVisitApproachValid(specialBuilding, specialPath))
+            {
                 if (targetSpecialBuilding == specialBuilding)
                 {
                     yield return VisitSpecialBuildingRoutine(specialBuilding);
@@ -934,6 +944,12 @@ public class CustomerBlood : MonoBehaviour
                         yield break;
                     yield return MoveToRoutine(specialBranchPoint, false, null);
                 }
+            }
+            else if (targetSpecialBuilding == specialBuilding)
+            {
+                targetSpecialBuilding = null;
+                currentPath = null;
+                yield return MoveToRoutine(specialBranchPoint, false, null);
             }
 
             if (targetSpecialBuilding == specialBuilding)
@@ -971,6 +987,78 @@ public class CustomerBlood : MonoBehaviour
     private bool IsInteractingWithBuilding(Building building)
     {
         return targetBuilding == building || pendingPurchaseBuilding == building;
+    }
+
+    private bool IsSpecialBuildingVisitApproachValid(SpecialBuilding specialBuilding, Path expectedPath)
+    {
+        if (specialBuilding == null || expectedPath == null)
+            return false;
+
+        if (targetSpecialBuilding != specialBuilding)
+            return false;
+
+        if (specialBuilding.IsRelocating || !specialBuilding.CanAcceptCustomers())
+            return false;
+
+        return specialBuilding.CurrentPath == expectedPath;
+    }
+
+    private IEnumerator MoveToSpecialBuildingEntranceRoutine(
+        SpecialBuilding specialBuilding,
+        Path expectedPath,
+        System.Action<bool> onCompleted)
+    {
+        bool reachedDestination = false;
+        if (specialBuilding != null)
+        {
+            Transform entranceTransform = specialBuilding.CustomerEntrance;
+            Vector3 fallbackWorldPosition = entranceTransform != null ? entranceTransform.position : specialBuilding.transform.position;
+            waitingAtCounter = false;
+            activeMoveTargetTransform = entranceTransform;
+            activeMoveTargetPosition = WithFixedZ(fallbackWorldPosition);
+
+            while (true)
+            {
+                if (!IsSpecialBuildingVisitApproachValid(specialBuilding, expectedPath))
+                    break;
+
+                Vector3 moveTarget = GetCurrentMoveTargetPosition(fallbackWorldPosition);
+                if (Vector3.Distance(transform.position, moveTarget) <= 0.03f)
+                {
+                    reachedDestination = true;
+                    break;
+                }
+
+                Vector3 next = Vector3.MoveTowards(transform.position, moveTarget, moveSpeed * Time.fixedDeltaTime);
+                next.z = fixedZ;
+                UpdateFacing(next.x - transform.position.x);
+                transform.position = next;
+                if (body != null)
+                    body.position = next;
+                ApplyWalkStretch();
+                UpdateSortingOrders();
+                if (!purchaseFinished)
+                    ApplyVisualState(VisualState.Walking);
+                else if (transitioningToCarry)
+                    ApplyVisualState(VisualState.ReceivingItem);
+                else
+                    ApplyVisualState(VisualState.CarryingItem);
+                yield return waitForFixedUpdate;
+            }
+
+            if (reachedDestination)
+            {
+                Vector3 finalPosition = GetCurrentMoveTargetPosition(fallbackWorldPosition);
+                transform.position = finalPosition;
+                if (body != null)
+                    body.position = finalPosition;
+            }
+        }
+
+        ClearActiveMoveTarget();
+        ResetWalkStretch();
+        UpdateSortingOrders();
+        onCompleted?.Invoke(reachedDestination);
     }
 
     private Vector3 GetQueueSlotWorldPosition(Building building, Building.QueueSlot slot)
@@ -1278,6 +1366,7 @@ public class CustomerBlood : MonoBehaviour
         hasVisitedSpecialBuildingThisTrip = true;
         specialBuildingRelocatedDuringVisit = false;
         specialBuildingVisitEndedWithDespawn = false;
+        enteredSpecialBuildingPath = specialBuilding.CurrentPath;
         specialBuilding.RegisterInsideCustomer(this);
         SetTemporaryVisibility(false);
         lifeEndTime += visitSeconds;
@@ -1286,19 +1375,33 @@ public class CustomerBlood : MonoBehaviour
         if (targetSpecialBuilding != specialBuilding)
         {
             specialBuilding.UnregisterInsideCustomer(this);
+            enteredSpecialBuildingPath = null;
             yield break;
         }
 
         while (specialBuilding != null && specialBuilding.IsRelocating)
             yield return null;
 
+        if (specialBuilding != null && specialBuilding.CurrentPath == null && specialBuildingRelocatedDuringVisit)
+        {
+            float waitDeadline = Time.time + 1f;
+            while (specialBuilding != null &&
+                   specialBuilding.CurrentPath == null &&
+                   Time.time < waitDeadline)
+            {
+                yield return null;
+            }
+        }
+
         if (targetSpecialBuilding != specialBuilding)
         {
             specialBuilding.UnregisterInsideCustomer(this);
+            enteredSpecialBuildingPath = null;
             yield break;
         }
 
-        if (specialBuildingRelocatedDuringVisit)
+        bool exitViaInstalledWay = ShouldExitSpecialBuildingViaInstalledWay(specialBuilding);
+        if (exitViaInstalledWay)
         {
             specialBuilding.UnregisterInsideCustomer(this);
             SetTemporaryVisibility(true);
@@ -1306,7 +1409,7 @@ public class CustomerBlood : MonoBehaviour
             transform.position = exitStartPosition;
             if (body != null)
                 body.position = exitStartPosition;
-            yield return ExitRelocatedSpecialBuildingAndDespawn(specialBuilding);
+            yield return ExitSpecialBuildingViaInstalledWayAndDespawn(specialBuilding);
             yield break;
         }
 
@@ -1316,6 +1419,7 @@ public class CustomerBlood : MonoBehaviour
             body.position = respawnPosition;
         SetTemporaryVisibility(true);
         specialBuilding.UnregisterInsideCustomer(this);
+        enteredSpecialBuildingPath = null;
     }
 
     private void SetTemporaryVisibility(bool visible)
@@ -1343,26 +1447,42 @@ public class CustomerBlood : MonoBehaviour
         allSpriteRenderers = GetComponentsInChildren<SpriteRenderer>(true);
     }
 
-    private IEnumerator ExitRelocatedSpecialBuildingAndDespawn(SpecialBuilding specialBuilding)
+    private bool ShouldExitSpecialBuildingViaInstalledWay(SpecialBuilding specialBuilding)
+    {
+        if (specialBuilding == null)
+            return false;
+
+        if (specialBuildingRelocatedDuringVisit || specialBuilding.IsRelocating)
+            return true;
+
+        Path installedPath = specialBuilding.CurrentPath;
+        if (installedPath == null)
+            return false;
+
+        return installedPath != enteredSpecialBuildingPath;
+    }
+
+    private IEnumerator ExitSpecialBuildingViaInstalledWayAndDespawn(SpecialBuilding specialBuilding)
     {
         if (specialBuilding == null || specialBuilding.CurrentPath == null)
         {
+            targetSpecialBuilding = null;
+            enteredSpecialBuildingPath = null;
             specialBuildingVisitEndedWithDespawn = true;
             ownerEntranceManagement?.RecycleCustomer(this);
             yield break;
         }
 
         Path installedPath = specialBuilding.CurrentPath;
-        if (!installedPath.TryGetRandomConnectedWay(out Way exitWay) ||
-            exitWay == null ||
-            !exitWay.TryGetSpawnEntrance(out Entrance exitEntrance))
+        if (!TryResolveInstalledWayExit(installedPath, transform.position, out Way exitWay, out Entrance exitEntrance, out int exitRouteSequenceIndex))
         {
+            targetSpecialBuilding = null;
+            enteredSpecialBuildingPath = null;
             specialBuildingVisitEndedWithDespawn = true;
             ownerEntranceManagement?.RecycleCustomer(this);
             yield break;
         }
 
-        int exitRouteSequenceIndex = exitWay.GetRandomRouteSequenceIndex();
         if (exitRouteSequenceIndex != int.MinValue)
         {
             int closestNodeIndex = exitWay.GetClosestRouteNodeIndex(exitRouteSequenceIndex, transform.position);
@@ -1379,9 +1499,143 @@ public class CustomerBlood : MonoBehaviour
         if (exitEntrance != null)
             yield return MoveToRoutine(exitEntrance.DespawnWorldPosition, false, null);
 
+        currentWay = exitWay;
+        currentPath = installedPath;
+        sourceEntrance = exitEntrance;
+        routeSequenceIndex = exitRouteSequenceIndex;
+        currentRouteNodeIndex = -1;
         targetSpecialBuilding = null;
+        enteredSpecialBuildingPath = null;
         specialBuildingVisitEndedWithDespawn = true;
         ownerEntranceManagement?.RecycleCustomer(this);
+    }
+
+    private bool TryResolveInstalledWayExit(Path installedPath, Vector3 worldPosition, out Way exitWay, out Entrance exitEntrance, out int exitRouteSequenceIndex)
+    {
+        exitWay = null;
+        exitEntrance = null;
+        exitRouteSequenceIndex = int.MinValue;
+        if (installedPath == null)
+            return false;
+
+        Way[] allWays = FindObjectsByType<Way>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        float bestScore = float.MaxValue;
+
+        for (int i = 0; i < allWays.Length; i++)
+        {
+            Way candidateWay = allWays[i];
+            if (candidateWay == null || !IsWayConnectedToPath(candidateWay, installedPath))
+                continue;
+
+            Entrance candidateEntrance = GetClosestConnectedEntrance(candidateWay, worldPosition);
+            if (candidateEntrance == null)
+                continue;
+
+            int candidateSequenceIndex = GetBestExitRouteSequenceIndex(candidateWay, worldPosition, candidateEntrance.SpawnWorldPosition);
+            float score = GetInstalledWayExitScore(candidateWay, candidateSequenceIndex, worldPosition, candidateEntrance.SpawnWorldPosition);
+            if (score >= bestScore)
+                continue;
+
+            bestScore = score;
+            exitWay = candidateWay;
+            exitEntrance = candidateEntrance;
+            exitRouteSequenceIndex = candidateSequenceIndex;
+        }
+
+        return exitWay != null && exitEntrance != null;
+    }
+
+    private static bool IsWayConnectedToPath(Way way, Path path)
+    {
+        if (way == null || path == null)
+            return false;
+
+        IReadOnlyList<Path> connectedPaths = way.ConnectedPaths;
+        for (int i = 0; i < connectedPaths.Count; i++)
+        {
+            if (connectedPaths[i] == path)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static Entrance GetClosestConnectedEntrance(Way way, Vector3 worldPosition)
+    {
+        if (way == null)
+            return null;
+
+        Entrance closestEntrance = null;
+        float bestDistance = float.MaxValue;
+        IReadOnlyList<Entrance> entrances = way.ConnectedEntrances;
+        for (int i = 0; i < entrances.Count; i++)
+        {
+            Entrance candidate = entrances[i];
+            if (candidate == null)
+                continue;
+
+            float distance = (candidate.SpawnWorldPosition - worldPosition).sqrMagnitude;
+            if (distance >= bestDistance)
+                continue;
+
+            bestDistance = distance;
+            closestEntrance = candidate;
+        }
+
+        return closestEntrance;
+    }
+
+    private static int GetBestExitRouteSequenceIndex(Way way, Vector3 worldPosition, Vector3 entrancePosition)
+    {
+        if (way == null)
+            return int.MinValue;
+
+        float bestScore = float.MaxValue;
+        int bestSequenceIndex = int.MinValue;
+        IReadOnlyList<Way.RouteSequence> sequences = way.RouteSequences;
+        for (int i = 0; i < sequences.Count; i++)
+        {
+            int firstNodeIndex = way.GetFirstRouteNodeIndex(i);
+            if (firstNodeIndex < 0 || !way.TryGetRouteNode(i, firstNodeIndex, out Vector3 firstNodePosition))
+                continue;
+
+            int closestNodeIndex = way.GetClosestRouteNodeIndex(i, worldPosition);
+            if (closestNodeIndex < 0 || !way.TryGetRouteNode(i, closestNodeIndex, out Vector3 closestNodePosition))
+                continue;
+
+            float score =
+                (closestNodePosition - worldPosition).sqrMagnitude +
+                (firstNodePosition - entrancePosition).sqrMagnitude;
+
+            if (score >= bestScore)
+                continue;
+
+            bestScore = score;
+            bestSequenceIndex = i;
+        }
+
+        return bestSequenceIndex;
+    }
+
+    private static float GetInstalledWayExitScore(Way way, int routeSequenceIndex, Vector3 worldPosition, Vector3 entrancePosition)
+    {
+        if (way == null)
+            return float.MaxValue;
+
+        if (routeSequenceIndex == int.MinValue)
+            return (way.transform.position - worldPosition).sqrMagnitude + (entrancePosition - worldPosition).sqrMagnitude;
+
+        int closestNodeIndex = way.GetClosestRouteNodeIndex(routeSequenceIndex, worldPosition);
+        int firstNodeIndex = way.GetFirstRouteNodeIndex(routeSequenceIndex);
+
+        float score = 0f;
+        if (closestNodeIndex >= 0 && way.TryGetRouteNode(routeSequenceIndex, closestNodeIndex, out Vector3 closestNodePosition))
+            score += (closestNodePosition - worldPosition).sqrMagnitude;
+
+        if (firstNodeIndex >= 0 && way.TryGetRouteNode(routeSequenceIndex, firstNodeIndex, out Vector3 firstNodePosition))
+            score += (firstNodePosition - entrancePosition).sqrMagnitude;
+
+        return score;
     }
 
     private static Vector3 GetClosestPointOnSegment(Vector3 start, Vector3 end, Vector3 point, out float t)
