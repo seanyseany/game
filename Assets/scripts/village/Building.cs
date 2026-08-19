@@ -78,7 +78,8 @@ public class Building : MonoBehaviour
     private const string Line1AnchorName = "_Line1Point";
     private const string Line2AnchorName = "_Line2Point";
     private const float DragScaleMultiplier = 1.2f;
-    private const float HoldDurationSeconds = 0.7f;
+    private const float HoldDurationSeconds = 1.4f;
+    private const float DragPreparationLeadTimeSeconds = 0.15f;
     private const int DragSortingOrderBoost = 1000;
     private const float CustomerPurchaseReentryBlockSeconds = 0.5f;
 
@@ -106,6 +107,7 @@ public class Building : MonoBehaviour
     private bool tapPending;
     private bool pointerHeld;
     private bool isDragging;
+    private bool dragPreparationActive;
     private string originalSortingLayerName;
     private int originalSortingOrder;
     private float lastDragFinishedAt = -10f;
@@ -227,6 +229,9 @@ public class Building : MonoBehaviour
             ReleasePointerHold();
         }
 
+        if (pointerHeld && !isDragging && !dragPreparationActive && Time.unscaledTime - pointerDownStartedAt >= DragPreparationLeadTimeSeconds)
+            BeginDragPreparation();
+
         if (pointerHeld && !isDragging && Time.unscaledTime - pointerDownStartedAt >= HoldDurationSeconds)
             BeginDrag();
 
@@ -278,7 +283,7 @@ public class Building : MonoBehaviour
         if (!IsWorking || !HasPurchasableCustomerPoint())
             return false;
 
-        if (isDragging)
+        if (isDragging || pointerHeld || dragPreparationActive)
             return false;
 
         return Time.time >= customerPurchaseBlockedUntil;
@@ -626,13 +631,13 @@ public class Building : MonoBehaviour
             ui.Close();
 
         isDragging = true;
+        dragPreparationActive = false;
         tapPending = false;
         customerPurchaseBlockedUntil = Mathf.Max(customerPurchaseBlockedUntil, Time.time + CustomerPurchaseReentryBlockSeconds);
         transform.localScale = initialScale * DragScaleMultiplier;
         RaiseSortingForDrag();
         Vector3 pointerWorld = GetPointerWorldPosition();
         dragPointerOffset = transform.position - pointerWorld;
-        CancelWaitingCustomersForRelocation();
         if (activeOwnerBlood != null)
             activeOwnerBlood.LockToBuildingForDrag();
         currentPath.ReleaseBuildingReference(this, false);
@@ -651,6 +656,7 @@ public class Building : MonoBehaviour
     {
         VillagePointerCapture.Release(this);
         isDragging = false;
+        dragPreparationActive = false;
         pointerHeld = false;
         pointerDownStartedAt = -1f;
         lastDragFinishedAt = Time.unscaledTime;
@@ -826,8 +832,28 @@ public class Building : MonoBehaviour
         pointerDownStartedAt = -1f;
         tapPending = false;
 
+        if (!wasDragging)
+            EndDragPreparation();
+
         if (wasDragging)
             FinishDrag();
+    }
+
+    private void BeginDragPreparation()
+    {
+        if (dragPreparationActive)
+            return;
+
+        dragPreparationActive = true;
+        customerPurchaseBlockedUntil = Mathf.Max(
+            customerPurchaseBlockedUntil,
+            Time.time + HoldDurationSeconds + CustomerPurchaseReentryBlockSeconds);
+        CancelWaitingCustomersForRelocation();
+    }
+
+    private void EndDragPreparation()
+    {
+        dragPreparationActive = false;
     }
 
     private void TryOpenManagementUiFromTap()

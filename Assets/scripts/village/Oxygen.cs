@@ -233,6 +233,9 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
         if (villageManagement == null || string.IsNullOrWhiteSpace(slotId))
             return;
 
+        if (villageManagement.IsRestoreInProgress)
+            return;
+
         villageManagement.UpsertOxygenGeneratorState(new VillageManagement.OxygenGeneratorState
         {
             slotId = slotId,

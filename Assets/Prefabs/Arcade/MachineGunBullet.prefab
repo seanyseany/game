@@ -50,7 +50,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MachineGunBullet
   speed: 20
   poolTag: MachineGunBullet
-  lifeTime: 5
+  lifeTime: 1.2
+  bulletAnimator: {fileID: 0}
+  hitCollider: {fileID: 0}
+  dieTriggerName: die
+  dieAnimationDuration: 0.1
 --- !u!212 &2239180505900525943
 SpriteRenderer:
   m_ObjectHideFlags: 0

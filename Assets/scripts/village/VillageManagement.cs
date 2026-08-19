@@ -192,6 +192,7 @@ public class VillageManagement : MonoBehaviour
     private float nextDelayedSaveAt;
     private bool restoreInProgress;
     private Coroutine restoreSceneRoutine;
+    private Coroutine debugProxyAttachRoutine;
     private VillageManagementDebugProxy debugProxy;
 
     public VillageSaveData SaveData => saveData;
@@ -253,6 +254,7 @@ public class VillageManagement : MonoBehaviour
         SceneManager.activeSceneChanged += HandleActiveSceneChanged;
         Load();
         EnsureDebugProxy();
+        StartDebugProxyAttachRoutine();
         InstanceReady?.Invoke(this);
     }
 
@@ -269,6 +271,9 @@ public class VillageManagement : MonoBehaviour
             SceneManager.activeSceneChanged -= HandleActiveSceneChanged;
             FlushPendingSave();
         }
+
+        if (debugProxyAttachRoutine != null)
+            StopCoroutine(debugProxyAttachRoutine);
     }
 
     private void Update()
@@ -851,6 +856,7 @@ public class VillageManagement : MonoBehaviour
     {
         FlushPendingSave();
         EnsureDebugProxy();
+        StartDebugProxyAttachRoutine();
         ScheduleRestoreSceneState(scene);
     }
 
@@ -858,6 +864,7 @@ public class VillageManagement : MonoBehaviour
     {
         FlushPendingSave();
         EnsureDebugProxy();
+        StartDebugProxyAttachRoutine();
     }
 
     private void ScheduleRestoreSceneState(Scene scene)
@@ -892,11 +899,81 @@ public class VillageManagement : MonoBehaviour
 
         if (debugProxy == null)
         {
-            GameObject proxyObject = new GameObject("VillageManagement Debug");
+            GameObject proxyObject = FindRuntimeDebugUpdaterHost();
+            if (proxyObject == null)
+                proxyObject = new GameObject("VillageManagement Debug");
+
             debugProxy = proxyObject.AddComponent<VillageManagementDebugProxy>();
+        }
+        else
+        {
+            TryMoveDebugProxyToRuntimeHost();
         }
 
         debugProxy.Bind(this);
+    }
+
+    private void StartDebugProxyAttachRoutine()
+    {
+        if (!Application.isPlaying)
+            return;
+
+        if (debugProxyAttachRoutine != null)
+            StopCoroutine(debugProxyAttachRoutine);
+
+        debugProxyAttachRoutine = StartCoroutine(AttachDebugProxyWhenRuntimeHostAppears());
+    }
+
+    private System.Collections.IEnumerator AttachDebugProxyWhenRuntimeHostAppears()
+    {
+        const float timeoutSeconds = 5f;
+        float elapsed = 0f;
+
+        while (elapsed < timeoutSeconds)
+        {
+            EnsureDebugProxy();
+
+            if (IsDebugProxyAttachedToRuntimeHost())
+            {
+                debugProxyAttachRoutine = null;
+                yield break;
+            }
+
+            yield return null;
+            elapsed += Time.unscaledDeltaTime;
+        }
+
+        debugProxyAttachRoutine = null;
+    }
+
+    private bool IsDebugProxyAttachedToRuntimeHost()
+    {
+        GameObject runtimeHost = FindRuntimeDebugUpdaterHost();
+        return runtimeHost != null && debugProxy != null && debugProxy.gameObject == runtimeHost;
+    }
+
+    private void TryMoveDebugProxyToRuntimeHost()
+    {
+        GameObject runtimeHost = FindRuntimeDebugUpdaterHost();
+        if (runtimeHost == null || debugProxy == null || debugProxy.gameObject == runtimeHost)
+            return;
+
+        VillageManagementDebugProxy hostProxy = runtimeHost.GetComponent<VillageManagementDebugProxy>();
+        if (hostProxy == null)
+            hostProxy = runtimeHost.AddComponent<VillageManagementDebugProxy>();
+
+        hostProxy.Bind(this);
+        Destroy(debugProxy.gameObject);
+        debugProxy = hostProxy;
+    }
+
+    private static GameObject FindRuntimeDebugUpdaterHost()
+    {
+        GameObject runtimeDebugUpdater = GameObject.Find("[Debug Updater]");
+        if (runtimeDebugUpdater != null)
+            return runtimeDebugUpdater;
+
+        return null;
     }
 
     private void RestoreSceneState(Scene scene)
