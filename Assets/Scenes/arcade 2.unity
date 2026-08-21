@@ -5621,7 +5621,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ac861eb8557084223a6741d05133becf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  testPhasePrefabs: []
+  testPhasePrefabs:
+  - {fileID: 2659614723417223950, guid: bac18af1ddfa44351a7f1056878d6a3e, type: 3}
   stage1PhasePrefabs:
   - {fileID: 2659614723417223950, guid: 79dfeedf66ebd4565bf36e6af6e961bb, type: 3}
   - {fileID: 2659614723417223950, guid: 0c2b8fa46b57f41fd946fae608c4b25d, type: 3}
@@ -5663,7 +5664,14 @@ MonoBehaviour:
   - {fileID: 2659614723417223950, guid: c11d02656cca44bc9ba675e0eebc1710, type: 3}
   - {fileID: 2659614723417223950, guid: c3e13e8e0ec0a4ef1b0133e31f87c046, type: 3}
   - {fileID: 2659614723417223950, guid: 5961be634db5142369efd6096cc6e23f, type: 3}
-  stage2SpecialPhasePrefabs: []
+  - {fileID: 2659614723417223950, guid: d279f00548d0f4fa89799d5b18c5a74f, type: 3}
+  - {fileID: 2659614723417223950, guid: 516b6dd691dce4eda9e46e9ee5a56c16, type: 3}
+  - {fileID: 2659614723417223950, guid: ba6989c6209254ed783956bd0930d6cc, type: 3}
+  stage2SpecialPhasePrefabs:
+  - prefab: {fileID: 2659614723417223950, guid: 1177093bf0ee04d6ebcd0be567804abb, type: 3}
+    spawnChance: 0.5
+  - prefab: {fileID: 2659614723417223950, guid: 86a9e3ef495cc4ed09cafdfc02a26ec3, type: 3}
+    spawnChance: 1
   stage3PhasePrefabs:
   - {fileID: 0}
   stage3SpecialPhasePrefabs:
@@ -6386,16 +6394,16 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6525172685940875560, guid: b645720f70c8a4a5294393b54ab54fb1, type: 3}
       propertyPath: m_Size.x
-      value: 2.15
+      value: 2.23
       objectReference: {fileID: 0}
     - target: {fileID: 6525172685940875560, guid: b645720f70c8a4a5294393b54ab54fb1, type: 3}
       propertyPath: m_Size.y
-      value: 1.25
+      value: 1.57
       objectReference: {fileID: 0}
     - target: {fileID: 6525172685940875560, guid: b645720f70c8a4a5294393b54ab54fb1, type: 3}
       propertyPath: m_Sprite
       value: 
-      objectReference: {fileID: -6404741104382166878, guid: 4c94fc293f5d84f6296ec463d404c7a5, type: 3}
+      objectReference: {fileID: 5937316028250201651, guid: 43eb58da166694862bfd6aedad0c566a, type: 3}
     - target: {fileID: 6525172685940875560, guid: b645720f70c8a4a5294393b54ab54fb1, type: 3}
       propertyPath: m_WasSpriteAssigned
       value: 1

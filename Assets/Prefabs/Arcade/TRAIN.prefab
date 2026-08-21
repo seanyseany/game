@@ -26,7 +26,7 @@ Transform:
   m_GameObject: {fileID: 411430262965900060}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0.08901855, w: 0.99603}
-  m_LocalPosition: {x: -7.54, y: 0.49, z: -5}
+  m_LocalPosition: {x: -7.54, y: 0.61, z: -5}
   m_LocalScale: {x: 0.96806645, y: 1.1439825, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -192,7 +192,7 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 3
+  m_SortingOrder: 4
   m_Sprite: {fileID: 8587958851180327957, guid: 42d974055a914442aa854eb3719fa228, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -275,9 +275,9 @@ MonoBehaviour:
   endLocalPos: {x: -4.34, y: 2}
   machineGunPrefab: {fileID: 3528224640946837458}
   machineGunExtraBodyPrefab: {fileID: 2051844838524713543}
-  endDuration: 20
+  endDuration: 31
   bodyShiftX: 1.5
-  bodyShiftDuration: 1
+  bodyShiftDuration: 0.7
 --- !u!1 &1005564321032429924
 GameObject:
   m_ObjectHideFlags: 0
@@ -579,7 +579,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: -16.180002, y: 1.74, z: 0}
-  m_LocalScale: {x: 1.2, y: 1.2, z: 1}
+  m_LocalScale: {x: 1.5, y: 1.5, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 4496518749673601240}
@@ -631,12 +631,12 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 10
-  m_Sprite: {fileID: 3434236936243825329, guid: 14017cc5fba3b48218e094aa8ed71c43, type: 3}
+  m_Sprite: {fileID: 5937316028250201651, guid: 43eb58da166694862bfd6aedad0c566a, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 1.92, y: 1.15}
+  m_Size: {x: 2.23, y: 1.57}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
@@ -689,13 +689,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2462373858118800473}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: 0.14431703, w: 0.9895315}
-  m_LocalPosition: {x: -6.63, y: 1.91, z: -5}
-  m_LocalScale: {x: 1.2204212, y: 0.78980553, z: 1}
+  m_LocalRotation: {x: -0, y: -0, z: 0.07148164, w: 0.99744195}
+  m_LocalPosition: {x: -6.7, y: 1.92, z: -5}
+  m_LocalScale: {x: 1.3916464, y: 0.66280484, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 4496518749673601240}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 16.595}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 8.198}
 --- !u!212 &5939601647321461234
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -2050,6 +2050,8 @@ EdgeCollider2D:
   - {x: -0.7052506, y: -1.8748708}
   - {x: -0.65682596, y: -0.8163181}
   - {x: 0.60127, y: 1.2572266}
+  - {x: 0.46576342, y: 0.6772496}
+  - {x: 0.44911408, y: 0.60599124}
   - {x: 0.024389476, y: -1.2118609}
   - {x: 0.35465333, y: -1.7196308}
   - {x: 0.7242622, y: -1.8967179}
@@ -2225,7 +2227,7 @@ PrefabInstance:
       objectReference: {fileID: -2170712247897187164, guid: b12fa9ae7d54d436c833e929a5a13598, type: 3}
     - target: {fileID: -634871297307901009, guid: ffc68ddccb6b44b35af841cba9d91070, type: 3}
       propertyPath: m_SortingOrder
-      value: 4
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 456334652193639125, guid: ffc68ddccb6b44b35af841cba9d91070, type: 3}
       propertyPath: m_LocalScale.x
@@ -2347,11 +2349,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8251013934011039920, guid: 1c62df9891248454ea3618a19f6f36f3, type: 3}
       propertyPath: lowerMaxAngle
-      value: -23
+      value: -27
       objectReference: {fileID: 0}
     - target: {fileID: 8251013934011039920, guid: 1c62df9891248454ea3618a19f6f36f3, type: 3}
       propertyPath: upperMaxAngle
-      value: 15
+      value: 18
       objectReference: {fileID: 0}
     - target: {fileID: 8251013934011039920, guid: 1c62df9891248454ea3618a19f6f36f3, type: 3}
       propertyPath: bulletSpawnTime

@@ -1374,8 +1374,8 @@ public class CustomerBlood : MonoBehaviour
 
         if (targetSpecialBuilding != specialBuilding)
         {
+            RestoreAfterSpecialBuildingVisit(specialBuilding);
             specialBuilding.UnregisterInsideCustomer(this);
-            enteredSpecialBuildingPath = null;
             yield break;
         }
 
@@ -1395,8 +1395,8 @@ public class CustomerBlood : MonoBehaviour
 
         if (targetSpecialBuilding != specialBuilding)
         {
+            RestoreAfterSpecialBuildingVisit(specialBuilding);
             specialBuilding.UnregisterInsideCustomer(this);
-            enteredSpecialBuildingPath = null;
             yield break;
         }
 
@@ -1419,6 +1419,20 @@ public class CustomerBlood : MonoBehaviour
             body.position = respawnPosition;
         SetTemporaryVisibility(true);
         specialBuilding.UnregisterInsideCustomer(this);
+        enteredSpecialBuildingPath = null;
+    }
+
+    private void RestoreAfterSpecialBuildingVisit(SpecialBuilding specialBuilding)
+    {
+        if (specialBuilding != null)
+        {
+            Vector3 restorePosition = WithFixedZ(specialBuilding.CustomerEntrance.position);
+            transform.position = restorePosition;
+            if (body != null)
+                body.position = restorePosition;
+        }
+
+        SetTemporaryVisibility(true);
         enteredSpecialBuildingPath = null;
     }
 
