@@ -22,6 +22,13 @@ public class MiniBossBomb : MonoBehaviour
     [SerializeField] private float yTurnDuration = 0.35f;
     [SerializeField] private float destroyCleanupDelay = 0.5f;
 
+    [Header("Engines")]
+    [Tooltip("Assign the root GameObject of the upper engine animation prefab child.")]
+    [SerializeField] private GameObject upperEngine;
+    [Tooltip("Assign the root GameObject of the lower engine animation prefab child.")]
+    [SerializeField] private GameObject lowerEngine;
+    [SerializeField, Min(0f)] private float engineActivationVelocity = 0.01f;
+
     private Animator cachedAnimator;
     private Collider2D cachedCollider;
     private ObstacleInfo cachedObstacleInfo;
@@ -31,10 +38,12 @@ public class MiniBossBomb : MonoBehaviour
     private bool destroyTriggered;
     private float currentYVelocity;
     private float preTrackingOscillationTime;
+    private GameObject activeEngine;
 
     private void Awake()
     {
-        cachedAnimator = GetComponent<Animator>() ?? GetComponentInChildren<Animator>(true);
+        DisableEngines();
+        cachedAnimator = GetComponent<Animator>() ?? FindBombAnimator();
         cachedCollider = GetComponent<Collider2D>();
         cachedObstacleInfo = GetComponent<ObstacleInfo>();
 
@@ -80,6 +89,7 @@ public class MiniBossBomb : MonoBehaviour
         targetPlayer = Player.Instance != null ? Player.Instance.transform : FindFirstObjectByType<Player>()?.transform;
         currentYVelocity = 0f;
         preTrackingOscillationTime = 0f;
+        DisableEngines();
         if (cachedCollider != null)
             cachedCollider.enabled = true;
 
@@ -111,6 +121,7 @@ public class MiniBossBomb : MonoBehaviour
         position.y += currentYVelocity * Time.deltaTime;
 
         transform.position = position;
+        UpdateEngineState(currentYVelocity);
     }
 
     private float GetTargetY(float currentY, bool shouldTrackPlayerY)
@@ -157,6 +168,7 @@ public class MiniBossBomb : MonoBehaviour
             return;
 
         destroyTriggered = true;
+        DisableEngines();
 
         if (selfDestroyRoutine != null)
         {
@@ -174,6 +186,58 @@ public class MiniBossBomb : MonoBehaviour
             StopCoroutine(cleanupRoutine);
 
         cleanupRoutine = StartCoroutine(CoCleanup());
+    }
+
+    private Animator FindBombAnimator()
+    {
+        Animator[] animators = GetComponentsInChildren<Animator>(true);
+        for (int i = 0; i < animators.Length; i++)
+        {
+            Animator animator = animators[i];
+            if (animator != null && !IsEngineTransform(animator.transform))
+                return animator;
+        }
+
+        return null;
+    }
+
+    private bool IsEngineTransform(Transform target)
+    {
+        return (upperEngine != null && target.IsChildOf(upperEngine.transform))
+            || (lowerEngine != null && target.IsChildOf(lowerEngine.transform));
+    }
+
+    private void UpdateEngineState(float verticalVelocity)
+    {
+        GameObject nextEngine = null;
+        float activationVelocity = Mathf.Max(0f, engineActivationVelocity);
+
+        if (verticalVelocity > activationVelocity)
+            nextEngine = lowerEngine;
+        else if (verticalVelocity < -activationVelocity)
+            nextEngine = upperEngine;
+
+        if (activeEngine == nextEngine)
+            return;
+
+        if (upperEngine != null)
+            upperEngine.SetActive(nextEngine == upperEngine);
+
+        if (lowerEngine != null)
+            lowerEngine.SetActive(nextEngine == lowerEngine);
+
+        activeEngine = nextEngine;
+    }
+
+    private void DisableEngines()
+    {
+        if (upperEngine != null)
+            upperEngine.SetActive(false);
+
+        if (lowerEngine != null)
+            lowerEngine.SetActive(false);
+
+        activeEngine = null;
     }
 
     private IEnumerator CoCleanup()

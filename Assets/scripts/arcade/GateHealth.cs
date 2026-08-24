@@ -4,6 +4,7 @@ using System.Collections;
 public class GateHealth : MonoBehaviour
 {
     public static GateHealth Instance;
+    public static System.Action OnOpenHoldStarted;
 
     [Header("Sprites - 단계별(0,1,2)")]
     public Sprite[] closedSprites;
@@ -37,6 +38,8 @@ public class GateHealth : MonoBehaviour
     private GateState state = GateState.Closed;
     private GateVisualPhase visualPhase = GateVisualPhase.Closed;
     private bool smokePlayed = false;
+    private bool machineGunReturnGateLocked;
+    private int openHoldCount;
 
     public bool IsBroken => state == GateState.Broken;
     public int CurrentHits => hitCount;
@@ -102,6 +105,7 @@ public class GateHealth : MonoBehaviour
 
     public void OpenGate()
     {
+        if (machineGunReturnGateLocked) return;
         if (state == GateState.Broken) return;
         if (state == GateState.Open || state == GateState.Opening) return;
 
@@ -109,7 +113,33 @@ public class GateHealth : MonoBehaviour
         animCo = StartCoroutine(OpenAnimation());
     }
 
+    public void BeginOpenHold()
+    {
+        bool wasClosedByAllOwners = openHoldCount == 0;
+        openHoldCount++;
+        OpenGate();
+
+        if (wasClosedByAllOwners)
+            OnOpenHoldStarted?.Invoke();
+    }
+
+    public void EndOpenHold()
+    {
+        if (openHoldCount <= 0)
+            return;
+
+        openHoldCount--;
+        if (openHoldCount == 0)
+            CloseGateInternal();
+    }
+
     public void CloseGate()
+    {
+        if (openHoldCount > 0) return;
+        CloseGateInternal();
+    }
+
+    private void CloseGateInternal()
     {
         if (state == GateState.Broken) return;
         if (state == GateState.Closed || state == GateState.Closing) return;
@@ -121,6 +151,14 @@ public class GateHealth : MonoBehaviour
     public void CloseGateOnBloodHit()
     {
         CloseGate();
+    }
+
+    public void SetMachineGunReturnGateLocked(bool locked)
+    {
+        machineGunReturnGateLocked = locked;
+
+        if (locked && openHoldCount == 0)
+            CloseGateInternal();
     }
 
     private IEnumerator OpenAnimation()
@@ -155,6 +193,8 @@ public class GateHealth : MonoBehaviour
         animCo = null;
 
         hitCount = 0;
+        openHoldCount = 0;
+        machineGunReturnGateLocked = false;
         state = GateState.Closed;
         visualPhase = GateVisualPhase.Closed;
         ApplyCurrentVisualSprite();

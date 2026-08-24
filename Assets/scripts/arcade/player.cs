@@ -197,6 +197,9 @@ public class Player : MonoBehaviour
     private float flyattackProtectedUntil = -999f;
     private bool isSpawnIntroActive = false;
     private Coroutine spawnIntroRoutine;
+    private bool isMachineGunTransferActive;
+    private bool isMachineGunBoarded;
+    private readonly List<Renderer> hiddenMachineGunChildRenderers = new List<Renderer>();
     private bool jumpedThisAirborne = false;
     private Coroutine rangedFlyattackLatchRoutine;
     private Coroutine rageRangedGroundAttackRoutine;
@@ -322,9 +325,17 @@ public class Player : MonoBehaviour
             ClearRunningSmokeImmediate();
             return;
         }
-        if (isSpawnIntroActive)
+        if (isSpawnIntroActive || isMachineGunTransferActive)
         {
             UpdateWalkAnimationSpeed();
+            return;
+        }
+        if (isMachineGunBoarded)
+        {
+            // While hidden inside the gate, only the mounted machine gun may receive input.
+            if (HandleMachineGunControlOverride())
+                UpdateWalkAnimationSpeed();
+
             return;
         }
         if (isRageMode)
@@ -2466,7 +2477,7 @@ public class Player : MonoBehaviour
 
     public void TakeDamage(int dmg)
     {
-        if (isSpawnIntroActive) return;
+        if (isSpawnIntroActive || isMachineGunTransferActive || isMachineGunBoarded) return;
         if (isInvincible || isRageMode || IsP3AttackInvulnerable()) return;  // 🔹 Hurt 중엔 무시
 
         lives = Mathf.Max(0, lives - dmg);
@@ -2485,7 +2496,7 @@ public class Player : MonoBehaviour
 
     public bool TakeExternalObstacleDamage(int dmg, ObstacleType obstacleType, Collider2D hazardCollider = null)
     {
-        if (isSpawnIntroActive) return false;
+        if (isSpawnIntroActive || isMachineGunTransferActive || isMachineGunBoarded) return false;
 
         lastHitObstacleType = obstacleType;
 
@@ -3137,6 +3148,121 @@ public class Player : MonoBehaviour
         spawnIntroRoutine = StartCoroutine(CoPlaySpawnIntro());
     }
 
+    public IEnumerator CoBoardMachineGun(Transform gatePoint, float duration)
+    {
+        if (gatePoint == null)
+            yield break;
+
+        isMachineGunTransferActive = true;
+        isMachineGunBoarded = false;
+        PrepareForMachineGunTransfer();
+
+        Vector3 startPosition = transform.position;
+        float elapsed = 0f;
+        float safeDuration = Mathf.Max(0.01f, duration);
+        while (elapsed < safeDuration)
+        {
+            elapsed += Time.deltaTime;
+            transform.position = Vector3.Lerp(startPosition, gatePoint.position, Mathf.Clamp01(elapsed / safeDuration));
+            yield return null;
+        }
+
+        transform.position = gatePoint.position;
+        if (sr != null)
+            sr.enabled = false;
+        HideMachineGunChildVisuals();
+
+        isMachineGunTransferActive = false;
+        isMachineGunBoarded = true;
+    }
+
+    public IEnumerator CoExitMachineGun(float startDelay)
+    {
+        isMachineGunTransferActive = true;
+        isMachineGunBoarded = false;
+
+        if (startDelay > 0f)
+            yield return new WaitForSeconds(startDelay);
+
+        // Reuse the complete spawn intro so player and attached visuals share its timing.
+        yield return CoPlaySpawnIntro();
+        isMachineGunTransferActive = false;
+    }
+
+    public void CancelMachineGunTransfer()
+    {
+        isMachineGunTransferActive = false;
+        isMachineGunBoarded = false;
+        RestoreAfterMachineGunTransfer();
+        RestoreMachineGunChildVisuals();
+    }
+
+    private void PrepareForMachineGunTransfer()
+    {
+        StopGroundedAttackRoutine();
+        StopLandingRoutine();
+        StopRageRangedGroundAttackTimer();
+        EndP3AttackPhysicsLock();
+        isAttacking = false;
+        isLanding = false;
+        hasLanded = false;
+        attackQueued = false;
+        p3NormalAttackQueued = false;
+
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector2.zero;
+            rb.gravityScale = 0f;
+        }
+
+        Collider2D col = bodyCollider != null ? bodyCollider : GetComponent<Collider2D>();
+        if (col != null)
+            col.enabled = false;
+    }
+
+    private void RestoreAfterMachineGunTransfer()
+    {
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector2.zero;
+            rb.gravityScale = cachedGravity;
+        }
+
+        Collider2D col = bodyCollider != null ? bodyCollider : GetComponent<Collider2D>();
+        if (col != null)
+            col.enabled = true;
+        if (sr != null)
+            sr.enabled = true;
+    }
+
+    private void HideMachineGunChildVisuals()
+    {
+        hiddenMachineGunChildRenderers.Clear();
+
+        Renderer[] renderers = GetComponentsInChildren<Renderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Renderer childRenderer = renderers[i];
+            if (childRenderer == null || childRenderer.gameObject == gameObject || !childRenderer.enabled)
+                continue;
+
+            hiddenMachineGunChildRenderers.Add(childRenderer);
+            childRenderer.enabled = false;
+        }
+    }
+
+    private void RestoreMachineGunChildVisuals()
+    {
+        for (int i = 0; i < hiddenMachineGunChildRenderers.Count; i++)
+        {
+            Renderer childRenderer = hiddenMachineGunChildRenderers[i];
+            if (childRenderer != null)
+                childRenderer.enabled = true;
+        }
+
+        hiddenMachineGunChildRenderers.Clear();
+    }
+
     private IEnumerator CoPlaySpawnIntro()
     {
         isSpawnIntroActive = true;
@@ -3154,7 +3280,7 @@ public class Player : MonoBehaviour
         if (sr != null)
             sr.enabled = false;
 
-        GateHealth.Instance?.OpenGate();
+        GateHealth.Instance?.BeginOpenHold();
 
         float totalDuration = Mathf.Max(0.05f, introTotalDuration);
         float startDelay = Mathf.Max(0f, introStartDelay);
@@ -3168,6 +3294,7 @@ public class Player : MonoBehaviour
         transform.position = new Vector3(introAppearPosition.x, introAppearPosition.y, transform.position.z);
         if (sr != null)
             sr.enabled = true;
+        RestoreMachineGunChildVisuals();
         if (col != null)
             col.enabled = true;
 
@@ -3234,7 +3361,7 @@ public class Player : MonoBehaviour
         }
 
         if (closeGateAfterIntro)
-            GateHealth.Instance?.CloseGateOnBloodHit();
+            GateHealth.Instance?.EndOpenHold();
 
         ForceAnimationState("Base Walk", "Walk");
         isSpawnIntroActive = false;

@@ -14,6 +14,14 @@ public class Train : MonoBehaviour, IReinitializable
     public float bodyShiftX = 1.5f;
     public float bodyShiftDuration = 1f;
 
+    [Header("Player Gate Transfer")]
+    [Tooltip("머신건 탑승 시 플레이어가 빨려 들어갈 게이트 위치. 비어 있으면 GateHealth 게이트 위치를 사용합니다.")]
+    public Transform playerBoardingPoint;
+    [Min(0.01f)] public float playerBoardingDuration = 0.35f;
+    [Min(0f)] public float playerExitDelay = 0.1f;
+    [Min(0f)] public float playerGateOpenLeadTime = 0.2f;
+    [Min(0f)] public float playerExitGateOpenDelay = 1.5f;
+
     private const float moveDuration = 1f;
 
     private MachineGun machineGunInstance;
@@ -59,6 +67,10 @@ public class Train : MonoBehaviour, IReinitializable
             machineGunInstance.ReinitMountedState();
         }
 
+        GateHealth.Instance?.SetMachineGunReturnGateLocked(false);
+        GateHealth.Instance?.CloseGate();
+        ResolvePlayer()?.CancelMachineGunTransfer();
+
         if (machineGunExtraBodyInstance != null)
             machineGunExtraBodyInstance.transform.localPosition = ToExtraBodyLocalVector3(startLocalPos);
     }
@@ -84,6 +96,10 @@ public class Train : MonoBehaviour, IReinitializable
             machineGunInstance.transform.localPosition = ToChildLocalVector3(startLocalPos);
             machineGunInstance.ReinitMountedState();
         }
+
+        GateHealth.Instance?.SetMachineGunReturnGateLocked(false);
+        GateHealth.Instance?.CloseGate();
+        ResolvePlayer()?.CancelMachineGunTransfer();
 
         if (machineGunExtraBodyInstance != null)
             machineGunExtraBodyInstance.transform.localPosition = ToExtraBodyLocalVector3(startLocalPos);
@@ -111,6 +127,14 @@ public class Train : MonoBehaviour, IReinitializable
         yield return MoveTrainBodyX(0f, bodyShiftX, bodyShiftDuration, 1.5f);
         yield return MoveLocal(startLocalPos, endLocalPos, moveDuration);
 
+        Player player = ResolvePlayer();
+        GateHealth.Instance?.BeginOpenHold();
+        if (playerGateOpenLeadTime > 0f)
+            yield return new WaitForSeconds(playerGateOpenLeadTime);
+        if (player != null)
+            yield return player.CoBoardMachineGun(ResolveBoardingPoint(), playerBoardingDuration);
+        GateHealth.Instance?.EndOpenHold();
+
         activeMachineGunObstacle?.BeginMachineGunSpawn();
 
         if (machineGunInstance != null)
@@ -125,8 +149,18 @@ public class Train : MonoBehaviour, IReinitializable
         if (machineGunInstance != null)
             machineGunInstance.BeginDeactivation();
 
+        GateHealth.Instance?.SetMachineGunReturnGateLocked(true);
         yield return MoveTrainBodyX(bodyShiftX, 0f, bodyShiftDuration, 1f);
         yield return MoveLocal(endLocalPos, startLocalPos, moveDuration);
+        if (playerExitGateOpenDelay > 0f)
+            yield return new WaitForSeconds(playerExitGateOpenDelay);
+        GateHealth.Instance?.SetMachineGunReturnGateLocked(false);
+        GateHealth.Instance?.BeginOpenHold();
+        if (playerGateOpenLeadTime > 0f)
+            yield return new WaitForSeconds(playerGateOpenLeadTime);
+        if (player != null)
+            yield return player.CoExitMachineGun(playerExitDelay);
+        GateHealth.Instance?.EndOpenHold();
         MachineGunObstacle.SetCurrentSource(null);
         EndMachineGunSequenceIfNeeded();
         routine = null;
@@ -199,6 +233,19 @@ public class Train : MonoBehaviour, IReinitializable
 
         machineGunExtraBodyInstance = Instantiate(machineGunExtraBodyPrefab, transform);
         machineGunExtraBodyInstance.name = machineGunExtraBodyPrefab.name;
+    }
+
+    private Transform ResolveBoardingPoint()
+    {
+        return playerBoardingPoint != null
+            ? playerBoardingPoint
+            : GateHealth.Instance != null ? GateHealth.Instance.transform
+            : machineGunInstance != null ? machineGunInstance.transform : null;
+    }
+
+    private static Player ResolvePlayer()
+    {
+        return Player.Instance != null ? Player.Instance : Object.FindFirstObjectByType<Player>();
     }
 
     private IEnumerator MoveTrainBodyX(float fromOffset, float toOffset, float duration, float legSpeedMultiplier)

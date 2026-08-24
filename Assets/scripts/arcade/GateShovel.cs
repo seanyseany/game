@@ -17,6 +17,8 @@ public class GateShovel : MonoBehaviour
     private readonly HashSet<Blood> countedBloods = new HashSet<Blood>();
 
     private Coroutine cycleRoutine;
+    private bool cycleStarting;
+    private bool cycleGateHoldActive;
     private int bloodCount = 0;
     private int suctionTargetIndex = 0;
     private Collider2D shovelCollider;
@@ -26,12 +28,31 @@ public class GateShovel : MonoBehaviour
         shovelCollider = GetComponent<Collider2D>();
     }
 
+    private void OnEnable()
+    {
+        GateHealth.OnOpenHoldStarted += HandleGateOpenHoldStarted;
+    }
+
+    private void OnDisable()
+    {
+        GateHealth.OnOpenHoldStarted -= HandleGateOpenHoldStarted;
+
+        if (cycleGateHoldActive)
+        {
+            GateHealth.Instance?.EndOpenHold();
+            cycleGateHoldActive = false;
+        }
+
+        cycleRoutine = null;
+        cycleStarting = false;
+    }
+
     private void Update()
     {
         CleanupBloodSets();
 
-        if (cycleRoutine == null && bloodCount >= GetRequiredBloodCount())
-            cycleRoutine = StartCoroutine(RunCycle());
+        if (cycleRoutine == null && !cycleStarting && bloodCount >= GetRequiredBloodCount())
+            StartCycle();
     }
 
     private void OnTriggerEnter2D(Collider2D other)
@@ -75,7 +96,8 @@ public class GateShovel : MonoBehaviour
 
     private IEnumerator RunCycle()
     {
-        GateHealth.Instance?.OpenGate();
+        GateHealth.Instance?.BeginOpenHold();
+        cycleGateHoldActive = true;
 
         while (true)
         {
@@ -95,9 +117,33 @@ public class GateShovel : MonoBehaviour
             yield return null;
         }
 
-        GateHealth.Instance?.CloseGate();
+        if (cycleGateHoldActive)
+        {
+            GateHealth.Instance?.EndOpenHold();
+            cycleGateHoldActive = false;
+        }
         ResetCycleState();
         cycleRoutine = null;
+    }
+
+    private void HandleGateOpenHoldStarted()
+    {
+        if (!isActiveAndEnabled || cycleRoutine != null || cycleStarting)
+            return;
+
+        // A player-driven gate opening should also collect every O2 currently at the shovel.
+        CleanupBloodSets();
+        if (bloodsInRange.Count == 0)
+            return;
+
+        StartCycle();
+    }
+
+    private void StartCycle()
+    {
+        cycleStarting = true;
+        cycleRoutine = StartCoroutine(RunCycle());
+        cycleStarting = false;
     }
 
     private void AssignWaitingBloods()
