@@ -39,7 +39,6 @@ public class GameData : MonoBehaviour
     public int score = 0;
     private float survivalTime = 0f;
     private int o2Score = 0;
-    private int totalKillCount = 0;
 
     public static System.Action OnRageStart;
     public static System.Action OnRageEnd;
@@ -104,6 +103,8 @@ public class GameData : MonoBehaviour
     private bool bossStage3Triggered = false;
     private bool bossStage4Triggered = false;
     private bool arcadeSceneActive;
+    private int initializedSceneHandle = int.MinValue;
+    public bool IsResetting { get; private set; }
 
     void Awake()
     {
@@ -117,19 +118,16 @@ public class GameData : MonoBehaviour
 
     void Start()
     {
-        Scene activeScene = SceneManager.GetActiveScene();
-        arcadeSceneActive = IsArcadeScene(activeScene);
-
-        if (arcadeSceneActive)
-            ResetGame();
-        else
-            SuspendForNonArcadeScene();
+        InitializeForScene(SceneManager.GetActiveScene());
     }
 
     void OnDestroy()
     {
         if (Instance == this)
+        {
             SceneManager.sceneLoaded -= HandleSceneLoaded;
+            Instance = null;
+        }
     }
 
     void Update()
@@ -182,6 +180,19 @@ public class GameData : MonoBehaviour
 
     private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
     {
+        if (mode == LoadSceneMode.Additive && scene != SceneManager.GetActiveScene())
+            return;
+
+        InitializeForScene(scene);
+    }
+
+    private void InitializeForScene(Scene scene)
+    {
+        if (initializedSceneHandle == scene.handle)
+            return;
+
+        initializedSceneHandle = scene.handle;
+        StopRuntimeCoroutines();
         arcadeSceneActive = IsArcadeScene(scene);
         ClearSceneReferences();
         ApplyPendingSelectedPlayer();
@@ -417,15 +428,35 @@ public class GameData : MonoBehaviour
     // ------------------ RESET ------------------
     public void ResetGame()
     {
-        Debug.Log("[GameData] ResetGame called");
+        if (IsResetting || !IsArcadeScene(SceneManager.GetActiveScene()))
+            return;
+
+        IsResetting = true;
+        gameOver = true;
+        restartRoutine = StartCoroutine(ResetGameAfterSceneReady());
+    }
+
+    private IEnumerator ResetGameAfterSceneReady()
+    {
+        // Scene-loaded callbacks precede Start. Let scene components finish binding first.
+        yield return null;
+
+        var stageManager = StageManager.Instance;
+        if (stageManager != null)
+            stageManager.StartStageLoop();
+        ResetGameState();
+        ClearMiniBossEntities();
+        IsResetting = false;
+        restartRoutine = null;
+    }
+
+    private void ResetGameState()
+    {
         arcadeSceneActive = true;
         arcadeRewardsGranted = false;
         ForceStopRage();
         Hitbox.ClearBossTargetCache();
         ZigzagLightning.ClearBossTargetCache();
-
-        if (StageManager.Instance != null)
-            StageManager.Instance.ForceClearBossNow();
 
         ClearBossAndBombObjectsNow();
 
@@ -479,9 +510,9 @@ public class GameData : MonoBehaviour
         preRageSpeedMult = defaultStageSpeedMult;
         stageSpeedMult = defaultStageSpeedMult;
 
+        score = 0;
         o2Score = 0;
         survivalTime = 0f;
-        totalKillCount = 0;
 
         MachineGunObstacle.ClearAllSpawnedObstacles();
 
@@ -494,38 +525,11 @@ public class GameData : MonoBehaviour
             player.ResetPlayer();
         }
 
-        if (StageManager.Instance != null)
-            StartCoroutine(RestartStageLoopSafe());
     }
 
     public void PrepareForSceneTransition()
     {
         SuspendForNonArcadeScene();
-    }
-
-    private IEnumerator RestartStageLoopSafe()
-    {
-        if (restartRoutine != null) yield break;
-        restartRoutine = StartCoroutine(_RestartStageLoopSafe());
-        yield return restartRoutine;
-        restartRoutine = null;
-    }
-
-    private IEnumerator _RestartStageLoopSafe()
-    {
-        if (StageManager.Instance != null)
-        {
-            StageManager.Instance.StopStageLoop();
-            yield return new WaitUntil(() => StageManager.Instance.IsStageLoopStopped());
-
-            StageManager.Instance.ClearAllPhases();
-            ClearMiniBossEntities();
-            MachineGunObstacle.ClearAllSpawnedObstacles();
-
-            yield return new WaitForSeconds(0.1f);
-
-            StageManager.Instance.StartStageLoop();
-        }
     }
 
     private void ClearMiniBossEntities()
@@ -692,7 +696,6 @@ public class GameData : MonoBehaviour
 
         gameOverSpeedRoutine = StartCoroutine(GameOverSlowStop());
 
-        Debug.Log("💀 TriggerGameOver 실행됨");
         if (gameOverUiRoutine != null)
             StopCoroutine(gameOverUiRoutine);
         gameOverUiRoutine = StartCoroutine(CoShowGameOverUIAfterDelay());
@@ -808,7 +811,6 @@ public class GameData : MonoBehaviour
 
     private void ForceStopRage()
     {
-        Debug.Log($"[GameData] ForceStopRage called rageMode={rageMode}");
         rageMode = false;
         rageEndTime = -1f;
         rageReady = false;
@@ -905,6 +907,7 @@ public class GameData : MonoBehaviour
 
     private void StopRuntimeCoroutines()
     {
+        IsResetting = false;
         if (restartRoutine != null)
         {
             StopCoroutine(restartRoutine);

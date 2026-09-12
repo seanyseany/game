@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 [RequireComponent(typeof(EdgeCollider2D))]
 [RequireComponent(typeof(Rigidbody2D))]
-public class JumpObstacle : MonoBehaviour, IReinitializable
+public class JumpObstacle : MonoBehaviour, IReinitializeOnEnable
 {
     [Header("Jump Boost")]
     [SerializeField] private float jumpVelocityY = 15f;

@@ -4,7 +4,7 @@ using UnityEngine;
 [DisallowMultipleComponent]
 [RequireComponent(typeof(Collider2D))]
 [RequireComponent(typeof(SpriteRenderer))]
-public class Monster : MonoBehaviour, IReinitializable
+public class Monster : MonoBehaviour, IReinitializeOnEnable
 {
     [Header("Animation")]
     [SerializeField] private Animator targetAnimator;

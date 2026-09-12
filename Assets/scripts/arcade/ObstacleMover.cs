@@ -4,7 +4,7 @@ using UnityEngine.Serialization;
 
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(Collider2D))]
-public class ObstacleMover : MonoBehaviour, IReinitializable
+public class ObstacleMover : MonoBehaviour, IReinitializeOnEnable
 {
     [Header("Movement Settings")]
     [FormerlySerializedAs("speedX")]

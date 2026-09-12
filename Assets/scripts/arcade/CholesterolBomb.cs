@@ -4,7 +4,7 @@ using UnityEngine.Serialization;
 
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(Collider2D))]
-public class CholesterolBomb : MonoBehaviour, IReinitializable
+public class CholesterolBomb : MonoBehaviour, IReinitializeOnEnable
 {
     private const string ExplosionTriggerName = "bomb";
     private const float CleanupDelay = 0.5f;

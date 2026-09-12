@@ -1,7 +1,7 @@
 using UnityEngine;
 using System.Collections;
 
-public class BulletObstacle : MonoBehaviour, IReinitializable
+public class BulletObstacle : MonoBehaviour, IReinitializeOnEnable
 {
     [Header("Bullet Damage Animation")]
     [SerializeField] private Animator targetAnimator;

@@ -1,7 +1,7 @@
 using System.Collections;
 using UnityEngine;
 
-public class Train : MonoBehaviour, IReinitializable
+public class Train : MonoBehaviour, IReinitializeOnEnable
 {
     [Header("MachineGun Path")]
     public Vector2 startLocalPos;
@@ -21,6 +21,7 @@ public class Train : MonoBehaviour, IReinitializable
     [Min(0f)] public float playerExitDelay = 0.1f;
     [Min(0f)] public float playerGateOpenLeadTime = 0.2f;
     [Min(0f)] public float playerExitGateOpenDelay = 1.5f;
+    [Min(0f)] public float playerExitGatePreOpenLeadTime = 1f;
 
     private const float moveDuration = 1f;
 
@@ -149,13 +150,18 @@ public class Train : MonoBehaviour, IReinitializable
         if (machineGunInstance != null)
             machineGunInstance.BeginDeactivation();
 
-        GateHealth.Instance?.SetMachineGunReturnGateLocked(true);
         yield return MoveTrainBodyX(bodyShiftX, 0f, bodyShiftDuration, 1f);
         yield return MoveLocal(endLocalPos, startLocalPos, moveDuration);
-        if (playerExitGateOpenDelay > 0f)
-            yield return new WaitForSeconds(playerExitGateOpenDelay);
-        GateHealth.Instance?.SetMachineGunReturnGateLocked(false);
+
+        float preOpenLeadTime = Mathf.Min(playerExitGatePreOpenLeadTime, playerExitGateOpenDelay);
+        float waitBeforePreOpen = Mathf.Max(0f, playerExitGateOpenDelay - preOpenLeadTime);
+        if (waitBeforePreOpen > 0f)
+            yield return new WaitForSeconds(waitBeforePreOpen);
+
+        // Keep the player gate open before the exit intro begins. An O2 suction hold can share it.
         GateHealth.Instance?.BeginOpenHold();
+        if (preOpenLeadTime > 0f)
+            yield return new WaitForSeconds(preOpenLeadTime);
         if (playerGateOpenLeadTime > 0f)
             yield return new WaitForSeconds(playerGateOpenLeadTime);
         if (player != null)

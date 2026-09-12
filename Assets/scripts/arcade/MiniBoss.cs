@@ -84,7 +84,6 @@ public class MiniBoss : MonoBehaviour
     [SerializeField] private float initialGroundSearchDistance = 20f;
     [SerializeField] private float minAttackTravelTime = 0.45f;
     [SerializeField] private float maxAttackTravelTime = 1.15f;
-    [SerializeField] private float postImpactFallSpeed = 2.5f;
     [SerializeField] private float postImpactBounceX = 0.3f;
     [SerializeField] private float postImpactBounceXOnPlayer = 0.1f;
     [SerializeField] private float postImpactBounceY = 1.2f;

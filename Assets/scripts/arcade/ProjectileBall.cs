@@ -151,7 +151,7 @@ public class ProjectileBall : MonoBehaviour, IRageTransformPauseHandler
 
         if (delta.sqrMagnitude > 0.0001f)
         {
-            int hitCount = Physics2D.LinecastNonAlloc(lastPhysicsPos, now, linecastBuffer);
+            int hitCount = Physics2D.Linecast(lastPhysicsPos, now, DefaultQueryFilter, linecastBuffer);
 
             // 1) 같은 프레임 라인 충돌에서는 적을 최우선 처리
             for (int i = 0; i < hitCount; i++)
@@ -249,12 +249,19 @@ public class ProjectileBall : MonoBehaviour, IRageTransformPauseHandler
         Invoke(nameof(Despawn), clampedDelay);
     }
 
+    private static ContactFilter2D DefaultQueryFilter => new ContactFilter2D
+    {
+        useLayerMask = true,
+        layerMask = Physics2D.DefaultRaycastLayers,
+        useTriggers = Physics2D.queriesHitTriggers
+    };
+
     private bool TryHitNearbyEnemy()
     {
         const float radius = 0.38f;
 
         // 현재 위치 1차 검사
-        int count = Physics2D.OverlapCircleNonAlloc(transform.position, radius, nearbyEnemyBuffer);
+        int count = Physics2D.OverlapCircle(transform.position, radius, DefaultQueryFilter, nearbyEnemyBuffer);
         for (int i = 0; i < count; i++)
         {
             var col = nearbyEnemyBuffer[i];
@@ -266,7 +273,7 @@ public class ProjectileBall : MonoBehaviour, IRageTransformPauseHandler
 
         // 이전~현재 중간점 2차 검사 (바닥과 거의 동시에 스칠 때 보정)
         Vector2 mid = ((Vector2)transform.position + lastPhysicsPos) * 0.5f;
-        int count2 = Physics2D.OverlapCircleNonAlloc(mid, radius, nearbyEnemyBuffer2);
+        int count2 = Physics2D.OverlapCircle(mid, radius, DefaultQueryFilter, nearbyEnemyBuffer2);
         for (int i = 0; i < count2; i++)
         {
             var col = nearbyEnemyBuffer2[i];

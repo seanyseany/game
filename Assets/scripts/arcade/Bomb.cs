@@ -8,17 +8,17 @@ public class Bomb : MonoBehaviour
     [Header("Slowdown Compensation")]
     [SerializeField] private bool accelerateDuringObstacleSlowdown = true;
     [SerializeField] private float slowdownSpeedBoostCap = 3f;
-    [SerializeField] private float requiredSpeedSafetyMargin = 1.1f;
-    [SerializeField] private float minimumRemainingLifetime = 0.05f;
 
     [Header("Rotate")]
     public float rotationOffset = 0f;
     public float rotateLerpSpeed = 20f;
     public float maxTiltAngle = 30f;
 
-    [Header("Auto Destroy")]
-    [Tooltip("발사 후 이 시간이 지나면 자동 폭발")]
-    public float autoExplodeTime = 1.5f;
+    [Header("Stop Explosion")]
+    [Tooltip("계산된 이동 속도가 이 값 이하가 되면 폭발")]
+    [SerializeField] private float stopSpeedThreshold = 0.01f;
+    [Tooltip("목표까지 이 거리 이하로 접근하면 정지한 것으로 보고 폭발")]
+    [SerializeField] private float targetArrivalDistance = 0.02f;
 
     [Header("Pooling")]
     public string poolTag = "Bomb";
@@ -31,7 +31,6 @@ public class Bomb : MonoBehaviour
     private bool exploded = false;
 
     private Collider2D col;
-    private float spawnTime;
     private readonly List<Collider2D> ignoredObstacleColliders = new List<Collider2D>(32);
     private readonly HashSet<Collider2D> targetColliders = new HashSet<Collider2D>();
 
@@ -44,7 +43,6 @@ public class Bomb : MonoBehaviour
     {
         exploded = false;
         target = null;
-        spawnTime = Time.time;
         RestoreIgnoredObstacleCollisions();
         targetColliders.Clear();
 
@@ -64,7 +62,6 @@ public class Bomb : MonoBehaviour
 
         target = t;
         exploded = false;
-        spawnTime = Time.time;
 
         if (col != null)
             col.enabled = true;
@@ -78,20 +75,27 @@ public class Bomb : MonoBehaviour
     {
         if (exploded) return;
 
-        if (Time.time - spawnTime >= autoExplodeTime)
-        {
-            Explode();
-            return;
-        }
-
         if (target == null)
         {
             Explode();
             return;
         }
 
-        Vector3 dir = (target.position - transform.position).normalized;
+        Vector3 toTarget = target.position - transform.position;
+        if (toTarget.sqrMagnitude <= targetArrivalDistance * targetArrivalDistance)
+        {
+            Explode();
+            return;
+        }
+
+        Vector3 dir = toTarget.normalized;
         float moveSpeed = GetCurrentMoveSpeed();
+        if (moveSpeed <= Mathf.Max(0f, stopSpeedThreshold))
+        {
+            Explode();
+            return;
+        }
+
         transform.position += dir * moveSpeed * Time.deltaTime;
 
         float rawAngle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg + rotationOffset;
@@ -122,15 +126,6 @@ public class Bomb : MonoBehaviour
             }
         }
 
-        if (target != null && autoExplodeTime > 0f)
-        {
-            float elapsed = Time.time - spawnTime;
-            float remainingLifetime = Mathf.Max(minimumRemainingLifetime, autoExplodeTime - elapsed);
-            float remainingDistance = Vector2.Distance(transform.position, target.position);
-            float requiredSpeed = (remainingDistance / remainingLifetime) * Mathf.Max(1f, requiredSpeedSafetyMargin);
-            moveSpeed = Mathf.Max(moveSpeed, requiredSpeed);
-        }
-
         return moveSpeed;
     }
 
@@ -139,14 +134,7 @@ public class Bomb : MonoBehaviour
         if (exploded) return;
         if (!IsTargetCollider(other)) return;
 
-        var info = other.GetComponent<ObstacleInfo>();
-        if (info == null)
-            info = other.GetComponentInParent<ObstacleInfo>();
-
-        if (info != null && info.type == ObstacleType.Saw)
-        {
-            Explode();
-        }
+        Explode();
     }
 
     private void ConfigureTargetOnlyCollisions()

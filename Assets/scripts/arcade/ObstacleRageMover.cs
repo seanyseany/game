@@ -1,7 +1,7 @@
 using UnityEngine;
 using System.Collections;
 
-public class ObstacleRageMover : MonoBehaviour, IReinitializable
+public class ObstacleRageMover : MonoBehaviour, IReinitializeOnEnable
 {
     [Header("Move Settings")]
     public float moveDistance = 10f;

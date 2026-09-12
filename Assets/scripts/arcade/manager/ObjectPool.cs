@@ -22,7 +22,6 @@ public class ObjectPool : MonoBehaviour
     private Dictionary<string, HashSet<GameObject>> activeByTag;
     private Dictionary<string, GameObject> prefabByTag;
     private Dictionary<GameObject, CachedRefs> cacheByObject;
-    private HashSet<string> exhaustedWarnedTags;
     private bool initialized;
 
     private sealed class CachedRefs
@@ -46,7 +45,6 @@ public class ObjectPool : MonoBehaviour
         activeByTag = new Dictionary<string, HashSet<GameObject>>();
         prefabByTag = new Dictionary<string, GameObject>();
         cacheByObject = new Dictionary<GameObject, CachedRefs>();
-        exhaustedWarnedTags = new HashSet<string>();
 
         if (pools != null)
         {
@@ -159,7 +157,6 @@ public class ObjectPool : MonoBehaviour
         for (int i = 0; i < count; i++)
             q.Enqueue(CreatePooledObject(prefab));
 
-        exhaustedWarnedTags.Remove(tag);
         return true;
     }
 
@@ -286,7 +283,12 @@ public class ObjectPool : MonoBehaviour
             for (int i = 0; i < refs.reinitializables.Length; i++)
             {
                 var r = refs.reinitializables[i];
-                if (r != null) r.Reinit();
+                var behaviour = r as MonoBehaviour;
+                if (behaviour == null || !behaviour.gameObject.activeInHierarchy)
+                    continue;
+                if (r is IReinitializeOnEnable && behaviour.enabled)
+                    continue;
+                r.Reinit();
             }
         }
     }
@@ -297,7 +299,6 @@ public class ObjectPool : MonoBehaviour
         EnsureInitialized();
         if (!poolDictionary.ContainsKey(tag))
         {
-            Debug.LogWarning($"[Pool] '{tag}' not found");
             return null;
         }
 
@@ -312,11 +313,6 @@ public class ObjectPool : MonoBehaviour
 
         if (obj == null)
         {
-            if (!exhaustedWarnedTags.Contains(tag))
-            {
-                exhaustedWarnedTags.Add(tag);
-                Debug.LogWarning($"[Pool] '{tag}' exhausted. Increase size or enable runtime expand.");
-            }
             return null;
         }
 

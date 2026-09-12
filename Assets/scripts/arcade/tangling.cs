@@ -2,7 +2,7 @@ using UnityEngine;
 using System.Collections.Generic;
 
 [RequireComponent(typeof(Collider2D))]
-public class tangling : MonoBehaviour, IReinitializable
+public class tangling : MonoBehaviour, IReinitializeOnEnable
 {
     [Header("Bounce Visual")]
     [SerializeField] private float stretchAmountX = 0.5f;

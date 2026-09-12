@@ -1,7 +1,7 @@
 using UnityEngine;
 using System.Collections;
 
-public class SwingMotor : MonoBehaviour, IReinitializable
+public class SwingMotor : MonoBehaviour, IReinitializeOnEnable
 {
     public Rigidbody2D rb;
     public float initialTorque = 200f; // 시작 회전 힘

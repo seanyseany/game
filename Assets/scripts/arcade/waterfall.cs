@@ -2,7 +2,7 @@ using UnityEngine;
 
 [RequireComponent(typeof(BoxCollider2D))]
 [RequireComponent(typeof(Rigidbody2D))]
-public class waterfall : MonoBehaviour, IReinitializable
+public class waterfall : MonoBehaviour, IReinitializeOnEnable
 {
     [Header("Pull")]
     [SerializeField] private float downwardMoveSpeedWhileJumpHeld = 1.5f;

@@ -1,7 +1,7 @@
 using UnityEngine;
 using System.Collections.Generic;
 
-public class BossSlimeJelly : MonoBehaviour, IReinitializable
+public class BossSlimeJelly : MonoBehaviour, IReinitializeOnEnable
 {
     [System.Serializable]
     public struct LaunchVersion

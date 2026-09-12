@@ -3,7 +3,7 @@ using UnityEngine.UI;
 using System.Collections;
 using System.Collections.Generic;
 
-public class BossSlime : MonoBehaviour, IReinitializable
+public class BossSlime : MonoBehaviour, IReinitializeOnEnable
 {
     public enum State { Inactive, Entering, Active, TimeoutAttacking, Dead }
     public State state = State.Inactive;

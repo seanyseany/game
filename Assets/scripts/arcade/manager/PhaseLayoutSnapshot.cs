@@ -13,6 +13,7 @@ public class PhaseLayoutSnapshot : MonoBehaviour
         public Quaternion localRot;
         public Vector3 localScale;
         public bool activeSelf;
+        public Rigidbody2D body;
     }
 
     [SerializeField] private List<Entry> entries;
@@ -36,7 +37,8 @@ public class PhaseLayoutSnapshot : MonoBehaviour
                 localPos = t.localPosition,
                 localRot = t.localRotation,
                 localScale = t.localScale,
-                activeSelf = t.gameObject.activeSelf
+                activeSelf = t.gameObject.activeSelf,
+                body = t.GetComponent<Rigidbody2D>()
             });
         }
     }
@@ -62,15 +64,11 @@ public class PhaseLayoutSnapshot : MonoBehaviour
                     e.t.SetSiblingIndex(targetIndex);
             }
 
-            bool shouldRestoreActive = restoreRootActiveState || e.t != transform;
-            if (shouldRestoreActive && e.t.gameObject.activeSelf != e.activeSelf)
-                e.t.gameObject.SetActive(e.activeSelf);
-
             e.t.localPosition = e.localPos;
             e.t.localRotation = e.localRot;
             e.t.localScale    = e.localScale;
 
-            var rb2d = e.t.GetComponent<Rigidbody2D>();
+            var rb2d = e.body;
             if (rb2d)
             {
                 if (rb2d.bodyType != RigidbodyType2D.Static)
@@ -79,6 +77,10 @@ public class PhaseLayoutSnapshot : MonoBehaviour
                     rb2d.angularVelocity = 0f;
                 }
             }
+
+            bool shouldRestoreActive = restoreRootActiveState || e.t != transform;
+            if (shouldRestoreActive && e.t.gameObject.activeSelf != e.activeSelf)
+                e.t.gameObject.SetActive(e.activeSelf);
         }
     }
     

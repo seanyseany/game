@@ -3,7 +3,7 @@ using UnityEngine;
 
 [RequireComponent(typeof(Collider2D))]
 [RequireComponent(typeof(SpriteRenderer))]
-public class O2 : MonoBehaviour, IReinitializable
+public class O2 : MonoBehaviour, IReinitializeOnEnable
 {
     public enum O2Level
     {
@@ -71,8 +71,6 @@ public class O2 : MonoBehaviour, IReinitializable
     private void OnDisable()
     {
         GameData.OnRageStart -= HandleRageStart;
-        RestoreIdleVisualState();
-
         if (collectRoutine != null)
         {
             StopCoroutine(collectRoutine);
@@ -130,7 +128,7 @@ public class O2 : MonoBehaviour, IReinitializable
 
     private void RestoreIdleVisualState()
     {
-        if (targetAnimator != null)
+        if (targetAnimator != null && targetAnimator.gameObject.activeInHierarchy)
         {
             if (!string.IsNullOrEmpty(destroyTriggerName))
                 targetAnimator.ResetTrigger(destroyTriggerName);

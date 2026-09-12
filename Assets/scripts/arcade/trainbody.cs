@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class trainbody : MonoBehaviour, IReinitializable
+public class trainbody : MonoBehaviour, IReinitializeOnEnable
 {
     [Header("Y Movement Range")]
     public float minYOffset = -0.5f;

@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class Escalator : MonoBehaviour, IReinitializable
+public class Escalator : MonoBehaviour, IReinitializeOnEnable
 {
     [Header("Explosion Sprites")]
     public Sprite[] breakSprites;       // Inspector에서 순서대로 3개 넣기

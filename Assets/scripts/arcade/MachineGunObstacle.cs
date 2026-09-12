@@ -253,7 +253,6 @@ internal sealed class MachineGunObstacleRuntime : MonoBehaviour
     {
         if (config.spawnPositions == null || config.spawnPositions.Length == 0)
         {
-            Debug.LogWarning($"[MachineGunObstacle] {config.ownerName} has no spawn positions.");
             spawnRoutine = null;
             Destroy(gameObject);
             yield break;
@@ -334,7 +333,6 @@ internal sealed class MachineGunObstacleRuntime : MonoBehaviour
         string poolTag = GetRandomMachineGunObstaclePoolTag();
         if (string.IsNullOrWhiteSpace(poolTag))
         {
-            Debug.LogWarning($"[MachineGunObstacle] {config.ownerName} has no obstacle pool tags.");
             return;
         }
 
@@ -344,7 +342,6 @@ internal sealed class MachineGunObstacleRuntime : MonoBehaviour
 
         if (spawned == null)
         {
-            Debug.LogWarning($"[MachineGunObstacle] Pool '{poolTag}' is empty or missing.");
             return;
         }
 

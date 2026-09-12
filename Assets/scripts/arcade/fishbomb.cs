@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 [RequireComponent(typeof(CircleCollider2D))]
-public class fishbomb : MonoBehaviour, IReinitializable
+public class fishbomb : MonoBehaviour, IReinitializeOnEnable
 {
     [Header("Arc Movement")]
     [SerializeField] private float arcHeight = 1f;

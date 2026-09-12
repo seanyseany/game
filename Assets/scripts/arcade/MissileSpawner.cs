@@ -73,7 +73,7 @@ public class MissileSpawner : MonoBehaviour
 
                 if (player == null)
                 {
-                    var p = FindObjectOfType<Player>();
+                    var p = FindFirstObjectByType<Player>();
                     if (p != null) player = p.transform;
                 }
 

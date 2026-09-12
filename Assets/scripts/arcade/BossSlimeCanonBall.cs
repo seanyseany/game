@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class BossSlimeCanonBall : MonoBehaviour, IReinitializable
+public class BossSlimeCanonBall : MonoBehaviour, IReinitializeOnEnable
 {
     [System.Serializable]
     public struct LaunchVersion

@@ -161,10 +161,10 @@ public class Player : MonoBehaviour
     private bool p3NormalAttackQueued = false;
     private float p3ChainAttackWindow = 0.35f;
     private float p3LastAttackEndTime = -999f;
-    private bool needRebind = false;
     private bool isTransformLock = false;
     private float transformLockEndTime = 0f;
     private bool blockJumpUntilReleaseAfterTransform = false;
+    private bool blockJumpUntilReleaseAfterMachineGunTransfer = false;
     public float transformLockDuration = 0.9f;
 
     // ===== Ranged (Player2/Player4) =====
@@ -197,6 +197,8 @@ public class Player : MonoBehaviour
     private float flyattackProtectedUntil = -999f;
     private bool isSpawnIntroActive = false;
     private Coroutine spawnIntroRoutine;
+    // A stopped intro coroutine must return its gate hold before another intro begins.
+    private bool spawnIntroGateHoldActive;
     private bool isMachineGunTransferActive;
     private bool isMachineGunBoarded;
     private readonly List<Renderer> hiddenMachineGunChildRenderers = new List<Renderer>();
@@ -218,14 +220,10 @@ public class Player : MonoBehaviour
 
     [Header("Obstacle SlowMo Reposition")]
     public float slowToReverseDuration = 1f;   // 6 -> -2 (보간 1초)
-    private float reverseMagnitude = 0.8f;        // ★ 리버스 속도 배수(0.8배)
     public float baseMoverSpeed = 6f;          // Mover.baseSpeed
-    private float backToNormalDuration = 2f;    // -2 -> +1 (1초)
     public float resumeDelay = 0f;
     public float holdDuration = 0.5f;            // ★ 고정 시간 1초
 
-    private bool slowmoBusy = false;           // 진행 중 재진입 금지
-    private int firstHitDir = 0;              // ★ 첫 충돌 방향 저장(-1: 아래로 이동, +1: 위로 이동)
     private ObstacleType lastHitObstacleType = ObstacleType.Normal;
 
 
@@ -448,6 +446,9 @@ public class Player : MonoBehaviour
     public void SetMachineGunController(MachineGun machineGun)
     {
         activeMachineGun = machineGun;
+        // Arcade 1 can reach machine-gun control before its boarding coroutine completes.
+        // Mark it boarded here as well so hidden player input never reaches normal movement.
+        isMachineGunBoarded = machineGun != null;
         StopGroundedAttackRoutine();
         StopLandingRoutine();
         StopRageRangedGroundAttackTimer();
@@ -1216,6 +1217,18 @@ public class Player : MonoBehaviour
 
             if (!Input.GetKey(KeyCode.Space))
                 blockJumpUntilReleaseAfterTransform = false;
+
+            return;
+        }
+
+        // Space controls machine-gun aim too, so consume a held aim input first.
+        if (blockJumpUntilReleaseAfterMachineGunTransfer)
+        {
+            rb.gravityScale = cachedGravity;
+            attackQueued = false;
+
+            if (!Input.GetKey(KeyCode.Space))
+                blockJumpUntilReleaseAfterMachineGunTransfer = false;
 
             return;
         }
@@ -2217,8 +2230,6 @@ public class Player : MonoBehaviour
     {
         if (other.CompareTag("Mana"))
         {
-            Debug.Log("✨ Mana collected!");
-
             AddManaForLauncher(1);
 
             if (GameData.Instance != null)
@@ -2233,7 +2244,6 @@ public class Player : MonoBehaviour
 
         if (other.CompareTag("holyMana"))
         {
-
             var hm = other.GetComponent<holyMana>();
             if (hm != null) hm.Collect();
 
@@ -2781,7 +2791,6 @@ public class Player : MonoBehaviour
         StartCoroutine(SpawnRageTransformCollider());
         RageTransformFreezeController.Instance.Begin(this, transformLockEndTime - Time.time, 0.15f, 0.15f);
 
-        Debug.Log("🔥 Rage Mode ON");
     }
 
     private void PlayRageTransformAnimation()
@@ -3077,11 +3086,7 @@ public class Player : MonoBehaviour
 
     public void ResetPlayer()
     {
-        if (spawnIntroRoutine != null)
-        {
-            StopCoroutine(spawnIntroRoutine);
-            spawnIntroRoutine = null;
-        }
+        StopSpawnIntroRoutine();
 
         manaCount = 0;
         isDead = false;
@@ -3103,6 +3108,7 @@ public class Player : MonoBehaviour
         p3NormalAttackQueued = false;
         isTransformLock = false;
         blockJumpUntilReleaseAfterTransform = false;
+        blockJumpUntilReleaseAfterMachineGunTransfer = false;
         isInvincible = false;
         obstacleTouchCount = 0;
         activeHazardContactIds.Clear();
@@ -3138,14 +3144,41 @@ public class Player : MonoBehaviour
         anim.Rebind();
         anim.Update(0f);
         ForceAnimationState("Base Walk", "Walk");
-        needRebind = false;
         StartSpawnIntro();
     }
     private void StartSpawnIntro()
     {
-        if (spawnIntroRoutine != null)
-            StopCoroutine(spawnIntroRoutine);
+        StopSpawnIntroRoutine();
         spawnIntroRoutine = StartCoroutine(CoPlaySpawnIntro());
+    }
+
+    private void StopSpawnIntroRoutine()
+    {
+        if (spawnIntroRoutine != null)
+        {
+            StopCoroutine(spawnIntroRoutine);
+            spawnIntroRoutine = null;
+        }
+
+        EndSpawnIntroGateHold();
+    }
+
+    private void BeginSpawnIntroGateHold()
+    {
+        if (spawnIntroGateHoldActive || GateHealth.Instance == null)
+            return;
+
+        GateHealth.Instance.BeginOpenHold();
+        spawnIntroGateHoldActive = true;
+    }
+
+    private void EndSpawnIntroGateHold()
+    {
+        if (!spawnIntroGateHoldActive)
+            return;
+
+        spawnIntroGateHoldActive = false;
+        GateHealth.Instance?.EndOpenHold();
     }
 
     public IEnumerator CoBoardMachineGun(Transform gatePoint, float duration)
@@ -3186,13 +3219,23 @@ public class Player : MonoBehaviour
 
         // Reuse the complete spawn intro so player and attached visuals share its timing.
         yield return CoPlaySpawnIntro();
+        blockJumpUntilReleaseAfterMachineGunTransfer = Input.GetKey(KeyCode.Space);
         isMachineGunTransferActive = false;
     }
 
     public void CancelMachineGunTransfer()
     {
+        bool hadMachineGunTransfer = isMachineGunTransferActive || isMachineGunBoarded;
         isMachineGunTransferActive = false;
         isMachineGunBoarded = false;
+        blockJumpUntilReleaseAfterMachineGunTransfer = false;
+
+        // Train initializes before Player.Awake in Arcade 1. Do not restore physics
+        // before Player has cached the Rigidbody2D values from the scene.
+        if (!hadMachineGunTransfer)
+            return;
+
+        EndSpawnIntroGateHold();
         RestoreAfterMachineGunTransfer();
         RestoreMachineGunChildVisuals();
     }
@@ -3280,7 +3323,7 @@ public class Player : MonoBehaviour
         if (sr != null)
             sr.enabled = false;
 
-        GateHealth.Instance?.BeginOpenHold();
+        BeginSpawnIntroGateHold();
 
         float totalDuration = Mathf.Max(0.05f, introTotalDuration);
         float startDelay = Mathf.Max(0f, introStartDelay);
@@ -3361,7 +3404,7 @@ public class Player : MonoBehaviour
         }
 
         if (closeGateAfterIntro)
-            GateHealth.Instance?.EndOpenHold();
+            EndSpawnIntroGateHold();
 
         ForceAnimationState("Base Walk", "Walk");
         isSpawnIntroActive = false;
@@ -3520,6 +3563,10 @@ public class Player : MonoBehaviour
     }
     private void SpawnBloodFx()
     {
+        // Do not show the hill hit effect when that hit consumes the final life.
+        if (lastHitObstacleType == ObstacleType.Hill && lives <= 0)
+            return;
+
         GameObject prefab = bloodNormal;
 
         switch (lastHitObstacleType)
@@ -3583,17 +3630,12 @@ public class Player : MonoBehaviour
             {
                 bombLauncher.ActivateLauncher();
             }
-            else
-            {
-                Debug.LogWarning("[Player] bombLauncher is null (Inspector 연결 필요)");
-            }
         }
-        Debug.Log($"[Mana] bombLauncher null? {bombLauncher==null}");
+
         if (bombLauncher != null)
         {
-            Debug.Log($"[Mana] bombLauncher activeSelf={bombLauncher.gameObject.activeSelf}, activeInHierarchy={bombLauncher.gameObject.activeInHierarchy}");
-            Debug.Log($"[Mana] bombLauncher name={bombLauncher.gameObject.name}");
-            Debug.Log($"[Mana] bombLauncher scene={bombLauncher.gameObject.scene.name}");
+
+
         }
     }
 
@@ -3751,7 +3793,13 @@ public class Player : MonoBehaviour
 
         Vector2 overlapSize = new Vector2(Mathf.Max(0.05f, bounds.size.x - 0.04f), groundOverlapHeight);
         Vector2 overlapCenter = new Vector2(bounds.center.x, bounds.min.y - overlapSize.y * 0.5f);
-        int overlapCount = Physics2D.OverlapBoxNonAlloc(overlapCenter, overlapSize, 0f, groundOverlapResults);
+        ContactFilter2D groundFilter = new ContactFilter2D
+        {
+            useLayerMask = true,
+            layerMask = Physics2D.DefaultRaycastLayers,
+            useTriggers = Physics2D.queriesHitTriggers
+        };
+        int overlapCount = Physics2D.OverlapBox(overlapCenter, overlapSize, 0f, groundFilter, groundOverlapResults);
         for (int i = 0; i < overlapCount; i++)
         {
             Collider2D overlap = groundOverlapResults[i];

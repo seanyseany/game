@@ -37,7 +37,6 @@ public class GateHealth : MonoBehaviour
     private enum GateVisualPhase { Closed, HalfOpen, Open }
     private GateState state = GateState.Closed;
     private GateVisualPhase visualPhase = GateVisualPhase.Closed;
-    private bool smokePlayed = false;
     private bool machineGunReturnGateLocked;
     private int openHoldCount;
 
@@ -79,7 +78,6 @@ public class GateHealth : MonoBehaviour
 
         if (hitCount == 1)
         {
-            smokePlayed = true;
             if (ObjectPool.Instance != null && ObjectPool.Instance.HasPool("GateSmoke"))
                 ObjectPool.Instance.SpawnFromPool("GateSmoke", transform.TransformPoint(smokeFrontLocalOffset), Quaternion.identity);
         }
@@ -117,6 +115,10 @@ public class GateHealth : MonoBehaviour
     {
         bool wasClosedByAllOwners = openHoldCount == 0;
         openHoldCount++;
+
+        // O2 suction and player exit holds must visually open the gate even if a
+        // previous machine-gun return sequence left its close lock behind.
+        machineGunReturnGateLocked = false;
         OpenGate();
 
         if (wasClosedByAllOwners)
@@ -198,7 +200,6 @@ public class GateHealth : MonoBehaviour
         state = GateState.Closed;
         visualPhase = GateVisualPhase.Closed;
         ApplyCurrentVisualSprite();
-        smokePlayed = false;
     }
 
     private void ApplyCurrentVisualSprite()

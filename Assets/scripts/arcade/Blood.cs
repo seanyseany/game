@@ -278,7 +278,7 @@ public class Blood : MonoBehaviour
         if (bodyCollider == null)
             return;
 
-        Player player = FindObjectOfType<Player>();
+        Player player = FindFirstObjectByType<Player>();
         if (player == null)
             return;
 

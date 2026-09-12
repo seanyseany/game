@@ -205,7 +205,6 @@ public class BombLauncher : MonoBehaviour
 
         if (count <= 0)
         {
-            Debug.LogWarning("[BombLauncher] headLocalPositions size가 0임. 6개 넣어줘.");
             return;
         }
 
@@ -317,7 +316,6 @@ public class BombLauncher : MonoBehaviour
         UpdateForcedTargetPoints();
         if (forcedTargetPoints.Count == 0)
         {
-            Debug.LogWarning("[BombLauncher] forcedTargetWorldPositions가 비어있어서 남은 Bomb 강제 발사를 건너뜀.");
             return;
         }
 

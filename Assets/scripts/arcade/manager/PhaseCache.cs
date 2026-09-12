@@ -9,17 +9,32 @@ public class PhaseCache : MonoBehaviour
     public Mover mover;
     public PhaseEndTrigger phaseEndTrigger;
     public bool hasChildMovers;
+    public PhaseLayoutSnapshot layout { get; private set; }
 
     private Sprite[] initialSprites;
     private Color[] initialColors;
+    private MonoBehaviour[] behaviours;
+    private IReinitializable[] reinitializables;
+    private bool cached;
 
     void Awake()
     {
-        RefreshCache();
+        EnsureCached();
+    }
+
+    public void EnsureCached()
+    {
+        if (!cached)
+            RefreshCache();
+        if (layout == null)
+            layout = GetComponent<PhaseLayoutSnapshot>();
     }
 
     public void RefreshCache()
     {
+        layout = GetComponent<PhaseLayoutSnapshot>();
+        behaviours = GetComponentsInChildren<MonoBehaviour>(true);
+        reinitializables = GetComponentsInChildren<IReinitializable>(true);
         movers = GetComponentsInChildren<Mover>(true);
         rbs = GetComponentsInChildren<Rigidbody2D>(true);
         renderers = GetComponentsInChildren<Renderer>(true);
@@ -52,6 +67,7 @@ public class PhaseCache : MonoBehaviour
                 break;
             }
         }
+        cached = true;
     }
 
     public void ResetCached()
@@ -104,7 +120,6 @@ public class PhaseCache : MonoBehaviour
         foreach (var rb in rbs)
         {
             if (!rb) continue;
-            if (!rb.gameObject.activeInHierarchy) continue;
             rb.simulated = true;
             if (rb.bodyType != RigidbodyType2D.Static)
             {
@@ -116,13 +131,29 @@ public class PhaseCache : MonoBehaviour
 
     }
 
-    public void SetActiveChildren(bool active)
+    public void StopRuntimeActivity()
     {
-        Transform[] ts = GetComponentsInChildren<Transform>(true);
-        for (int i = 0; i < ts.Length; i++)
+        for (int i = 0; i < behaviours.Length; i++)
         {
-            if (ts[i] == null || ts[i] == transform) continue;
-            ts[i].gameObject.SetActive(active);
+            MonoBehaviour behaviour = behaviours[i];
+            if (behaviour == null)
+                continue;
+            behaviour.StopAllCoroutines();
+            behaviour.CancelInvoke();
+        }
+    }
+
+    public void ReinitializeAfterActivation()
+    {
+        for (int i = 0; i < reinitializables.Length; i++)
+        {
+            IReinitializable item = reinitializables[i];
+            MonoBehaviour behaviour = item as MonoBehaviour;
+            if (behaviour == null || !behaviour.gameObject.activeInHierarchy)
+                continue;
+            if (item is IReinitializeOnEnable && behaviour.enabled)
+                continue;
+            item.Reinit();
         }
     }
 }

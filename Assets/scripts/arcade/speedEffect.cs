@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class speedEffect : MonoBehaviour, IReinitializable
+public class speedEffect : MonoBehaviour, IReinitializeOnEnable
 {
     [SerializeField] private float speed = 10f;
     [SerializeField] private Vector2 spawnWorldPosition = new Vector2(-0.01f, 3.8f);

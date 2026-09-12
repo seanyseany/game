@@ -17,7 +17,6 @@ public class RageScrollSpeedModifier : MonoBehaviour
 
         if (scroller == null && exceptionScroller == null)
         {
-            Debug.LogWarning($"{nameof(RageScrollSpeedModifier)} requires BackgroundScroller or BackgroundScrollerException on {name}.", this);
             enabled = false;
             return;
         }

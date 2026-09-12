@@ -1,7 +1,7 @@
 using UnityEngine;
 using System.Collections;
 
-public class Obstacle : MonoBehaviour, IReinitializable
+public class Obstacle : MonoBehaviour, IReinitializeOnEnable
 {
     private static readonly int DieTrigger = Animator.StringToHash("Die");
 

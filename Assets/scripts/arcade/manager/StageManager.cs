@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using UnityEngine.Serialization;
 
 public interface IReinitializable { void Reinit(); }
+// Activation already resets these components; pools must not reset them a second time.
+public interface IReinitializeOnEnable : IReinitializable { }
 
 [System.Serializable]
 public class SpecialPhaseEntry
@@ -54,7 +56,6 @@ public class StageManager : MonoBehaviour
     public float phaseBaseSpeed = 3f;
     public float spawnX = 50f;
     public float ragePhaseSpawnX = 50f;
-    public float recoverX = -12f;
     public float despawnX = -20f;
     private float startSpawnDelay = 2f;
 
@@ -87,13 +88,20 @@ public class StageManager : MonoBehaviour
         public bool isRageSpawn;
         public float freezeUntil;
         public bool suppressNextPhasePass;
-        public bool recovered;
     }
 
     private readonly List<PhaseInfo> activePhases = new List<PhaseInfo>(256);
     private Dictionary<GameObject, Queue<GameObject>> poolDict;
     private readonly Dictionary<GameObject, GameObject> pooledInstanceToPrefab = new Dictionary<GameObject, GameObject>(256);
     private readonly HashSet<GameObject> activePhaseObjects = new HashSet<GameObject>();
+    private readonly Dictionary<GameObject, PhaseCache> phaseCaches = new Dictionary<GameObject, PhaseCache>();
+    private readonly Dictionary<GameObject, int> createdCountByPrefab = new Dictionary<GameObject, int>();
+    private readonly Queue<GameObject> prewarmQueue = new Queue<GameObject>();
+    private readonly HashSet<GameObject> pendingPrewarm = new HashSet<GameObject>();
+    private Coroutine prewarmRoutine;
+    private bool cavePoolInitialized;
+    private GameObject[] mixedPhasePrefabs;
+    private SpecialPhaseEntry[] mixedSpecialPhasePrefabs;
 
     [Header("Rage Phase Settings")]
     public float ragePhaseDuration = 12f;
@@ -103,7 +111,6 @@ public class StageManager : MonoBehaviour
     private readonly Dictionary<int, List<GameObject>> phaseShuffleByStage = new Dictionary<int, List<GameObject>>(MaxPhaseStage);
     private bool testPhaseSequenceCompleted;
     private SpawnMode currentSpawnMode = SpawnMode.Normal;
-    private bool phasePassedDuringRageCooldown;
     private bool pendingInitialRagePhaseSpawn;
     private bool machineGunPhasePauseActive;
     private bool machineGunStagePrePauseActive;
@@ -136,7 +143,6 @@ public class StageManager : MonoBehaviour
     private bool bossTriggered = false;
     private bool bossAwaitingFinalPass = false;
     private bool bossRunning = false;
-    private bool stageSpawnPausedByRage = false;
     private bool gameplayPauseByTransform = false;
     private int bossTriggerStage = 0;
     private int pendingMachineGunBossStage = 0;
@@ -170,15 +176,10 @@ public class StageManager : MonoBehaviour
         Instance = this;
     }
 
-    void Start()
+    void OnDestroy()
     {
-        DeactivateBossTemplatesIfSceneObjects();
-        InitPools();
-        InitCavePool();
-        StopStage4PhasePrefabSpawner();
-        SetBackgroundVisible(background1Prefab, true);
-        SetBackgroundVisible(background2Prefab, false);
-        StartStageLoop();
+        if (Instance == this)
+            Instance = null;
     }
 
     void OnEnable()
@@ -202,6 +203,9 @@ public class StageManager : MonoBehaviour
     // ============================ Phase 풀 초기화 ============================
     private void InitPools()
     {
+        if (poolDict != null)
+            return;
+
         List<GameObject> allPrefabs = CollectAllPhasePrefabs();
         poolDict = new Dictionary<GameObject, Queue<GameObject>>(allPrefabs.Count);
 
@@ -210,19 +214,75 @@ public class StageManager : MonoBehaviour
             if (prefab == null || poolDict.ContainsKey(prefab))
                 continue;
 
-            var queue = new Queue<GameObject>(poolSizePerPrefab);
-            int initialCount = Mathf.Clamp(initialPoolSizePerPrefab, 0, Mathf.Max(0, poolSizePerPrefab));
-            for (int i = 0; i < initialCount; i++)
-            {
-                queue.Enqueue(CreatePhasePoolObject(prefab));
-            }
-            poolDict[prefab] = queue;
+            poolDict[prefab] = new Queue<GameObject>();
         }
+    }
+
+    private void RequestStagePrewarm(int stage)
+    {
+        GameObject[] normal = GetPhasePrefabsForStage(stage);
+        if (normal != null)
+            for (int i = 0; i < normal.Length; i++)
+                RequestPrefabPrewarm(normal[i]);
+
+        SpecialPhaseEntry[] special = GetSpecialPhaseEntriesForStage(stage);
+        if (special != null)
+            for (int i = 0; i < special.Length; i++)
+                RequestPrefabPrewarm(special[i]?.prefab);
+
+        if (prewarmRoutine == null && prewarmQueue.Count > 0)
+            prewarmRoutine = StartCoroutine(PrewarmQueuedPhases());
+    }
+
+    private int InitialPoolCount => Mathf.Clamp(initialPoolSizePerPrefab, 0, Mathf.Max(0, poolSizePerPrefab));
+
+    private void RequestPrefabPrewarm(GameObject prefab)
+    {
+        if (prefab == null || InitialPoolCount == 0)
+            return;
+        if (createdCountByPrefab.TryGetValue(prefab, out int count) && count >= InitialPoolCount)
+            return;
+        if (pendingPrewarm.Add(prefab))
+            prewarmQueue.Enqueue(prefab);
+    }
+
+    private IEnumerator PrewarmQueuedPhases()
+    {
+        // One clone per frame, including special phases. Active clones also count as warmed.
+        while (prewarmQueue.Count > 0)
+        {
+            yield return null;
+            if (gameplayPauseByTransform || (GameData.Instance != null && GameData.Instance.gameOver))
+                continue;
+
+            GameObject prefab = prewarmQueue.Peek();
+            createdCountByPrefab.TryGetValue(prefab, out int count);
+            if (count < InitialPoolCount)
+                poolDict[prefab].Enqueue(CreatePhasePoolObject(prefab));
+
+            createdCountByPrefab.TryGetValue(prefab, out count);
+            if (count >= InitialPoolCount)
+            {
+                prewarmQueue.Dequeue();
+                pendingPrewarm.Remove(prefab);
+            }
+        }
+        prewarmRoutine = null;
+    }
+
+    private void PrewarmUpcomingStage()
+    {
+        int stage = GetCurrentPhaseStage();
+        RequestStagePrewarm(stage);
+        if (stage == TestPhaseStage)
+            RequestStagePrewarm(MinPhaseStage);
+        else if (stage >= MinPhaseStage && stage < MaxPhaseStage)
+            RequestStagePrewarm(stage + 1);
     }
 
     private GameObject CreatePhasePoolObject(GameObject prefab)
     {
-        var go = Instantiate(prefab);
+        var go = Instantiate(prefab, new Vector3(-999f, -999f, 0f), prefab.transform.rotation);
         go.name = prefab.name + "_Pooled";
         pooledInstanceToPrefab[go] = prefab;
 
@@ -232,7 +292,12 @@ public class StageManager : MonoBehaviour
         var cache = go.GetComponent<PhaseCache>();
         if (cache == null)
             cache = go.AddComponent<PhaseCache>();
+        cache.EnsureCached();
+        phaseCaches[go] = cache;
+        createdCountByPrefab.TryGetValue(prefab, out int count);
+        createdCountByPrefab[prefab] = count + 1;
         go.SetActive(false);
+        cache.layout.Restore(false);
         return go;
     }
 
@@ -243,7 +308,7 @@ public class StageManager : MonoBehaviour
 
         if (!poolDict.TryGetValue(prefab, out var queue) || queue == null)
         {
-            queue = new Queue<GameObject>(poolSizePerPrefab);
+            queue = new Queue<GameObject>();
             poolDict[prefab] = queue;
         }
 
@@ -266,11 +331,11 @@ public class StageManager : MonoBehaviour
         if (go.name.IndexOf("_Pooled") < 0)
             go.name = prefab.name + "_Pooled";
 
-        var snap = go.GetComponent<PhaseLayoutSnapshot>();
-        snap?.Restore(false);
         go.transform.position = spawnPos;
+        PhaseCache cache = phaseCaches[go];
+        cache.ResetCached();
         go.SetActive(true);
-        ResetPhase(go);
+        cache.ReinitializeAfterActivation();
         activePhaseObjects.Add(go);
         return go;
     }
@@ -291,22 +356,17 @@ public class StageManager : MonoBehaviour
         if (!activePhaseObjects.Contains(go) && !go.activeSelf)
             return;
 
-        foreach (var mb in go.GetComponentsInChildren<MonoBehaviour>(true))
-        {
-            mb.StopAllCoroutines();
-            mb.CancelInvoke();
-        }
-
-        var snap = go.GetComponent<PhaseLayoutSnapshot>();
-        snap?.Restore();
-
+        PhaseCache cache = phaseCaches[go];
+        cache.StopRuntimeActivity();
+        // Restore once, under an inactive root, so offscreen children do not restart gameplay.
         go.SetActive(false);
+        cache.layout.Restore(false);
         go.transform.position = new Vector3(-999f, -999f, 0f);
         activePhaseObjects.Remove(go);
 
         if (!poolDict.TryGetValue(prefab, out var queue) || queue == null)
         {
-            queue = new Queue<GameObject>(poolSizePerPrefab);
+            queue = new Queue<GameObject>();
             poolDict[prefab] = queue;
         }
 
@@ -332,9 +392,6 @@ public class StageManager : MonoBehaviour
                 float despawnCheckX = p.obj.transform.position.x;
                 if (p.cache != null && p.cache.phaseEndTrigger != null)
                     despawnCheckX = p.cache.phaseEndTrigger.transform.position.x;
-
-                if (!p.recovered && despawnCheckX < recoverX)
-                    RecoverPhase(p);
 
                 if (despawnCheckX < despawnX)
                 {
@@ -449,8 +506,6 @@ public class StageManager : MonoBehaviour
                 return;
             }
 
-            if (currentSpawnMode == SpawnMode.Cooldown && stageSpawnPausedByRage)
-                phasePassedDuringRageCooldown = true;
             return;
         }
 
@@ -460,9 +515,8 @@ public class StageManager : MonoBehaviour
     // ============================ 일반 Phase 스폰 ============================
     public void StartStageLoop()
     {
+        InitPools();
         ResetState();
-        if (stageLoopRoutine != null)
-            StopCoroutine(stageLoopRoutine);
         stageLoopRoutine = StartCoroutine(CoStartStageLoop());
     }
 
@@ -494,11 +548,21 @@ public class StageManager : MonoBehaviour
 
     public void ResetState()
     {
-        Debug.Log($"[StageManager] ResetState mode={currentSpawnMode} ragePaused={stageSpawnPausedByRage}");
+        // Cancel delayed spawns too; none of the previous run may resume after a retry.
+        StopAllCoroutines();
+        stageLoopRoutine = null;
+        ragePhaseRoutine = null;
+        bossFlowRoutine = null;
+        caveMoveRoutine = null;
+        prewarmRoutine = null;
+        prewarmQueue.Clear();
+        pendingPrewarm.Clear();
+        mixedPhasePrefabs = null;
+        mixedSpecialPhasePrefabs = null;
+        gameplayPauseByTransform = false;
+
         ClearAllPhases();
-        phaseSpawnCount = 0;
         spawnPaused = false;
-        stageSpawnPausedByRage = false;
         currentSpawnMode = SpawnMode.Normal;
         pendingInitialRagePhaseSpawn = false;
         machineGunPhasePauseActive = false;
@@ -506,19 +570,11 @@ public class StageManager : MonoBehaviour
         phasePassedDuringMachineGunPause = false;
         miniBossPhasePauseActive = false;
         phaseShuffleByStage.Clear();
-        testPhaseSequenceCompleted = false;
         isDelayActive = false;
-        if (stageLoopRoutine != null)
-        {
-            StopCoroutine(stageLoopRoutine);
-            stageLoopRoutine = null;
-        }
         StopStage4PhasePrefabSpawner();
-        StopRagePhaseSpawn();
 
         // ✅ 보스 상태 리셋
         ResetBossState();
-        ClearActiveCaveInstance();
         SetBackgroundVisible(background1Prefab, true);
         SetBackgroundVisible(background2Prefab, false);
     }
@@ -540,15 +596,29 @@ public class StageManager : MonoBehaviour
             stage: speedStage,
             isRageSpawn: false,
             countTowardPhaseProgress: !isTestPhase,
-            runPhaseRolls: !isTestPhase,
-            warnLabel: $"speed stage {speedStage}");
+            runPhaseRolls: !isTestPhase);
     }
 
     private IEnumerator CoStartStageLoop()
     {
         spawnPaused = true;
+        // GameData finishes resetting the run before warming or spawning any phase.
+        yield return null;
 
-        float delay = Mathf.Max(0f, startSpawnDelay);
+        float startedAt = Time.time;
+        RequestStagePrewarm(GetCurrentPhaseStage());
+        RequestStagePrewarm(RagePhaseStage);
+        while (pendingPrewarm.Count > 0)
+            yield return null;
+
+        if (!cavePoolInitialized)
+        {
+            InitCavePool();
+            cavePoolInitialized = true;
+        }
+        PrewarmUpcomingStage();
+
+        float delay = Mathf.Max(0f, startSpawnDelay - (Time.time - startedAt));
         if (delay > 0f)
             yield return WaitForSecondsRespectingGameplayPause(delay);
 
@@ -602,57 +672,6 @@ public class StageManager : MonoBehaviour
         isDelayActive = false;
     }
 
-    private void ResetPhase(GameObject phase)
-    {
-        var cache = phase.GetComponent<PhaseCache>();
-        if (cache != null)
-        {
-            cache.SetActiveChildren(true);
-            cache.ResetCached();
-        }
-
-        // 첫 스폰도 복구 경로와 동일하게 비활성 자식까지 되살린 뒤 재초기화한다.
-        foreach (var r in phase.GetComponentsInChildren<IReinitializable>(true))
-            r.Reinit();
-    }
-
-    private void RecoverPhase(PhaseInfo phaseInfo)
-    {
-        if (phaseInfo == null || phaseInfo.obj == null || phaseInfo.recovered)
-            return;
-
-        GameObject phase = phaseInfo.obj;
-        PhaseCache cache = phaseInfo.cache != null ? phaseInfo.cache : phase.GetComponent<PhaseCache>();
-
-        foreach (var mb in phase.GetComponentsInChildren<MonoBehaviour>(true))
-        {
-            mb.StopAllCoroutines();
-            mb.CancelInvoke();
-        }
-
-        Vector3 worldPosition = phase.transform.position;
-        Quaternion worldRotation = phase.transform.rotation;
-
-        var snap = phase.GetComponent<PhaseLayoutSnapshot>();
-        snap?.Restore(false);
-
-        phase.transform.SetPositionAndRotation(worldPosition, worldRotation);
-
-        if (cache != null)
-        {
-            cache.SetActiveChildren(true);
-            cache.ResetCached();
-        }
-
-        foreach (var r in phase.GetComponentsInChildren<IReinitializable>(true))
-        {
-            if (r != null)
-                r.Reinit();
-        }
-
-        phaseInfo.recovered = true;
-    }
-
     public void SetSpawnPaused(bool paused) => spawnPaused = paused;
     public void SetGameplayPause(bool paused)
     {
@@ -687,7 +706,6 @@ public class StageManager : MonoBehaviour
         // ✅ 즉시 스폰 중단 (마지막 페이즈가 detector 찍을 때까지 기다림)
         spawnPaused = true;
 
-        Debug.Log($"👑 Boss Triggered (stage {stage}) -> spawn paused, waiting final phase pass...");
     }
 
     public void QueueBossEncounterAfterMachineGun(int stage)
@@ -736,7 +754,7 @@ public class StageManager : MonoBehaviour
             StopCoroutine(bossFlowRoutine);
 
         bossFlowRoutine = StartCoroutine(CoRunBossEncounter());
-        Debug.Log($"👑 Boss Triggered immediately from tagged trigger (stage {stage})");
+
     }
 
     private IEnumerator CoRunBossEncounter()
@@ -751,7 +769,6 @@ public class StageManager : MonoBehaviour
         GameObject source = PickBossPrefabForStage(bossTriggerStage);
         if (source == null)
         {
-            Debug.LogWarning($"⚠️ Boss prefab not set for stage {bossTriggerStage}. Resume stage.");
             yield return WaitForSecondsRespectingGameplayPause(bossResumeDelay);
             ResumeAfterBoss(startStage4PrefabSpawner: bossTriggerStage >= 4);
             yield break;
@@ -763,14 +780,12 @@ public class StageManager : MonoBehaviour
         activeBossIsSceneObject = source.scene.IsValid();
         if (!activeBossIsSceneObject)
         {
-            Debug.LogWarning($"⚠️ Stage {bossTriggerStage} boss reference must be a SCENE object (not prefab asset).");
             yield return WaitForSecondsRespectingGameplayPause(bossResumeDelay);
             ResumeAfterBoss(startStage4PrefabSpawner: bossTriggerStage >= 4);
             yield break;
         }
 
         activeBoss = source;
-        Debug.Log($"👑 Using scene boss object '{activeBoss.name}' at {activeBoss.transform.position} for stage {bossTriggerStage}");
 
         if (activeBoss != null && !activeBoss.activeSelf)
             activeBoss.SetActive(true);
@@ -799,7 +814,6 @@ public class StageManager : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning("⚠️ Boss prefab has no Boss.cs/BossSlime.cs. Resume stage.");
             yield return WaitForSecondsRespectingGameplayPause(bossResumeDelay);
             ResumeAfterBoss(startStage4PrefabSpawner: bossTriggerStage >= 4);
             yield break;
@@ -842,8 +856,6 @@ public class StageManager : MonoBehaviour
         bossAwaitingFinalPass = false;
         bossTriggerStage = 0;
         pendingBossExtraNormalPhase = false;
-        postBossSlimeMixedPhaseUnlocked = false;
-
         spawnPaused = false;
 
         // ✅ 바로 다음 페이즈 다시 스폰 재개
@@ -852,7 +864,6 @@ public class StageManager : MonoBehaviour
         if (startStage4PrefabSpawner)
             StartCoroutine(CoStartStage4SpawnerDeferred());
 
-        Debug.Log("✅ Boss ended -> stage spawn resumed");
     }
 
     private IEnumerator CoStartStage4SpawnerDeferred()
@@ -1119,11 +1130,8 @@ public class StageManager : MonoBehaviour
 
     private void HandleRageStart()
     {
-        Debug.Log($"[StageManager] HandleRageStart mode(before)={currentSpawnMode}");
-
         if (bossRunning || bossTriggered)
         {
-            Debug.Log("[StageManager] Rage start ignored because boss encounter is active.");
             return;
         }
 
@@ -1208,7 +1216,6 @@ public class StageManager : MonoBehaviour
     {
         if (!HasConfiguredPhasePrefabs(rageStagePrefabs))
         {
-            Debug.LogWarning("[StageManager] Rage start skipped because no rageStagePrefabs are configured.");
             return;
         }
 
@@ -1216,10 +1223,8 @@ public class StageManager : MonoBehaviour
             StopCoroutine(ragePhaseRoutine);
 
         machineGunStagePrePauseActive = false;
-        stageSpawnPausedByRage = true;
         spawnPaused = machineGunPhasePauseActive;
         currentSpawnMode = SpawnMode.Rage;
-        phasePassedDuringRageCooldown = false;
         pendingInitialRagePhaseSpawn = true;
         SuppressActivePhaseTriggers(false);
 
@@ -1230,17 +1235,12 @@ public class StageManager : MonoBehaviour
             SpawnRagePhaseDirect();
             pendingInitialRagePhaseSpawn = false;
         }
-        else
-        {
-            Debug.Log($"[StageManager] Rage phase spawn deferred gameplayPause={gameplayPauseByTransform} machineGunPause={machineGunPhasePauseActive}");
-        }
 
         ragePhaseRoutine = StartCoroutine(CoRunRagePhaseSequence());
     }
 
     private void StopRagePhaseSpawn()
     {
-        Debug.Log($"[StageManager] StopRagePhaseSpawn mode(before)={currentSpawnMode}");
         if (ragePhaseRoutine != null)
         {
             StopCoroutine(ragePhaseRoutine);
@@ -1250,16 +1250,12 @@ public class StageManager : MonoBehaviour
         currentSpawnMode = SpawnMode.Normal;
         pendingInitialRagePhaseSpawn = false;
         machineGunStagePrePauseActive = false;
-        stageSpawnPausedByRage = false;
-        phasePassedDuringRageCooldown = false;
     }
 
     private IEnumerator CoRunRagePhaseSequence()
     {
-        Debug.Log($"[StageManager] RageSequence enter mode={currentSpawnMode}");
         yield return WaitForSecondsRespectingGameplayPause(Mathf.Max(0f, ragePhaseDuration));
 
-        Debug.Log("[StageManager] RageSequence -> Cooldown");
         currentSpawnMode = SpawnMode.Cooldown;
         spawnPaused = true;
 
@@ -1280,16 +1276,13 @@ public class StageManager : MonoBehaviour
     {
         if (!bossRunning && !bossTriggered)
         {
-            Debug.Log("[StageManager] RageSequence -> Normal resume");
             currentSpawnMode = SpawnMode.Normal;
             machineGunStagePrePauseActive = false;
             spawnPaused = false;
-            stageSpawnPausedByRage = false;
             SuppressActivePhaseTriggers(true);
             SpawnPhase();
         }
 
-        phasePassedDuringRageCooldown = false;
         ragePhaseRoutine = null;
         yield break;
     }
@@ -1299,8 +1292,7 @@ public class StageManager : MonoBehaviour
             stage: RagePhaseStage,
             isRageSpawn: true,
             countTowardPhaseProgress: false,
-            runPhaseRolls: false,
-            warnLabel: "rage stage");
+            runPhaseRolls: false);
     }
 
     private int GetActivePhaseCount()
@@ -1341,7 +1333,6 @@ public class StageManager : MonoBehaviour
         if (GetActiveRagePhaseCount() > 0)
             return;
 
-        Debug.Log("[StageManager] Rage phase missing during Rage mode. Respawning rage phase.");
         SpawnRagePhaseDirect();
     }
 
@@ -1392,7 +1383,6 @@ public class StageManager : MonoBehaviour
 
     private void ClearActiveSpawnedPhases()
     {
-        Debug.Log($"[StageManager] ClearActiveSpawnedPhases count={activePhases.Count} mode={currentSpawnMode}");
         for (int i = activePhases.Count - 1; i >= 0; i--)
         {
             var p = activePhases[i];
@@ -1467,6 +1457,10 @@ public class StageManager : MonoBehaviour
         AddUniquePrefabs(allPrefabs, stage2PhasePrefabs);
         AddUniquePrefabs(allPrefabs, stage3PhasePrefabs);
         AddUniquePrefabs(allPrefabs, stage4PhasePrefabs);
+        AddUniquePrefabs(allPrefabs, stage1SpecialPhasePrefabs);
+        AddUniquePrefabs(allPrefabs, stage2SpecialPhasePrefabs);
+        AddUniquePrefabs(allPrefabs, stage3SpecialPhasePrefabs);
+        AddUniquePrefabs(allPrefabs, stage4SpecialPhasePrefabs);
         return allPrefabs;
     }
 
@@ -1489,7 +1483,7 @@ public class StageManager : MonoBehaviour
         }
 
         if (stage == PostBossSlimeMixedStage)
-            return CombinePhasePrefabs(stage3PhasePrefabs, stage4PhasePrefabs);
+            return mixedPhasePrefabs ??= CombinePhasePrefabs(stage3PhasePrefabs, stage4PhasePrefabs);
 
         switch (Mathf.Clamp(stage, MinPhaseStage, MaxPhaseStage))
         {
@@ -1595,7 +1589,7 @@ public class StageManager : MonoBehaviour
     private SpecialPhaseEntry[] GetSpecialPhaseEntriesForStage(int stage)
     {
         if (stage == PostBossSlimeMixedStage)
-            return CombineSpecialPhaseEntries(stage3SpecialPhasePrefabs, stage4SpecialPhasePrefabs);
+            return mixedSpecialPhasePrefabs ??= CombineSpecialPhaseEntries(stage3SpecialPhasePrefabs, stage4SpecialPhasePrefabs);
 
         if (stage < MinPhaseStage || stage > MaxPhaseStage)
             return null;
@@ -1731,17 +1725,18 @@ public class StageManager : MonoBehaviour
         }
     }
 
-    private void SpawnPhaseInternal(int stage, bool isRageSpawn, bool countTowardPhaseProgress, bool runPhaseRolls, string warnLabel)
+    private void SpawnPhaseInternal(int stage, bool isRageSpawn, bool countTowardPhaseProgress, bool runPhaseRolls)
     {
-        SpawnPhaseInternal(stage, isRageSpawn, countTowardPhaseProgress, runPhaseRolls, warnLabel, allowMachineGunStage: true);
+        SpawnPhaseInternal(stage, isRageSpawn, countTowardPhaseProgress, runPhaseRolls, allowMachineGunStage: true);
     }
 
-    private void SpawnPhaseInternal(int stage, bool isRageSpawn, bool countTowardPhaseProgress, bool runPhaseRolls, string warnLabel, bool allowMachineGunStage)
+    private void SpawnPhaseInternal(int stage, bool isRageSpawn, bool countTowardPhaseProgress, bool runPhaseRolls, bool allowMachineGunStage)
     {
+        if (GameData.Instance != null && (GameData.Instance.IsResetting || GameData.Instance.gameOver))
+            return;
         GameObject prefab = GetNextPhasePrefabForStage(stage, allowMachineGunStage);
         if (prefab == null)
         {
-            Debug.LogWarning($"[StageManager] No phase prefabs configured for {warnLabel}.");
             return;
         }
 
@@ -1749,9 +1744,7 @@ public class StageManager : MonoBehaviour
         if (go == null)
             return;
 
-        Debug.Log($"[StageManager] SpawnPhaseInternal stage={stage} rage={isRageSpawn} prefab={prefab.name} mode={currentSpawnMode}");
-
-        var cache = go.GetComponent<PhaseCache>();
+        var cache = phaseCaches[go];
         if (cache != null && cache.mover != null)
         {
             cache.mover.applyStageSpeedMultiplier = false;
@@ -1768,7 +1761,10 @@ public class StageManager : MonoBehaviour
         });
 
         if (countTowardPhaseProgress)
+        {
             phaseSpawnCount++;
+            PrewarmUpcomingStage();
+        }
 
         if (runPhaseRolls && GameData.Instance != null)
             GameData.Instance.CheckBossTriggerBeforeSpeedUp(this, phaseSpawnCount);
@@ -1928,7 +1924,6 @@ public class StageManager : MonoBehaviour
             isRageSpawn: false,
             countTowardPhaseProgress: false,
             runPhaseRolls: false,
-            warnLabel: $"boss buffer stage {stage}",
             allowMachineGunStage: false);
 
         if (GetActivePhaseCount() <= activePhaseCountBeforeSpawn)

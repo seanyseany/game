@@ -3,7 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine.UI;
 
-public class Boss : MonoBehaviour, IReinitializable
+public class Boss : MonoBehaviour, IReinitializeOnEnable
 {
     public enum State { Inactive, Entering, Active, DashingToGate, Dead }
     public State state = State.Inactive;
