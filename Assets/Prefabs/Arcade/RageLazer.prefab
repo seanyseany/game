@@ -53,6 +53,8 @@ MonoBehaviour:
   colliderEnabledOnSpawn: 1
   usePool: 1
   poolTag: Lazer
+  firstAttackAnimation: {fileID: 7400000, guid: 6f44686cec5414f0bbb8fa1eddc31299, type: 2}
+  secondAttackAnimation: {fileID: 7400000, guid: c0eb5d830310945dd86df2935c3eb28c, type: 2}
 --- !u!61 &8977519557220043701
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -90,7 +92,7 @@ BoxCollider2D:
   m_Offset: {x: 9.715878, y: -0.04426551}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
-    pivot: {x: -0.04, y: 0.5000001}
+    pivot: {x: -0.035, y: 0.45}
     oldSize: {x: 16.5, y: 6.3}
     newSize: {x: 16.5, y: 6.3}
     adaptiveTilingThreshold: 0.5

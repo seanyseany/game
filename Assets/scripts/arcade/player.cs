@@ -245,7 +245,7 @@ public class Player : MonoBehaviour
     private RigidbodyConstraints2D p3AttackOriginalConstraints;
     private bool p3AttackPhysicsLocked = false;
     private float p3AttackHazardIgnoreUntil = -999f;
-    private const float p3AttackInvulnerabilityPortion = 2f / 3f;
+    private const float p3AttackInvulnerabilityPortion = 4f / 5f;
     public HealthBarUI bar;
 
     [Header("Obstacle Bump")]
@@ -282,6 +282,8 @@ public class Player : MonoBehaviour
     private GameObject activeRunningSmoke;
     private GameObject activeP2RageLaser;
     private GameObject activeP4RageLightning;
+    private bool nextP2RageAnimationIsSecond;
+    private bool nextP4RageAnimationIsSecond;
     private bool skipNextP1RageLandingSmoke = false;
     private bool skipNextP5RageLandingSmoke = false;
     private float groundProbeDistance = 0.28f;
@@ -1551,14 +1553,10 @@ public class Player : MonoBehaviour
     private IEnumerator P5_GroundAttack()
     {
         if (!isGrounded) yield break;
-        if (isLanding && !isRageMode) yield break;
 
         isAttacking = true;
-        if (isRageMode)
-        {
-            isLanding = false;
-            hasLanded = false;
-        }
+        isLanding = false;
+        hasLanded = false;
         attackStateStartTime = Time.time;
         ForceAnimationState("Base Attack", "Attack");
 
@@ -1662,13 +1660,9 @@ public class Player : MonoBehaviour
         {
             if (isGrounded)
             {
-                if (isRageMode)
-                {
-                    StopLandingRoutine();
-                    isLanding = false;
-                    hasLanded = false;
-                }
-
+                StopLandingRoutine();
+                isLanding = false;
+                hasLanded = false;
                 StartGroundedAttackRoutine(P5_GroundAttack());
             }
             else StartCoroutine(P5_AirStomp());
@@ -2615,7 +2609,8 @@ public class Player : MonoBehaviour
                 p2RageLaserPrefab,
                 p2RageLaserPoolTag,
                 p2Muzzle != null ? p2Muzzle.position : transform.position,
-                6);
+                6,
+                ref nextP2RageAnimationIsSecond);
         }
 
         // ✅ 분노 상태 + 지면일 때 태그별로 연기 생성
@@ -2682,6 +2677,7 @@ public class Player : MonoBehaviour
                 p4RageLightningPoolTag,
                 p4Emitter.position,
                 8,
+                ref nextP4RageAnimationIsSecond,
                 (go, fromPool) =>
                 {
                     var zig = go != null ? go.GetComponent<ZigzagLightning>() : null;
@@ -4081,6 +4077,7 @@ public class Player : MonoBehaviour
         string poolTag,
         Vector3 position,
         int initialSize,
+        ref bool nextAnimationIsSecond,
         System.Action<GameObject, bool> onSpawned = null)
     {
         if (prefab == null)
@@ -4101,6 +4098,10 @@ public class Player : MonoBehaviour
 
         activeEffect = spawned;
         onSpawned?.Invoke(spawned, fromPool);
+        var lightning = spawned.GetComponent<ZigzagLightning>();
+        if (lightning != null)
+            lightning.PlayAttackAnimation(nextAnimationIsSecond);
+        nextAnimationIsSecond = !nextAnimationIsSecond;
         return true;
     }
 

@@ -53,6 +53,8 @@ MonoBehaviour:
   colliderEnabledOnSpawn: 1
   usePool: 1
   poolTag: RageLightening
+  firstAttackAnimation: {fileID: 7400000, guid: a1b782c5d7c4e4f99b416a34f7c113a6, type: 2}
+  secondAttackAnimation: {fileID: 7400000, guid: 953381f8c11574f3a80e949b602d1858, type: 2}
 --- !u!61 &8981302590899611703
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -91,7 +93,7 @@ BoxCollider2D:
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.04, y: 0.5}
-    oldSize: {x: 16.47, y: 8.2}
+    oldSize: {x: 15.28, y: 8.2}
     newSize: {x: 16.47, y: 8.2}
     adaptiveTilingThreshold: 0.5
     drawMode: 0

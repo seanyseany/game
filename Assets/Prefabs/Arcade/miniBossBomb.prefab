@@ -26,7 +26,7 @@ Transform:
   m_GameObject: {fileID: 643382236657287535}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0.3420201, w: 0.9396927}
-  m_LocalPosition: {x: 0.47900057, y: 0.3849999, z: 0}
+  m_LocalPosition: {x: 0.47900057, y: 0.3849999, z: -0.5}
   m_LocalScale: {x: 1.2, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -105,6 +105,7 @@ GameObject:
   - component: {fileID: 855448487757792540}
   - component: {fileID: 4214474704706786281}
   - component: {fileID: 1962878202988432269}
+  - component: {fileID: -1336786145321263506}
   m_Layer: 0
   m_Name: miniBossBomb
   m_TagString: Untagged
@@ -311,6 +312,20 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ObstacleInfo
   type: 2
+--- !u!114 &-1336786145321263506
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1684974471160718448}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce4c00462992547d0bfa5fbfdf523201, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ObstacleRageMover
+  moveDistance: 20
+  isTop: 1
 --- !u!1 &1891897865384989785
 GameObject:
   m_ObjectHideFlags: 0
@@ -338,7 +353,7 @@ Transform:
   m_GameObject: {fileID: 1891897865384989785}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: -0.3420201, w: 0.9396927}
-  m_LocalPosition: {x: 0.749, y: -0.61, z: 1}
+  m_LocalPosition: {x: 0.749, y: -0.61, z: -0.2}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -450,7 +465,7 @@ Transform:
   m_GameObject: {fileID: 5340076883997133951}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: -0.3420201, w: 0.9396927}
-  m_LocalPosition: {x: 0.50399995, y: -0.365, z: 0}
+  m_LocalPosition: {x: 0.50399995, y: -0.365, z: -0.5}
   m_LocalScale: {x: 1.2, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -541,7 +556,7 @@ Transform:
   m_GameObject: {fileID: 5805999767892406854}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0.3420201, w: 0.9396927}
-  m_LocalPosition: {x: 0.74899995, y: 0.578, z: 1}
+  m_LocalPosition: {x: 0.74899995, y: 0.578, z: -0.2}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

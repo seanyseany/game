@@ -246,6 +246,13 @@ public class MiniBossBomb : MonoBehaviour
             yield return new WaitForSeconds(destroyCleanupDelay);
 
         cleanupRoutine = null;
+        // Keep phase children available for layout restoration when the phase returns to its pool.
+        if (GetComponentInParent<PhaseLayoutSnapshot>(true) != null)
+        {
+            gameObject.SetActive(false);
+            yield break;
+        }
+
         Destroy(gameObject);
     }
 }

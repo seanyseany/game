@@ -21,7 +21,15 @@ public class ZigzagLightning : MonoBehaviour, IRageTransformPauseHandler
     [SerializeField] private bool usePool = true;
     [SerializeField] private string poolTag = "";
 
+    [Header("Attack Animations")]
+    [Tooltip("첫 번째 공격 애니메이션. 비워 두면 Animator의 기존 클립을 사용합니다.")]
+    [SerializeField] private AnimationClip firstAttackAnimation;
+    [Tooltip("두 번째 공격 애니메이션. 비워 두면 첫 번째 애니메이션을 사용합니다.")]
+    [SerializeField] private AnimationClip secondAttackAnimation;
+
     private Animator animator;
+    private AnimatorOverrideController attackAnimatorOverride;
+    private AnimationClip originalAttackAnimation;
     private BoxCollider2D hitCollider;
     private float despawnAtTime = -1f;
     private float pausedRemainingLife = -1f;
@@ -68,6 +76,43 @@ public class ZigzagLightning : MonoBehaviour, IRageTransformPauseHandler
             StopCoroutine(lifeCo);
             lifeCo = null;
         }
+    }
+
+    private void OnDestroy()
+    {
+        if (attackAnimatorOverride != null)
+            Destroy(attackAnimatorOverride);
+    }
+
+    // 풀 준비 중에도 OnEnable이 호출되므로, 실제 공격 생성 후 플레이어가 호출한다.
+    public void PlayAttackAnimation(bool useSecondAnimation)
+    {
+        if (animator == null || animator.runtimeAnimatorController == null)
+            return;
+        if (firstAttackAnimation == null && secondAttackAnimation == null)
+            return;
+
+        if (attackAnimatorOverride == null)
+        {
+            // RageLazer / RageLightning 컨트롤러는 단일 공격 클립을 사용한다.
+            AnimationClip[] clips = animator.runtimeAnimatorController.animationClips;
+            if (clips.Length == 0)
+                return;
+
+            originalAttackAnimation = clips[0];
+            attackAnimatorOverride = new AnimatorOverrideController(animator.runtimeAnimatorController);
+            animator.runtimeAnimatorController = attackAnimatorOverride;
+        }
+
+        AnimationClip clip = useSecondAnimation ? secondAttackAnimation : firstAttackAnimation;
+        if (clip == null)
+            clip = firstAttackAnimation != null ? firstAttackAnimation : originalAttackAnimation;
+
+        attackAnimatorOverride[originalAttackAnimation] = clip;
+        animator.Rebind();
+        animator.Update(0f);
+        animator.Play(0, 0, 0f);
+        animator.Update(0f);
     }
 
     public void SetOrientation(Vector2 dir)

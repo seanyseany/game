@@ -88,6 +88,7 @@ public class StageManager : MonoBehaviour
         public bool isRageSpawn;
         public float freezeUntil;
         public bool suppressNextPhasePass;
+        public bool passedEndTrigger;
     }
 
     private readonly List<PhaseInfo> activePhases = new List<PhaseInfo>(256);
@@ -463,6 +464,9 @@ public class StageManager : MonoBehaviour
             return;
 
         PhaseInfo sourcePhase = FindPhaseInfoByTrigger(sourceTrigger);
+        if (sourcePhase != null)
+            sourcePhase.passedEndTrigger = true;
+
         if (sourcePhase != null && sourcePhase.suppressNextPhasePass)
         {
             sourcePhase.suppressNextPhasePass = false;
@@ -1276,10 +1280,39 @@ public class StageManager : MonoBehaviour
     {
         if (!bossRunning && !bossTriggered)
         {
-            currentSpawnMode = SpawnMode.Normal;
+            // Let the final rage phase reach the detector before starting the normal sequence.
+            // Its pass during cooldown is recorded even though spawning is paused.
+            PhaseInfo lastRagePhase = null;
+            for (int i = activePhases.Count - 1; i >= 0; i--)
+            {
+                if (activePhases[i].isRageSpawn && activePhases[i].obj != null)
+                {
+                    lastRagePhase = activePhases[i];
+                    break;
+                }
+            }
+
+            while (lastRagePhase != null && lastRagePhase.obj != null &&
+                   activePhaseObjects.Contains(lastRagePhase.obj) &&
+                   !lastRagePhase.passedEndTrigger)
+            {
+                if (bossRunning || bossTriggered)
+                    break;
+                yield return null;
+            }
+
+            while ((machineGunPhasePauseActive || miniBossPhasePauseActive || gameplayPauseByTransform) &&
+                   !bossRunning && !bossTriggered)
+                yield return null;
+
+            SuppressActivePhaseTriggers(true);
+        }
+
+        currentSpawnMode = SpawnMode.Normal;
+        if (!bossRunning && !bossTriggered)
+        {
             machineGunStagePrePauseActive = false;
             spawnPaused = false;
-            SuppressActivePhaseTriggers(true);
             SpawnPhase();
         }
 
