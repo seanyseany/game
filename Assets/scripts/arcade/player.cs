@@ -201,6 +201,7 @@ public class Player : MonoBehaviour
     private bool spawnIntroGateHoldActive;
     private bool isMachineGunTransferActive;
     private bool isMachineGunBoarded;
+    public bool IsSpawnOrTransferActive => isSpawnIntroActive || isMachineGunTransferActive || isMachineGunBoarded;
     private readonly List<Renderer> hiddenMachineGunChildRenderers = new List<Renderer>();
     private bool jumpedThisAirborne = false;
     private Coroutine rangedFlyattackLatchRoutine;
@@ -2322,7 +2323,7 @@ public class Player : MonoBehaviour
 
         if (!isInvincible && !isRageMode)
         {
-            TakeDamage(1);
+            TakeDamageFromSource(1, lastHitObstacleType);
             if (isAttacking) ForceLandFromHit();
         }
 
@@ -2393,7 +2394,9 @@ public class Player : MonoBehaviour
 
     private void Hit()
     {
+        if (isDead || lives <= 0) return;
         lives -= 1;
+        GetComponent<ArcadeFeedback>()?.NotifyLifeLost(showEmoji: lives > 0);
         if (lives <= 0) Die();
     }
     private bool IsP3AttackInvulnerable()
@@ -2481,10 +2484,18 @@ public class Player : MonoBehaviour
 
     public void TakeDamage(int dmg)
     {
+        TakeDamageFromSource(dmg, ObstacleType.Normal);
+    }
+
+    public void TakeDamageFromSource(int dmg, ObstacleType damageSource)
+    {
+        if (isDead || lives <= 0 || dmg <= 0) return;
         if (isSpawnIntroActive || isMachineGunTransferActive || isMachineGunBoarded) return;
         if (isInvincible || isRageMode || IsP3AttackInvulnerable()) return;  // 🔹 Hurt 중엔 무시
 
         lives = Mathf.Max(0, lives - dmg);
+        GetComponent<ArcadeFeedback>()?.NotifyLifeLost(
+            showEmoji: lives > 0 && damageSource != ObstacleType.Missile);
         RefreshLivesUI();
 
         if (lives <= 0)
@@ -2513,7 +2524,7 @@ public class Player : MonoBehaviour
         if (isInvincible || isRageMode)
             return false;
 
-        TakeDamage(dmg);
+        TakeDamageFromSource(dmg, obstacleType);
 
         if (isAttacking)
             ForceLandFromHit();
@@ -3082,6 +3093,7 @@ public class Player : MonoBehaviour
 
     public void ResetPlayer()
     {
+        GetComponent<ArcadeFeedback>()?.ResetFeedback();
         StopSpawnIntroRoutine();
 
         manaCount = 0;

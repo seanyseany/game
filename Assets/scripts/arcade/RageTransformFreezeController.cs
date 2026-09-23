@@ -105,6 +105,13 @@ public class RageTransformFreezeController : MonoBehaviour
         RestoreFrozenState();
     }
 
+    public static void EndActivePause()
+    {
+        // Scene cleanup must not create a new persistent controller.
+        if (instance != null)
+            instance.EndNow();
+    }
+
     public static IEnumerator WaitForSecondsRespectingGameplayPause(float seconds)
     {
         float remaining = Mathf.Max(0f, seconds);
@@ -193,6 +200,9 @@ public class RageTransformFreezeController : MonoBehaviour
         freezeActive = false;
         activePlayer = null;
         playerBodyStateCaptured = false;
+        behaviourStates.Clear();
+        animatorSpeeds.Clear();
+        rigidbodyStates.Clear();
         rageMoverStates.Clear();
         pauseHandlers.Clear();
     }
@@ -251,7 +261,8 @@ public class RageTransformFreezeController : MonoBehaviour
     {
         for (int i = 0; i < pauseHandlers.Count; i++)
         {
-            if (pauseHandlers[i] != null)
+            // Interface null checks do not detect destroyed Unity components after scene unload.
+            if (pauseHandlers[i] is MonoBehaviour behaviour && behaviour != null)
                 pauseHandlers[i].OnRageTransformPauseEnded();
         }
     }

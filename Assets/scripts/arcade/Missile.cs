@@ -85,6 +85,8 @@ public class Missile : MonoBehaviour, IRageTransformPauseHandler
 
     private void OnTriggerEnter2D(Collider2D other)
     {
+        if (returned || forceDisabledByPool) return;
+
         // 플레이어 충돌
         var player = other.GetComponent<Player>();
         if (player != null)
@@ -100,7 +102,7 @@ public class Missile : MonoBehaviour, IRageTransformPauseHandler
             if (!player.IsRageModeActive())
             {
                 CameraShakeManager.ShakeDefault();
-                player.TakeDamage(1);
+                player.TakeDamageFromSource(1, ObstacleType.Missile);
             }
 
             Explode();
@@ -115,6 +117,8 @@ public class Missile : MonoBehaviour, IRageTransformPauseHandler
 
     private void Explode()
     {
+        ArcadeFeedback.ShowBoom(transform.position);
+
         // 풀에 Smoke가 있으면 우선 사용
         if (ObjectPool.Instance != null)
         {

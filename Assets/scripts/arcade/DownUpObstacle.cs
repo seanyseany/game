@@ -44,8 +44,12 @@ public class DownUpObstacle : MonoBehaviour
 
         moveTime += Time.deltaTime * Mathf.Max(0f, moveSpeed);
 
-        // 시작할 때 반대 방향에서 움직이도록 offset에 -1 곱하기
-        float offset = -(Mathf.PingPong(moveTime, moveDistance * 2f) - moveDistance);
+        // Keep the same range and cycle duration, easing to zero speed at each turn.
+        float distance = Mathf.Max(0f, moveDistance);
+        float progress = distance > 0f
+            ? Mathf.PingPong(moveTime, distance * 2f) / (distance * 2f)
+            : 0f;
+        float offset = Mathf.Lerp(distance, -distance, Mathf.SmoothStep(0f, 1f, progress));
         Vector3 localOffset = new Vector3(0f, offset, 0f);
 
         if (rageMover != null)

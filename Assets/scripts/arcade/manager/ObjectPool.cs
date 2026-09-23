@@ -164,7 +164,6 @@ public class ObjectPool : MonoBehaviour
     {
         var obj = Instantiate(prefab);
         obj.SetActive(false);
-        obj.tag = "Untagged";
         GetOrCreateRefs(obj);
         return obj;
     }
@@ -218,7 +217,7 @@ public class ObjectPool : MonoBehaviour
     private void ResetSpawned(GameObject obj, string tag)
     {
         var refs = GetOrCreateRefs(obj);
-        obj.tag = tag;
+        // Pool keys are independent of Unity gameplay tags; preserve the prefab tag.
         obj.SetActive(true);
 
         var rb = refs != null ? refs.rb : null;

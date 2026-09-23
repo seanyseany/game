@@ -227,8 +227,8 @@ Transform:
   m_GameObject: {fileID: 19456630}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.0286, y: -2.44, z: -4}
-  m_LocalScale: {x: 28.89031, y: 8.671147, z: 1}
+  m_LocalPosition: {x: -0.0286, y: -2.23, z: -4}
+  m_LocalScale: {x: 28.89031, y: 10.6285, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -1632,10 +1632,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CameraShakeManager
   defaultDuration: 0.35
-  defaultMagnitudeX: 0.4
-  defaultMagnitudeY: 0.26
+  defaultMagnitudeX: 0.8
+  defaultMagnitudeY: 0.12
   defaultFrequency: 28
-  allowHorizontalShake: 0
+  allowHorizontalShake: 1
   allowVerticalShake: 1
 --- !u!1 &519891718
 GameObject:
@@ -2670,12 +2670,12 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_Sprite: {fileID: -809572728, guid: 4a5702a7a36b94e15b84e84773dc1c67, type: 3}
+  m_Sprite: {fileID: 164464433, guid: c56d9ca3b96bf454bb9540003d0170ab, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 0.76, y: 0.75}
+  m_Size: {x: 0.55333334, y: 0.6666667}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
@@ -3238,7 +3238,7 @@ Transform:
   m_GameObject: {fileID: 1223396562}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 1, w: 0}
-  m_LocalPosition: {x: -0.0402, y: -1.58, z: -3}
+  m_LocalPosition: {x: -0.0402, y: -2.13, z: -3}
   m_LocalScale: {x: 28.766645, y: 11.00884, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -4232,8 +4232,8 @@ Transform:
   m_GameObject: {fileID: 1309666213}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.0469, y: -2.09, z: -1.5}
-  m_LocalScale: {x: 28.89884, y: 13.199356, z: 0}
+  m_LocalPosition: {x: -0.0469, y: -1.8741, z: -1.5}
+  m_LocalScale: {x: 28.89884, y: 14.917887, z: 0}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 743863273}
@@ -5199,7 +5199,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ac861eb8557084223a6741d05133becf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  testPhasePrefabs: []
+  testPhasePrefabs:
+  - {fileID: 2659614723417223950, guid: bd4db3ea86b324149b25206e765fddb9, type: 3}
   stage1PhasePrefabs:
   - {fileID: 2659614723417223950, guid: a72c1401e0d3543ceb8319395edbfd50, type: 3}
   - {fileID: 2659614723417223950, guid: f2580553c03134ef08bffc7fa9000e68, type: 3}
@@ -5335,7 +5336,7 @@ MonoBehaviour:
   speedUp2: 14
   speedUp3: 31
   speedUp4: 50
-  speedMult1: 2.7
+  speedMult1: 2.82
   speedMult2: 2.75
   speedMult3: 2.82
   speedMult4: 2.82
@@ -5918,6 +5919,18 @@ PrefabInstance:
       propertyPath: bodyShiftDuration
       value: 0.7
       objectReference: {fileID: 0}
+    - target: {fileID: 412033080555156528, guid: b645720f70c8a4a5294393b54ab54fb1, type: 3}
+      propertyPath: ragePushBackDuration
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 412033080555156528, guid: b645720f70c8a4a5294393b54ab54fb1, type: 3}
+      propertyPath: normalRandomMaxOffset
+      value: 0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 412033080555156528, guid: b645720f70c8a4a5294393b54ab54fb1, type: 3}
+      propertyPath: rageRandomMoveDuration
+      value: 2
+      objectReference: {fileID: 0}
     - target: {fileID: 661559057523322911, guid: b645720f70c8a4a5294393b54ab54fb1, type: 3}
       propertyPath: m_Name
       value: TRAIN
@@ -6032,7 +6045,7 @@ PrefabInstance:
       objectReference: {fileID: -6404741104382166878, guid: 4c94fc293f5d84f6296ec463d404c7a5, type: 3}
     - target: {fileID: 6525172685940875560, guid: b645720f70c8a4a5294393b54ab54fb1, type: 3}
       propertyPath: m_WasSpriteAssigned
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 7940888697483130591, guid: b645720f70c8a4a5294393b54ab54fb1, type: 3}
       propertyPath: m_Points.Array.size

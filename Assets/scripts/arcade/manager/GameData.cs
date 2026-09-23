@@ -891,8 +891,11 @@ public class GameData : MonoBehaviour
     {
         arcadeSceneActive = false;
         gameOver = true;
-        ForceStopMachineGunSequence();
         StopRuntimeCoroutines();
+        RageTransformFreezeController.EndActivePause();
+        ForceStopRage();
+        Hitbox.ClearBossTargetCache();
+        ZigzagLightning.ClearBossTargetCache();
         ClearSceneReferences();
     }
 

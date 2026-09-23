@@ -83,6 +83,26 @@ public class MiniBossBomb : MonoBehaviour
         targetPlayer = playerTarget;
     }
 
+    private void OnTriggerEnter2D(Collider2D other)
+    {
+        if (destroyTriggered || other == null)
+            return;
+
+        Hitbox hitbox = other.GetComponentInParent<Hitbox>();
+        if (hitbox == null &&
+            other.GetComponentInParent<ZigzagLightning>() == null &&
+            other.GetComponentInParent<ProjectileBall>() == null)
+        {
+            return;
+        }
+
+        Player attacker = hitbox != null && hitbox.Owner != null
+            ? hitbox.Owner
+            : Player.Instance;
+        if (attacker != null && attacker.IsRageModeActive())
+            TriggerDestroy();
+    }
+
     private void ResetRuntime()
     {
         destroyTriggered = false;
@@ -108,6 +128,9 @@ public class MiniBossBomb : MonoBehaviour
 
     private void Update()
     {
+        if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            return;
+
         if (destroyTriggered)
             return;
 
@@ -156,7 +179,7 @@ public class MiniBossBomb : MonoBehaviour
     private IEnumerator CoSelfDestruct()
     {
         if (selfDestructionTime > 0f)
-            yield return new WaitForSeconds(selfDestructionTime);
+            yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(selfDestructionTime);
 
         selfDestroyRoutine = null;
         TriggerDestroy();
@@ -243,7 +266,7 @@ public class MiniBossBomb : MonoBehaviour
     private IEnumerator CoCleanup()
     {
         if (destroyCleanupDelay > 0f)
-            yield return new WaitForSeconds(destroyCleanupDelay);
+            yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(destroyCleanupDelay);
 
         cleanupRoutine = null;
         // Keep phase children available for layout restoration when the phase returns to its pool.

@@ -169,7 +169,7 @@ public class CholesterolBomb : MonoBehaviour, IReinitializeOnEnable
         if (currentHitCount < Mathf.Max(1, hitCount))
             return;
 
-        Explode();
+        Explode(showBoom: true);
     }
 
     public void TriggerExplosionFromExternalHit()
@@ -243,12 +243,15 @@ public class CholesterolBomb : MonoBehaviour, IReinitializeOnEnable
         HandleBounceCollision(collision.collider);
     }
 
-    private void Explode()
+    private void Explode(bool showBoom = false)
     {
         if (exploded)
             return;
 
         exploded = true;
+
+        if (showBoom)
+            ArcadeFeedback.ShowBoom(transform.position);
 
         MachineGunLastSpawnNotifier machineGunNotifier = GetComponent<MachineGunLastSpawnNotifier>() ?? GetComponentInParent<MachineGunLastSpawnNotifier>();
         if (machineGunNotifier != null)

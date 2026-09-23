@@ -1571,6 +1571,7 @@ public class StageManager : MonoBehaviour
                 return null;
 
             ShuffleList(shuffleList);
+            ReserveNormalPhaseBeforeBoss(shuffleList, stage, source, specialEntries);
         }
 
         if (allowMachineGunStage)
@@ -1599,6 +1600,54 @@ public class StageManager : MonoBehaviour
         }
 
         return null;
+    }
+
+    private void ReserveNormalPhaseBeforeBoss(List<GameObject> cycle, int stage, GameObject[] normalPrefabs, SpecialPhaseEntry[] specialEntries)
+    {
+        if (bossTriggered || bossRunning || (stage != BossStage3 && stage != BossStage4))
+            return;
+
+        int bossPhaseCount = stage == BossStage3 ? speedUp3 : speedUp4;
+        int finalPhaseIndex = bossPhaseCount - phaseSpawnCount - 1;
+        // A stage can refill its cycle before reaching the boss threshold.
+        if (finalPhaseIndex < 0 || finalPhaseIndex >= cycle.Count)
+            return;
+
+        List<GameObject> availableNormals = new List<GameObject>();
+        AddAvailableNormalPrefabs(availableNormals, normalPrefabs, allowMachineGunStage: false);
+        availableNormals.RemoveAll(prefab => prefab.CompareTag(MiniBossStageTag));
+        if (specialEntries != null)
+        {
+            foreach (SpecialPhaseEntry entry in specialEntries)
+            {
+                if (entry != null && entry.prefab != null)
+                    availableNormals.RemoveAll(prefab => prefab == entry.prefab);
+            }
+        }
+
+        if (availableNormals.Contains(cycle[finalPhaseIndex]))
+            return;
+
+        // Keep the rolled specials by moving the final one to an earlier normal slot.
+        for (int i = 0; i < finalPhaseIndex; i++)
+        {
+            if (!availableNormals.Contains(cycle[i]))
+                continue;
+
+            GameObject normal = cycle[i];
+            cycle[i] = cycle[finalPhaseIndex];
+            cycle[finalPhaseIndex] = normal;
+            return;
+        }
+
+        // Even a one-phase stage or an all-special roll must end with a normal phase.
+        if (availableNormals.Count > 0)
+        {
+            cycle[finalPhaseIndex] = availableNormals[Random.Range(0, availableNormals.Count)];
+            return;
+        }
+
+        Debug.LogWarning($"[StageManager] Stage {stage} needs a normal phase prefab before the boss.", this);
     }
 
     private int GetPhaseCycleCountForStage(int stage)

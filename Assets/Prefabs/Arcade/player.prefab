@@ -9687,6 +9687,7 @@ GameObject:
   - component: {fileID: 1375860378352231304}
   - component: {fileID: 7619116827110755597}
   - component: {fileID: 831977246100301547}
+  - component: {fileID: 4901132731014009689}
   m_Layer: 0
   m_Name: player
   m_TagString: player
@@ -10089,3 +10090,23 @@ CapsuleCollider2D:
   m_Offset: {x: 0.022103041, y: 0.06482519}
   m_Size: {x: 0.6345013, y: 1.0559945}
   m_Direction: 0
+--- !u!114 &4901132731014009689
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7683074617469704678}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e3762963c1c04afb9da59ee7028f71e0, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::ArcadeFeedback
+  boomPrefab: {fileID: 5582986152051508971, guid: 520db062b982e4f529b7fb60fed9b752, type: 3}
+  goodPrefab: {fileID: 5024498338609336080, guid: 50adf4825cd7242c69929fa5b80f58c9, type: 3}
+  perfectPrefab: {fileID: 8912081597299453873, guid: 7f97a034a1bf24d059266f5478a56d52, type: 3}
+  multiKillPrefab: {fileID: 8912081597299453873, guid: 4a39b36ace54a4fa6bd31f2fa43e74da, type: 3}
+  killChainWindow: 1
+  damageEmojiPrefabs:
+  - {fileID: 2783033508503310222, guid: e7c86de40af9f47268f35c6c935153cc, type: 3}
+  - {fileID: 2783033508503310222, guid: 6c3fc5b3ea1954266b2acc5277140f2b, type: 3}

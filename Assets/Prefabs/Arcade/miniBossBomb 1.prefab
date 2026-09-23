@@ -128,7 +128,6 @@ GameObject:
   - component: {fileID: 855448487757792540}
   - component: {fileID: 4214474704706786281}
   - component: {fileID: 1962878202988432269}
-  - component: {fileID: 463634431748842068}
   m_Layer: 0
   m_Name: miniBossBomb 1
   m_TagString: Untagged
@@ -335,20 +334,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ObstacleInfo
   type: 2
---- !u!114 &463634431748842068
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1684974471160718448}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ce4c00462992547d0bfa5fbfdf523201, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ObstacleRageMover
-  moveDistance: 20
-  isTop: 1
 --- !u!1 &3518522978575707095
 GameObject:
   m_ObjectHideFlags: 0

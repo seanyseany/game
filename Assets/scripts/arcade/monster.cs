@@ -150,7 +150,7 @@ public class Monster : MonoBehaviour, IReinitializeOnEnable
         if (!CanReactToHits())
             return;
 
-        StartDie(byPlayerKill: countAsPlayerKill);
+        StartDie(byPlayerKill: countAsPlayerKill, countForCombo: true);
     }
 
     public void TakeDamage(int damage)
@@ -205,7 +205,7 @@ public class Monster : MonoBehaviour, IReinitializeOnEnable
         }
     }
 
-    private void StartDie(bool byPlayerKill)
+    private void StartDie(bool byPlayerKill, bool countForCombo = false)
     {
         if (dead)
             return;
@@ -230,6 +230,10 @@ public class Monster : MonoBehaviour, IReinitializeOnEnable
 
         if (targetAnimator != null && !string.IsNullOrEmpty(destroyTriggerName))
             targetAnimator.SetTrigger(destroyTriggerName);
+
+        // Machine-gun hits suppress rage gain but still count as kills for feedback.
+        if (byPlayerKill || countForCombo)
+            ArcadeFeedback.NotifyEnemyKilled(transform.position);
 
         if (byPlayerKill)
             AddRageOneKill();

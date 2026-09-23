@@ -2,6 +2,9 @@ using UnityEngine;
 
 public class Escalator : MonoBehaviour, IReinitializeOnEnable
 {
+    [Header("Hit Settings")]
+    [Min(1)] public int hitCount = 1;
+
     [Header("Explosion Sprites")]
     public Sprite[] breakSprites;       // Inspector에서 순서대로 3개 넣기
     public float spriteInterval = 0.2f; // 스프라이트 간 전환 속도
@@ -15,6 +18,7 @@ public class Escalator : MonoBehaviour, IReinitializeOnEnable
     private Collider2D col;
     private Rigidbody2D rb;
     private bool isBreaking = false;
+    private int currentHitCount;
     private Sprite intactSprite;
     private Coroutine breakRoutine;
     private Vector3 initialLocalPosition;
@@ -39,14 +43,11 @@ public class Escalator : MonoBehaviour, IReinitializeOnEnable
 
     private void OnEnable()
     {
-        GameData.OnRageStart += HandleRageStart;
         Reinit();
     }
 
     private void OnDisable()
     {
-        GameData.OnRageStart -= HandleRageStart;
-
         if (breakRoutine != null)
         {
             StopCoroutine(breakRoutine);
@@ -57,6 +58,7 @@ public class Escalator : MonoBehaviour, IReinitializeOnEnable
     public void Reinit()
     {
         isBreaking = false;
+        currentHitCount = 0;
 
         if (sr != null)
         {
@@ -87,20 +89,22 @@ public class Escalator : MonoBehaviour, IReinitializeOnEnable
 
     private void OnTriggerEnter2D(Collider2D other)
     {
-        if (!isBreaking && CanBreakBy(other))
-            breakRoutine = StartCoroutine(BreakAndDestroy());
+        TryRegisterHit(other);
     }
 
     private void OnCollisionEnter2D(Collision2D collision)
     {
         if (collision == null) return;
-        if (!isBreaking && CanBreakBy(collision.collider))
-            breakRoutine = StartCoroutine(BreakAndDestroy());
+        TryRegisterHit(collision.collider);
     }
 
-    private void HandleRageStart()
+    private void TryRegisterHit(Collider2D other)
     {
-        if (!isActiveAndEnabled || isBreaking)
+        if (isBreaking || !CanBreakBy(other))
+            return;
+
+        currentHitCount++;
+        if (currentHitCount < Mathf.Max(1, hitCount))
             return;
 
         breakRoutine = StartCoroutine(BreakAndDestroy());
