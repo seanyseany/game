@@ -283,6 +283,7 @@ public class Player : MonoBehaviour
     private GameObject activeRunningSmoke;
     private GameObject activeP2RageLaser;
     private GameObject activeP4RageLightning;
+    private bool nextP4NormalAnimationIsSecond;
     private bool nextP2RageAnimationIsSecond;
     private bool nextP4RageAnimationIsSecond;
     private bool skipNextP1RageLandingSmoke = false;
@@ -1477,6 +1478,8 @@ public class Player : MonoBehaviour
             {
                 zig.ConfigurePooling(fromPool, lightningPoolTag);
                 zig.damage = stats.attack;
+                zig.PlayAttackAnimation(nextP4NormalAnimationIsSecond);
+                nextP4NormalAnimationIsSecond = !nextP4NormalAnimationIsSecond;
                 zig.SetOrientation(down45);   // ← 각도만 설정, 이동 없음
             }
         }
@@ -3101,6 +3104,7 @@ public class Player : MonoBehaviour
         lives = 3;
         hp = maxHp;
         isRageMode = false;
+        nextP4NormalAnimationIsSecond = false;
         ClearP2RageLaserReference();
         StopRageSpeedEffect();
         SetAttachedRageSmokesActive(false);

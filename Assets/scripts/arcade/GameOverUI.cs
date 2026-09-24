@@ -10,6 +10,8 @@ public class GameOverUI : MonoBehaviour
 
     [Header("UI")]
     public GameObject panel;
+    [Tooltip("Canvas 아래에 있는 GameplayHUD 오브젝트")]
+    public GameObject gameplayHud;
     public TMP_Text gameOverText;  
     public Button retryButton;
     public Button quitButton;
@@ -17,20 +19,74 @@ public class GameOverUI : MonoBehaviour
     [Header("Score Texts")]
     public TMP_Text cleanScoreText;   // ENERGY
     public TMP_Text o2ScoreText;      // O2
+    public TMP_Text runScoreText;     // SCORE
 
     [Header("Scene")]
     [SerializeField] private string quitSceneName = DefaultQuitSceneName;
 
     void Awake()
     {
-        panel.SetActive(false); // 시작 시 꺼두기
+        ResolveGameOverScoreText();
+        SetGameOverVisible(false);
         retryButton.onClick.AddListener(OnRetry);
         quitButton.onClick.AddListener(OnQuit);
     }
 
+    private void ResolveGameOverScoreText()
+    {
+        if (runScoreText != null || panel == null)
+            return;
+
+        Transform scoreTransform = panel.transform.Find("Score");
+        if (scoreTransform == null)
+            return;
+
+        ArcadeScoreDisplay spriteScore = scoreTransform.GetComponent<ArcadeScoreDisplay>();
+        if (spriteScore != null)
+        {
+            spriteScore.enabled = false;
+            for (int i = 0; i < scoreTransform.childCount; i++)
+            {
+                Transform child = scoreTransform.GetChild(i);
+                if (child.name.StartsWith("Digit "))
+                    child.gameObject.SetActive(false);
+            }
+        }
+
+        runScoreText = scoreTransform.GetComponent<TMP_Text>();
+        if (runScoreText != null)
+            return;
+
+        TextMeshProUGUI text = scoreTransform.gameObject.AddComponent<TextMeshProUGUI>();
+        text.raycastTarget = false;
+
+        if (cleanScoreText != null)
+        {
+            text.font = cleanScoreText.font;
+            text.fontSharedMaterial = cleanScoreText.fontSharedMaterial;
+            text.fontSize = cleanScoreText.fontSize;
+            text.fontStyle = cleanScoreText.fontStyle;
+            text.color = cleanScoreText.color;
+            text.alignment = cleanScoreText.alignment;
+            text.enableAutoSizing = cleanScoreText.enableAutoSizing;
+            text.fontSizeMin = cleanScoreText.fontSizeMin;
+            text.fontSizeMax = cleanScoreText.fontSizeMax;
+        }
+
+        runScoreText = text;
+    }
+
+    private void SetGameOverVisible(bool visible)
+    {
+        if (panel != null)
+            panel.SetActive(visible);
+        if (gameplayHud != null)
+            gameplayHud.SetActive(!visible);
+    }
+
     public void Show()
     {
-        panel.SetActive(true);
+        SetGameOverVisible(true);
 
         if (gameOverText != null)
             gameOverText.text = "GAME OVER";
@@ -39,9 +95,11 @@ public class GameOverUI : MonoBehaviour
         int o2 = GameData.Instance.GetO2Score();
 
         if (cleanScoreText != null)
-            cleanScoreText.text = $"ENERGY: {clean}";
+            cleanScoreText.text = clean.ToString();
         if (o2ScoreText != null)
-            o2ScoreText.text = $"O2: {o2}";
+            o2ScoreText.text = o2.ToString();
+        if (runScoreText != null)
+            runScoreText.text = $"SCORE: {GameData.Instance.GetRunScore()}";
 
     }
 
@@ -49,7 +107,7 @@ public class GameOverUI : MonoBehaviour
     {
         Time.timeScale = 1f;
 
-        panel.SetActive(false);
+        SetGameOverVisible(false);
 
         // ✅ GameData 초기화
         if (GameData.Instance != null)
@@ -64,7 +122,7 @@ public class GameOverUI : MonoBehaviour
     void OnQuit()
     {
         Time.timeScale = 1f;
-        panel.SetActive(false);
+        SetGameOverVisible(false);
 
         if (GameData.Instance != null)
             GameData.Instance.PrepareForSceneTransition();

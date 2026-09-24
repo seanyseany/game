@@ -22,10 +22,18 @@ public class ArcadeFeedback : MonoBehaviour
     [Header("Life lost emoji prefabs")]
     [SerializeField] private ArcadePopup[] damageEmojiPrefabs;
 
+    [Header("Rage and mini boss feedback")]
+    [SerializeField] private ArcadePopup rageModePrefab;
+    [SerializeField] private ArcadePopup[] miniBossPositiveEmojiPrefabs;
+    [SerializeField] private ArcadePopup miniBossNegativeEmojiPrefab;
+    [SerializeField] private ArcadePopup miniBossDeathEmojiPrefab;
+
     // A revision, rather than remaining lives, also detects damage followed by healing.
     public int LifeLossRevision { get; private set; }
 
     private Transform popupRoot;
+    private ArcadePopup activePlayerEmoji;
+    private readonly Dictionary<int, ArcadePopup> activeMiniBossEmojis = new Dictionary<int, ArcadePopup>();
     private readonly List<Vector3> pendingKillPositions = new List<Vector3>(8);
     private KillPopupType nextKillPopup = KillPopupType.Good;
     private double nextKillPopupDeadline = double.NegativeInfinity;
@@ -33,11 +41,28 @@ public class ArcadeFeedback : MonoBehaviour
     private static ArcadeFeedback Current => Player.Instance != null
         ? Player.Instance.GetComponent<ArcadeFeedback>() : null;
 
+    private void OnEnable()
+    {
+        GameData.OnRageStart += HandleRageStart;
+    }
+
+    private void OnDisable()
+    {
+        GameData.OnRageStart -= HandleRageStart;
+    }
+
     public static void ShowBoom(Vector3 position)
     {
         ArcadeFeedback feedback = Current;
         if (feedback != null && feedback.isActiveAndEnabled)
             feedback.Spawn(feedback.boomPrefab, position);
+    }
+
+    public static void ShowScaledBoom(Vector3 position, float sizeMultiplier)
+    {
+        ArcadeFeedback feedback = Current;
+        if (feedback != null && feedback.isActiveAndEnabled)
+            feedback.Spawn(feedback.boomPrefab, position, sizeMultiplier: sizeMultiplier);
     }
 
     public static void NotifyEnemyKilled(Vector3 enemyPosition)
@@ -91,11 +116,48 @@ public class ArcadeFeedback : MonoBehaviour
     public void NotifyLifeLost(bool showEmoji = true)
     {
         LifeLossRevision++;
+        QueueNegativeEmojiForActiveMiniBosses();
+        RemovePlayerEmoji();
         if (showEmoji)
-            ShowRandomEmoji(damageEmojiPrefabs, true);
+            ShowRandomEmojiAt(damageEmojiPrefabs, transform.position, transform, true);
+    }
+
+    public static void ShowMiniBossAttackResult(Transform miniBoss, bool showNegativeEmoji)
+    {
+        ArcadeFeedback feedback = Current;
+        if (feedback == null || !feedback.isActiveAndEnabled || miniBoss == null) return;
+
+        if (showNegativeEmoji)
+        {
+            feedback.Spawn(feedback.miniBossNegativeEmojiPrefab, miniBoss.position, miniBoss);
+            return;
+        }
+
+        feedback.ShowRandomEmojiAt(
+            feedback.miniBossPositiveEmojiPrefabs,
+            miniBoss.position,
+            miniBoss);
+    }
+
+    public static void ShowMiniBossDeath(Transform miniBoss)
+    {
+        ArcadeFeedback feedback = Current;
+        if (feedback == null || !feedback.isActiveAndEnabled || miniBoss == null) return;
+
+        feedback.RemoveMiniBossEmoji(miniBoss.GetInstanceID());
+        feedback.Spawn(feedback.miniBossDeathEmojiPrefab, miniBoss.position);
     }
 
     public void ShowRandomEmoji(ArcadePopup[] prefabs, bool followPlayer)
+    {
+        ShowRandomEmojiAt(prefabs, transform.position, followPlayer ? transform : null);
+    }
+
+    private void ShowRandomEmojiAt(
+        ArcadePopup[] prefabs,
+        Vector3 position,
+        Transform followTarget,
+        bool isDamageEmoji = false)
     {
         if (!isActiveAndEnabled || prefabs == null || prefabs.Length == 0) return;
 
@@ -107,12 +169,58 @@ public class ArcadeFeedback : MonoBehaviour
             if (prefab != null && Random.Range(0, ++validCount) == 0)
                 selected = prefab;
         }
-        Spawn(selected, transform.position, followPlayer ? transform : null);
+        Spawn(selected, position, followTarget, isDamageEmoji);
     }
 
-    private bool Spawn(ArcadePopup prefab, Vector3 position, Transform followTarget = null)
+    private void HandleRageStart()
+    {
+        Spawn(rageModePrefab, new Vector3(2.4f, 0.5f, 0f));
+    }
+
+    private void QueueNegativeEmojiForActiveMiniBosses()
+    {
+        if (miniBossNegativeEmojiPrefab == null) return;
+
+        MiniBoss[] miniBosses = FindObjectsByType<MiniBoss>(
+            FindObjectsInactive.Exclude,
+            FindObjectsSortMode.None);
+        for (int i = 0; i < miniBosses.Length; i++)
+        {
+            MiniBoss miniBoss = miniBosses[i];
+            if (miniBoss == null || !miniBoss.IsFeedbackActive) continue;
+            miniBoss.QueuePlayerDamageReaction();
+        }
+    }
+
+    private bool Spawn(
+        ArcadePopup prefab,
+        Vector3 position,
+        Transform followTarget = null,
+        bool isDamageEmoji = false,
+        float sizeMultiplier = 1f)
     {
         if (prefab == null) return false;
+        if (prefab.IsEmoji && GameData.Instance != null && GameData.Instance.rageMode)
+            return false;
+
+        bool isPlayerFollowingEmoji = prefab.IsEmoji && followTarget == transform;
+        if (isPlayerFollowingEmoji && activePlayerEmoji != null)
+        {
+            // Expression zones can overlap or finish close together. Keep the
+            // current ordinary emoji; only life-loss feedback may replace it.
+            if (!isDamageEmoji)
+                return false;
+
+            RemovePlayerEmoji();
+        }
+
+        MiniBoss miniBoss = prefab.IsEmoji && followTarget != null
+            ? followTarget.GetComponent<MiniBoss>()
+            : null;
+        int miniBossId = miniBoss != null ? miniBoss.GetInstanceID() : 0;
+        if (miniBossId != 0)
+            RemoveMiniBossEmoji(miniBossId);
+
         if (popupRoot == null)
         {
             GameObject root = new GameObject("Arcade Feedback Popups");
@@ -120,8 +228,31 @@ public class ArcadeFeedback : MonoBehaviour
             popupRoot = root.transform;
         }
         ArcadePopup popup = Instantiate(prefab, position, Quaternion.identity, popupRoot);
-        popup.Play(position, followTarget);
+        popup.Play(position, followTarget, sizeMultiplier);
+        if (isPlayerFollowingEmoji)
+            activePlayerEmoji = popup;
+        if (miniBossId != 0)
+            activeMiniBossEmojis[miniBossId] = popup;
         return true;
+    }
+
+    private void RemoveMiniBossEmoji(int miniBossId)
+    {
+        if (!activeMiniBossEmojis.Remove(miniBossId, out ArcadePopup popup)) return;
+        RemovePopup(popup);
+    }
+
+    private void RemovePlayerEmoji()
+    {
+        RemovePopup(activePlayerEmoji);
+        activePlayerEmoji = null;
+    }
+
+    private static void RemovePopup(ArcadePopup popup)
+    {
+        if (popup == null) return;
+        popup.gameObject.SetActive(false);
+        Destroy(popup.gameObject);
     }
 
     public void ResetFeedback()
@@ -130,6 +261,8 @@ public class ArcadeFeedback : MonoBehaviour
         pendingKillPositions.Clear();
         nextKillPopup = KillPopupType.Good;
         nextKillPopupDeadline = double.NegativeInfinity;
+        activePlayerEmoji = null;
+        activeMiniBossEmojis.Clear();
         if (popupRoot != null)
         {
             popupRoot.gameObject.SetActive(false);

@@ -100,6 +100,7 @@ public class MiniBoss : MonoBehaviour
     private Coroutine hitFlashRoutine;
     private Coroutine deathRoutine;
     private Coroutine shakeRoutine;
+    private Coroutine attackReactionRoutine;
     private MiniBossState state;
     private float currentGroundY;
     private float fireTargetX;
@@ -117,11 +118,22 @@ public class MiniBoss : MonoBehaviour
     private float baseColliderHeight = 1f;
     private float baseColliderWidth = 1f;
     private bool landTriggerPlayedThisFall;
+    private bool gateDamagedDuringAttack;
+    private bool attackReactionScheduled;
+    private bool playerDamageReactionPending;
     private readonly RaycastHit2D[] groundHits = new RaycastHit2D[8];
     private readonly List<Collider2D> ignoredColliders = new List<Collider2D>(64);
     private readonly List<Collider2D> temporarilyIgnoredGateColliders = new List<Collider2D>(8);
     private readonly List<Collider2D> temporarilyIgnoredImpactColliders = new List<Collider2D>(16);
     private readonly List<Collider2D> temporarilyIgnoredGroundColliders = new List<Collider2D>(16);
+
+    public bool IsFeedbackActive => isActiveAndEnabled && !isDead;
+
+    public void QueuePlayerDamageReaction()
+    {
+        if (IsFeedbackActive)
+            playerDamageReactionPending = true;
+    }
 
     private void Awake()
     {
@@ -170,6 +182,13 @@ public class MiniBoss : MonoBehaviour
             StopCoroutine(mainRoutine);
             mainRoutine = null;
         }
+
+        if (attackReactionRoutine != null)
+        {
+            StopCoroutine(attackReactionRoutine);
+            attackReactionRoutine = null;
+        }
+        playerDamageReactionPending = false;
 
         if (hitFlashRoutine != null)
         {
@@ -287,6 +306,9 @@ public class MiniBoss : MonoBehaviour
         returnTargetX = fireTargetX;
         deathPendingUntilGround = false;
         landTriggerPlayedThisFall = false;
+        gateDamagedDuringAttack = false;
+        attackReactionScheduled = false;
+        playerDamageReactionPending = false;
 
         RestoreSpriteColors();
         ConfigureForKinematicMovement();
@@ -365,6 +387,8 @@ public class MiniBoss : MonoBehaviour
         state = MiniBossState.FallingToAttack;
         attackLaunchPending = true;
         impactResolved = false;
+        gateDamagedDuringAttack = false;
+        attackReactionScheduled = false;
 
         SetAnimatorTrigger(AttackTriggerName);
         if (transformAnimationDuration > 0f)
@@ -432,7 +456,11 @@ public class MiniBoss : MonoBehaviour
     {
         GateHealth gate = GateHealth.Instance;
         if (gate != null)
+        {
+            int hitsBeforeAttack = gate.CurrentHits;
             gate.TakeBossMissileHit();
+            gateDamagedDuringAttack |= gate.CurrentHits > hitsBeforeAttack;
+        }
 
         ResolveAttackImpact(gate, null);
     }
@@ -561,6 +589,13 @@ public class MiniBoss : MonoBehaviour
             mainRoutine = null;
         }
 
+        if (attackReactionRoutine != null)
+        {
+            StopCoroutine(attackReactionRoutine);
+            attackReactionRoutine = null;
+        }
+        playerDamageReactionPending = false;
+
         if (hitCollider != null)
             hitCollider.enabled = false;
 
@@ -569,6 +604,7 @@ public class MiniBoss : MonoBehaviour
         body2D.simulated = false;
 
         SetAnimatorTrigger(DieTriggerName);
+        ArcadeFeedback.ShowMiniBossDeath(transform);
 
         if (deathRoutine != null)
             StopCoroutine(deathRoutine);
@@ -1335,7 +1371,34 @@ public class MiniBoss : MonoBehaviour
         ApplyWalkAnimation();
 
         if (landedFromAttack)
+        {
             CameraShakeManager.ShakeDefaultHalf();
+            bool showNegativeEmoji = gateDamagedDuringAttack || playerDamageReactionPending;
+            playerDamageReactionPending = false;
+            ScheduleAttackReaction(showNegativeEmoji);
+        }
+    }
+
+    private void ScheduleAttackReaction(bool showNegativeEmoji)
+    {
+        if (attackReactionScheduled) return;
+        attackReactionScheduled = true;
+
+        if (attackReactionRoutine != null)
+            StopCoroutine(attackReactionRoutine);
+        attackReactionRoutine = StartCoroutine(CoShowAttackReaction(showNegativeEmoji));
+    }
+
+    private IEnumerator CoShowAttackReaction(bool showNegativeEmoji)
+    {
+        float delay = Random.Range(0f, 2f);
+        if (delay > 0f)
+            yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(delay);
+
+        if (isActiveAndEnabled && !isDead)
+            ArcadeFeedback.ShowMiniBossAttackResult(transform, showNegativeEmoji);
+
+        attackReactionRoutine = null;
     }
 
     private void ForceRecoverToWalkOnFloor()

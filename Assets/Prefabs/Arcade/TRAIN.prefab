@@ -1,5 +1,36 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!1 &258310767552248577
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1203328839474825477}
+  m_Layer: 0
+  m_Name: smokepos (1)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1203328839474825477
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 258310767552248577}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -1.43, y: 1.36, z: 5}
+  m_LocalScale: {x: 1.0329871, y: 0.8741392, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2499898950276734393}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &411430262965900060
 GameObject:
   m_ObjectHideFlags: 0
@@ -282,15 +313,17 @@ MonoBehaviour:
   normalRandomMaxOffset: 0.5
   normalRandomMoveDuration: 1
   ragePushBackDistance: 4
-  ragePushBackDuration: 0.2
+  ragePushBackDuration: 1
   rageRandomMinOffset: 2.2
   rageRandomMaxOffset: 3.4
-  rageRandomMoveDuration: 1
+  rageRandomMoveDuration: 2
   rageReturnDuration: 1
   playerBoardingPoint: {fileID: 3434605306491510980}
-  playerExitPoint: {fileID: 3434605306491510980}
   playerBoardingDuration: 0.35
   playerExitDelay: 0.1
+  playerGateOpenLeadTime: 0.2
+  playerExitGateOpenDelay: 1.5
+  playerExitGatePreOpenLeadTime: 1
 --- !u!1 &1005564321032429924
 GameObject:
   m_ObjectHideFlags: 0
@@ -644,15 +677,15 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 10
-  m_Sprite: {fileID: 5937316028250201651, guid: 43eb58da166694862bfd6aedad0c566a, type: 3}
+  m_Sprite: {fileID: -6404741104382166878, guid: 4c94fc293f5d84f6296ec463d404c7a5, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 2.23, y: 1.57}
+  m_Size: {x: 2.15, y: 1.25}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
-  m_WasSpriteAssigned: 1
+  m_WasSpriteAssigned: 0
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!95 &5467044977788343998
@@ -1359,7 +1392,7 @@ Transform:
   m_GameObject: {fileID: 5018829375646612442}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -3.0202098, y: -0.78, z: 0}
+  m_LocalPosition: {x: -3.08, y: -0.78, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1525,7 +1558,9 @@ Transform:
   m_LocalPosition: {x: -3.09621, y: -0.6780399, z: -5}
   m_LocalScale: {x: 0.9680662, y: 1.1439825, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 192630127732922525}
+  - {fileID: 1203328839474825477}
   m_Father: {fileID: 4496518749673601240}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!212 &4503703151903942220
@@ -1664,9 +1699,8 @@ MonoBehaviour:
   - {fileID: -7551146303534807205, guid: 10f1cb22d3392424e88e9e854808e247, type: 3}
   brokenSprite: {fileID: -4630580825098580038, guid: 10f1cb22d3392424e88e9e854808e247, type: 3}
   maxHits: 3
-  smokeFrontLocalOffset: {x: -1.5, y: 0.42, z: 0}
-  smokeFrontLocalOffset2: {x: -1.5, y: 0.42, z: 0}
-  smokeBackLocalOffset: {x: -2, y: 2.24, z: 0}
+  gateSmokeSpawnPoint: {fileID: 192630127732922525}
+  gateSmokeBackSpawnPoint: {fileID: 1203328839474825477}
   gateDamageFxPrefab: {fileID: 7520643031545782398, guid: caf03cd1baa0a4eeaba1b80c2a067f5d, type: 3}
   gateDamageFxPoolTag: GateDamageFx
   gateDamageFxLocalOffset: {x: 1, y: 0.87, z: 0}
@@ -2164,6 +2198,37 @@ Rigidbody2D:
   m_SleepingMode: 1
   m_CollisionDetection: 1
   m_Constraints: 0
+--- !u!1 &8197662607281133968
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 192630127732922525}
+  m_Layer: 0
+  m_Name: smokepos
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &192630127732922525
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8197662607281133968}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -1.85, y: -0.08038585, z: 5}
+  m_LocalScale: {x: 1.0329871, y: 0.8741392, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2499898950276734393}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &8384650440577777555
 GameObject:
   m_ObjectHideFlags: 0

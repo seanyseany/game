@@ -3,6 +3,9 @@ using System.Collections;
 
 public class GateHealth : MonoBehaviour
 {
+    private const string GateSmoke1PoolTag = "GateSmoke";
+    private const string GateSmoke2PoolTag = "GateSmokeBack";
+
     public static GateHealth Instance;
     public static System.Action OnOpenHoldStarted;
 
@@ -16,12 +19,10 @@ public class GateHealth : MonoBehaviour
     public int maxHits = 3; // 3회 맞으면 파괴
 
     [Header("Gate Smoke Spawn Positions")]
-    [Tooltip("첫 번째 문 피격 때 GateSmoke가 생성될 로컬 오프셋")]
-    public Vector3 smokeFrontLocalOffset = Vector3.zero;
-    [Tooltip("추가 연출용 보조 오프셋(현재 기본 스폰 로직에서는 미사용)")]
-    public Vector3 smokeFrontLocalOffset2 = Vector3.zero;
-    [Tooltip("두 번째 문 피격 때 GateSmokeBack이 생성될 로컬 오프셋")]
-    public Vector3 smokeBackLocalOffset  = Vector3.zero;
+    [Tooltip("트레인 하위에 만든 GateSmoke 스폰 위치를 등록하세요.")]
+    public Transform gateSmokeSpawnPoint;
+    [Tooltip("트레인 하위에 만든 GateSmokeBack 스폰 위치를 등록하세요.")]
+    public Transform gateSmokeBackSpawnPoint;
 
     [Header("Damage FX")]
     public GameObject gateDamageFxPrefab;
@@ -32,6 +33,8 @@ public class GateHealth : MonoBehaviour
     private int hitCount = 0;
     private SpriteRenderer sr;
     private Coroutine animCo;
+    private GameObject activeGateSmoke1;
+    private GameObject activeGateSmoke2;
 
     private enum GateState { Closed, Opening, Open, Closing, Broken }
     private enum GateVisualPhase { Closed, HalfOpen, Open }
@@ -75,17 +78,7 @@ public class GateHealth : MonoBehaviour
         hitCount++;
         CameraShakeManager.ShakeDefaultHalf();
         SpawnGateDamageFx();
-
-        if (hitCount == 1)
-        {
-            if (ObjectPool.Instance != null && ObjectPool.Instance.HasPool("GateSmoke"))
-                ObjectPool.Instance.SpawnFromPool("GateSmoke", transform.TransformPoint(smokeFrontLocalOffset), Quaternion.identity);
-        }
-        else if (hitCount == 2)
-        {
-            if (ObjectPool.Instance != null && ObjectPool.Instance.HasPool("GateSmokeBack"))
-                ObjectPool.Instance.SpawnFromPool("GateSmokeBack", transform.TransformPoint(smokeBackLocalOffset), Quaternion.identity);
-        }
+        SpawnSmokeForCurrentHit();
 
         if (hitCount >= maxHits)
         {
@@ -99,6 +92,51 @@ public class GateHealth : MonoBehaviour
         }
 
         ApplyCurrentVisualSprite();
+    }
+
+    private void SpawnSmokeForCurrentHit()
+    {
+        if (hitCount == 1)
+            activeGateSmoke1 = SpawnGateSmoke(GateSmoke1PoolTag, gateSmokeSpawnPoint);
+        else if (hitCount == 2)
+            activeGateSmoke2 = SpawnGateSmoke(GateSmoke2PoolTag, gateSmokeBackSpawnPoint);
+    }
+
+    private static GameObject SpawnGateSmoke(string poolTag, Transform spawnPoint)
+    {
+        if (spawnPoint == null || ObjectPool.Instance == null || !ObjectPool.Instance.HasPool(poolTag))
+            return null;
+
+        GameObject smoke = ObjectPool.Instance.SpawnFromPool(poolTag, spawnPoint.position, spawnPoint.rotation);
+        if (smoke == null)
+            return null;
+
+        smoke.transform.SetParent(spawnPoint, true);
+        smoke.transform.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
+        return smoke;
+    }
+
+    private static void ReturnGateSmoke(string poolTag, GameObject smoke)
+    {
+        if (smoke == null)
+            return;
+
+        if (ObjectPool.Instance != null && ObjectPool.Instance.HasPool(poolTag))
+        {
+            ObjectPool.Instance.ReturnToPool(poolTag, smoke);
+            return;
+        }
+
+        smoke.transform.SetParent(null, true);
+        smoke.SetActive(false);
+    }
+
+    private void ResetGateSmokes()
+    {
+        ReturnGateSmoke(GateSmoke1PoolTag, activeGateSmoke1);
+        ReturnGateSmoke(GateSmoke2PoolTag, activeGateSmoke2);
+        activeGateSmoke1 = null;
+        activeGateSmoke2 = null;
     }
 
     public void OpenGate()
@@ -193,6 +231,8 @@ public class GateHealth : MonoBehaviour
     {
         if (animCo != null) StopCoroutine(animCo);
         animCo = null;
+
+        ResetGateSmokes();
 
         hitCount = 0;
         openHoldCount = 0;

@@ -241,8 +241,7 @@ public class Bomb : MonoBehaviour
         if (exploded) return;
         exploded = true;
 
-        CameraShakeManager.ShakeDefaultHalf();
-        ArcadeFeedback.ShowBoom(transform.position);
+        ArcadeFeedback.ShowScaledBoom(transform.position, 0.5f);
 
         GameObject hb = null;
         if (ObjectPool.Instance != null)

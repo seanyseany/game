@@ -37,7 +37,8 @@ public class GameData : MonoBehaviour
 
     [Header("Score")]
     public int score = 0;
-    private float survivalTime = 0f;
+    private int runScore = 0;
+    private float runScoreElapsed;
     private int o2Score = 0;
 
     public static System.Action OnRageStart;
@@ -137,7 +138,7 @@ public class GameData : MonoBehaviour
 
         if (gameOver) return;
 
-        survivalTime += Time.deltaTime;
+        UpdateRunScore(Time.deltaTime);
 
         if (debugForceRage)
         {
@@ -511,8 +512,9 @@ public class GameData : MonoBehaviour
         stageSpeedMult = defaultStageSpeedMult;
 
         score = 0;
+        runScore = 0;
+        runScoreElapsed = 0f;
         o2Score = 0;
-        survivalTime = 0f;
 
         MachineGunObstacle.ClearAllSpawnedObstacles();
 
@@ -767,7 +769,36 @@ public class GameData : MonoBehaviour
         return score;
     }
 
+    public int GetRunScore() => runScore;
+
     public int GetO2Score() => o2Score;
+
+    private void UpdateRunScore(float deltaTime)
+    {
+        const float normalInterval = 0.4f;
+        const float fastInterval = 0.2f;
+        const float speedTolerance = 0.0001f;
+
+        if (RageTransformFreezeController.IsGameplayPauseActive)
+            return;
+
+        if (stageSpeedMult < defaultStageSpeedMult - speedTolerance)
+        {
+            runScoreElapsed = 0f;
+            return;
+        }
+
+        float interval = stageSpeedMult > defaultStageSpeedMult + speedTolerance
+            ? fastInterval
+            : normalInterval;
+
+        runScoreElapsed += Mathf.Max(0f, deltaTime);
+        while (runScoreElapsed >= interval)
+        {
+            runScore++;
+            runScoreElapsed -= interval;
+        }
+    }
 
     public Coroutine TweenStageSpeedMult(float targetMult, float duration)
     {
