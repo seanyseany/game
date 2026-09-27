@@ -67,6 +67,12 @@ public class GameData : MonoBehaviour
     public float stopTime = 0.5f;
     public float recoverTime = 1.0f;
 
+    [Header("Escalator Contact")]
+    [Tooltip("에스컬레이터 접촉 후 설정된 지연 시간이 지나면 감속합니다. 접촉이 끊겨도 진행하며 정상 속도로 복구되면 재발동 가능합니다. 0 = 감속 없음, 1 = 완전 정지. 감속/유지 시간은 decelerateTime, stopTime, 복구 시간은 recoverTime × 감속 강도입니다.")]
+    [Range(0f, 1f)] public float escalatorSlowdownStrength = 1f;
+    [Tooltip("에스컬레이터에 닿은 뒤 감속을 시작하기까지의 시간(초). 0이면 즉시 시작합니다.")]
+    [Min(0f)] public float escalatorSlowdownDelay = 0.5f;
+
     public enum ObstacleContactState
     {
         None,
@@ -250,7 +256,11 @@ public class GameData : MonoBehaviour
         stageSpeedMult = defaultStageSpeedMult * rageSpeedFactor;
 
         var player = ResolvePlayer();
-        if (player != null) player.ActivateRageMode(seconds);
+        if (player != null)
+        {
+            player.ClearChewingEffects();
+            player.ActivateRageMode(seconds);
+        }
 
         OnRageStart?.Invoke();
     }
@@ -325,6 +335,7 @@ public class GameData : MonoBehaviour
     {
         if (obstacleState == ObstacleContactState.Decelerating ||
             obstacleState == ObstacleContactState.Pushing ||
+            obstacleState == ObstacleContactState.Stopped ||
             obstacleState == ObstacleContactState.Recovering)
         {
             return rageMode
@@ -355,6 +366,71 @@ public class GameData : MonoBehaviour
 
         if (Instance != null)
             Instance.ApplyPendingSelectedPlayer();
+    }
+
+    public void OnEscalatorContact(Escalator source)
+    {
+        if (source == null || source.IsBreaking || !source.isActiveAndEnabled)
+            return;
+
+        float strength = Mathf.Clamp01(escalatorSlowdownStrength);
+        if (strength <= 0f || rageMode || gameOver || IsResetting)
+            return;
+
+        // 최초 접촉부터 속도 복구까지 하나의 시퀀스로 묶어 블럭 사이 틈에서 재시작하지 않는다.
+        if (obstacleContactCount > 0 || obstacleRoutine != null)
+            return;
+
+        obstacleRoutine = StartCoroutine(EscalatorContactSequence(source, strength));
+    }
+
+    private IEnumerator EscalatorContactSequence(Escalator source, float strength)
+    {
+        int sourceVersion = source.InitializationVersion;
+        float delayEndTime = Time.time + Mathf.Max(0f, escalatorSlowdownDelay);
+        while (true)
+        {
+            // 접촉 종료는 무시하지만, 파괴/비활성화/풀 재사용된 블럭의 예약은 취소한다.
+            if (source == null || source.IsBreaking || !source.isActiveAndEnabled ||
+                source.InitializationVersion != sourceVersion)
+            {
+                obstacleRoutine = null;
+                yield break;
+            }
+
+            if (Time.time >= delayEndTime)
+                break;
+
+            yield return null;
+        }
+
+        if (speedTween != null)
+        {
+            StopCoroutine(speedTween);
+            speedTween = null;
+        }
+
+        float baseMult = stageSpeedMult;
+        float slowedMult = baseMult * (1f - strength);
+        var player = ResolvePlayer();
+
+        obstacleState = ObstacleContactState.Decelerating;
+        yield return TweenStageSpeedMultCoroutine(baseMult, slowedMult, decelerateTime, progress =>
+        {
+            if (player != null)
+                player.ShowEscalatorChewingProgress(progress);
+        });
+
+        obstacleState = ObstacleContactState.Stopped;
+        yield return new WaitForSeconds(Mathf.Max(0f, stopTime));
+
+        obstacleState = ObstacleContactState.Recovering;
+        yield return TweenStageSpeedMultCoroutine(slowedMult, baseMult, recoverTime * strength);
+
+        if (player != null)
+            player.ClearChewingEffects();
+        obstacleState = ObstacleContactState.None;
+        obstacleRoutine = null;
     }
 
     // ===== Obstacle contact control =====
@@ -423,7 +499,12 @@ public class GameData : MonoBehaviour
         obstacleState = ObstacleContactState.Recovering;
         yield return TweenStageSpeedMultCoroutine(pushMult, baseMult, recoverTime);
 
+        // 일반 장애물이 에스컬레이터 감속을 대체했을 때도 복구 후 이펙트를 정리한다.
+        var player = ResolvePlayer();
+        if (player != null)
+            player.ClearChewingEffects();
         obstacleState = ObstacleContactState.None;
+        obstacleRoutine = null;
     }
 
     // ------------------ RESET ------------------
@@ -678,6 +759,9 @@ public class GameData : MonoBehaviour
         gameOver = true;
         AwardVillageArcadeRewardsOnce();
         OnGameOver?.Invoke();
+        var player = ResolvePlayer();
+        if (player != null)
+            player.ClearChewingEffects();
 
         if (obstacleRoutine != null)
         {
@@ -824,7 +908,7 @@ public class GameData : MonoBehaviour
         speedTween = null;
     }
 
-    private IEnumerator TweenStageSpeedMultCoroutine(float from, float to, float duration)
+    private IEnumerator TweenStageSpeedMultCoroutine(float from, float to, float duration, System.Action<float> onProgress = null)
     {
         if (forceStopStage) yield break;
 
@@ -834,10 +918,12 @@ public class GameData : MonoBehaviour
         while (t < duration)
         {
             stageSpeedMult = Mathf.Lerp(from, to, t / duration);
+            onProgress?.Invoke(Mathf.Clamp01(t / duration));
             t += Time.deltaTime;
             yield return null;
         }
         stageSpeedMult = to;
+        onProgress?.Invoke(1f);
     }
 
     private void ForceStopRage()

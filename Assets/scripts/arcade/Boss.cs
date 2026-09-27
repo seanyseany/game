@@ -16,6 +16,9 @@ public class Boss : MonoBehaviour, IReinitializeOnEnable
     public Slider hpSlider;
     public Slider timerSlider;
 
+    [Header("Hit Count")]
+    [SerializeField] private HitCount hitCountPrefab;
+
     [Header("Enter (World)")]
     public Vector3 enterTargetWorldPos = new Vector3(-2.5f, 1.4f, 0f);
     public float enterMoveTime = 2f;
@@ -919,6 +922,8 @@ public class Boss : MonoBehaviour, IReinitializeOnEnable
         hp -= appliedDamage;
         if (hp < 0) hp = 0;
 
+        SpawnHitCount();
+
         SpawnFollowLocal(breakAnimPoolTag, breakAnimPrefab, breakAnimLocalOffset);
 
         UpdateBossUI_HPOnly();
@@ -937,6 +942,13 @@ public class Boss : MonoBehaviour, IReinitializeOnEnable
     public void TakeDamage(int amount)
     {
         TakeDamage((float)amount);
+    }
+
+    private void SpawnHitCount()
+    {
+        if (hitCountPrefab == null) return;
+        HitCount popup = Instantiate(hitCountPrefab, transform.position, Quaternion.identity);
+        popup.Play(HitCount.CalculateValue(maxHp));
     }
 
     private void TrySpawnHpThresholdAnims()

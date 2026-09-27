@@ -27,6 +27,11 @@ public class ZigzagLightning : MonoBehaviour, IRageTransformPauseHandler
     [Tooltip("두 번째 공격 애니메이션. 비워 두면 첫 번째 애니메이션을 사용합니다.")]
     [SerializeField] private AnimationClip secondAttackAnimation;
 
+    private Player owner;
+    public Player Owner => owner;
+    public void DespawnNow() => Despawn();
+    public void SetOwner(Player value) => owner = value;
+
     private Animator animator;
     private AnimatorOverrideController attackAnimatorOverride;
     private AnimationClip originalAttackAnimation;
@@ -52,6 +57,7 @@ public class ZigzagLightning : MonoBehaviour, IRageTransformPauseHandler
 
     private void OnEnable()
     {
+        owner = null;
         hitTargets.Clear();
         if (hitCollider != null)
             hitCollider.enabled = colliderEnabledOnSpawn;

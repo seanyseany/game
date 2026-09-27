@@ -18,6 +18,8 @@ public class Escalator : MonoBehaviour, IReinitializeOnEnable
     private Collider2D col;
     private Rigidbody2D rb;
     private bool isBreaking = false;
+    public bool IsBreaking => isBreaking;
+    public int InitializationVersion { get; private set; }
     private int currentHitCount;
     private Sprite intactSprite;
     private Coroutine breakRoutine;
@@ -57,6 +59,7 @@ public class Escalator : MonoBehaviour, IReinitializeOnEnable
 
     public void Reinit()
     {
+        InitializationVersion++;
         isBreaking = false;
         currentHitCount = 0;
 

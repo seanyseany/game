@@ -38,6 +38,7 @@ public class PlayerAnimOverride : MonoBehaviour
     public AnimationClip[] rageLandClips;
     public AnimationClip[] rageTransformClips;
 
+    private Player owner;
     private AnimatorOverrideController aoc;
     private int cachedType = -1;
     private bool isRageMode = false;
@@ -45,6 +46,7 @@ public class PlayerAnimOverride : MonoBehaviour
 
     void Awake()
     {
+        owner = GetComponent<Player>();
         if (!anim) anim = GetComponent<Animator>();
 
         // AnimatorOverrideController 생성 (HeroBase 기반)
@@ -60,7 +62,7 @@ public class PlayerAnimOverride : MonoBehaviour
     private IEnumerator DelayedInit()
     {
         // GameData.Instance가 완전히 준비될 때까지 대기
-        yield return new WaitUntil(() => GameData.Instance != null);
+        yield return new WaitUntil(() => owner != null || GameData.Instance != null);
         ApplyOverrides(force: true);
     }
 
@@ -78,9 +80,9 @@ public class PlayerAnimOverride : MonoBehaviour
     // ✅ 외부에서 호출 가능하도록 public
     public void ApplyOverrides(bool force = false)
     {
-        if (aoc == null || GameData.Instance == null) return;
+        if (aoc == null || (owner == null && GameData.Instance == null)) return;
 
-        int i = Mathf.Clamp(GameData.Instance.selectedPlayerType, 1, 5) - 1;
+        int i = Mathf.Clamp(owner != null ? owner.CharacterType : GameData.Instance.selectedPlayerType, 1, 5) - 1;
         if (!force && cachedType == i) return;
 
         var map = new List<KeyValuePair<AnimationClip, AnimationClip>>();
@@ -127,9 +129,9 @@ public class PlayerAnimOverride : MonoBehaviour
 
     public AnimationClip GetCurrentRageTransformClip()
     {
-        if (GameData.Instance == null) return baseTransform;
+        if (owner == null && GameData.Instance == null) return baseTransform;
 
-        int i = Mathf.Clamp(GameData.Instance.selectedPlayerType, 1, 5) - 1;
+        int i = Mathf.Clamp(owner != null ? owner.CharacterType : GameData.Instance.selectedPlayerType, 1, 5) - 1;
         return SafeGet(rageTransformClips, i) ?? baseTransform;
     }
 

@@ -4,6 +4,48 @@ using System.Collections.Generic;
 
 public class Player : MonoBehaviour
 {
+
+    // Virtual context preserves the arcade controller and all serialized tuning in race slots.
+    protected virtual bool UsesArcadeSystems => true;
+    public virtual int CharacterType => GameData.Instance != null ? GameData.Instance.selectedPlayerType : 1;
+    protected virtual int CharacterLevel => GameData.Instance != null ? GameData.Instance.playerLevels[CharacterType] : 1;
+    private bool HasCharacterContext => !UsesArcadeSystems || GameData.Instance != null;
+    protected virtual bool ReadKey(KeyCode key) => Input.GetKey(key);
+    protected virtual bool ReadKeyDown(KeyCode key) => Input.GetKeyDown(key);
+    protected virtual bool ReadKeyUp(KeyCode key) => Input.GetKeyUp(key);
+    protected virtual void OnPlayerDied() => GameData.Instance?.TriggerGameOver();
+    protected virtual void OnStompStarted() { }
+    protected virtual void OnObstacleContactStarted()
+    {
+        if (UsesArcadeSystems && GameData.Instance != null) GameData.Instance.BeginObstacleContact();
+    }
+    protected virtual void OnObstacleContactEnded()
+    {
+        if (UsesArcadeSystems && GameData.Instance != null) GameData.Instance.EndObstacleContact();
+    }
+    protected bool AttackInProgress => isAttacking;
+    protected bool Grounded => isGrounded;
+
+    protected void RefreshCharacterStats()
+    {
+        stats = StatsManager.GetPlayerStats(CharacterType, Mathf.Max(1, CharacterLevel));
+        if (animOverride != null) animOverride.ApplyOverrides(true);
+    }
+
+    protected void InterruptForRaceKnockback()
+    {
+        StopAllCoroutines();
+        StopGroundedAttackRoutine();
+        StopLandingRoutine();
+        EndP3AttackPhysicsLock();
+        isAttacking = isLanding = hasLanded = attackQueued = p3NormalAttackQueued = false;
+        isInvincible = false;
+        rb.gravityScale = cachedGravity;
+        foreach (var hitbox in GetComponentsInChildren<Hitbox>())
+            if (hitbox.Owner == this) hitbox.DespawnNow();
+        ChangeAnimation("Hurt");
+    }
+
     private enum RageSmokeDirection
     {
         None,
@@ -218,6 +260,20 @@ public class Player : MonoBehaviour
     public float runningSmokeNormalSpeed = 1f;
     public float runningSmokeRageSpeed = 1.5f;
 
+    [Header("Escalator Chewing Effects")]
+    [Tooltip("설정된 감속량의 1/3에 도달하면 플레이어 자식으로 생성합니다.")]
+    public GameObject chewingEffect1Prefab;
+    public Vector2 chewingEffect1LocalPosition;
+    [Tooltip("설정된 감속량의 2/3에 도달하면 추가로 생성합니다.")]
+    public GameObject chewingEffect2Prefab;
+    public Vector2 chewingEffect2LocalPosition;
+    [Tooltip("설정된 감속량 전체에 도달하면 추가로 생성합니다. 속도 복구 후 모두 즉시 제거합니다.")]
+    public GameObject chewingEffect3Prefab;
+    public Vector2 chewingEffect3LocalPosition;
+
+    private readonly List<GameObject> chewingEffects = new List<GameObject>(3);
+    private int chewingEffectStage;
+
 
     [Header("Obstacle SlowMo Reposition")]
     public float slowToReverseDuration = 1f;   // 6 -> -2 (보간 1초)
@@ -300,10 +356,13 @@ public class Player : MonoBehaviour
             bar.SetHealth(lives);
     }
 
-    void Awake()
+    protected virtual void Awake()
     {
-        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
-        Instance = this;
+        if (UsesArcadeSystems)
+        {
+            if (Instance != null && Instance != this) { Destroy(gameObject); return; }
+            Instance = this;
+        }
 
         if (!rb) rb = GetComponent<Rigidbody2D>();
         if (!anim) anim = GetComponent<Animator>();
@@ -313,14 +372,14 @@ public class Player : MonoBehaviour
         cachedGravity = rb.gravityScale;
         currentWalkAnimSpeed = baseWalkAnimSpeed;
         anim.speed = baseWalkAnimSpeed;
-        SetupRageTransformCollider();
+        if (UsesArcadeSystems) SetupRageTransformCollider();
         ApplyJumpParticleMaterial(isRageMode);
 
         EnsureEffectPoolTagIsolation();
         PrewarmEffectPools();
     }
 
-    void Update()
+    protected virtual void Update()
     {
         if (isDead)
         {
@@ -439,7 +498,7 @@ public class Player : MonoBehaviour
         return true;
     }
 
-    void LateUpdate()
+    protected virtual void LateUpdate()
     {
         SyncRunningSmoke();
         SyncRageTransformSmokes();
@@ -776,8 +835,8 @@ public class Player : MonoBehaviour
         {
             var ps = jumpParticleObject != null ? jumpParticleObject.GetComponent<ParticleSystem>() : null;
             var ps1 = jumpParticleObject2 != null ? jumpParticleObject2.GetComponent<ParticleSystem>() : null;
-            bool normalP3Attack = GameData.Instance != null &&
-                                  GameData.Instance.selectedPlayerType == T3 &&
+            bool normalP3Attack = HasCharacterContext &&
+                                  CharacterType == T3 &&
                                   !isRageMode &&
                                   (triggerName == "Attack" || triggerName == "Flyattack");
             bool enabled = !normalP3Attack && (triggerName == "Jump" || triggerName == "Flyattack");
@@ -832,7 +891,7 @@ public class Player : MonoBehaviour
         }
 
         float mult = 1f;
-        if (GameData.Instance != null)
+        if (UsesArcadeSystems && GameData.Instance != null)
             mult = GameData.Instance.GetStageSpeedMult();
 
         if (useAbsoluteWalkSpeedMultiplier)
@@ -867,10 +926,10 @@ public class Player : MonoBehaviour
 
     private bool IsRangedPlayerType()
     {
-        if (GameData.Instance == null)
+        if (!HasCharacterContext)
             return false;
 
-        int t = GameData.Instance.selectedPlayerType;
+        int t = CharacterType;
         return t == T2 || t == T4;
     }
 
@@ -881,10 +940,10 @@ public class Player : MonoBehaviour
 
     private bool IsRageTimedAttackPlayerType()
     {
-        if (!isRageMode || GameData.Instance == null)
+        if (!isRageMode || !HasCharacterContext)
             return false;
 
-        int t = GameData.Instance.selectedPlayerType;
+        int t = CharacterType;
         return t == T2 || t == T3 || t == T4;
     }
 
@@ -978,7 +1037,7 @@ public class Player : MonoBehaviour
 
         StopRangedFlyattackLatch();
 
-        if (isAttacking || Input.GetKey(KeyCode.DownArrow))
+        if (isAttacking || ReadKey(KeyCode.DownArrow))
         {
             PlayRageRangedAttackAnimation(true);
             return;
@@ -1073,9 +1132,10 @@ public class Player : MonoBehaviour
         if (isTransformLock) return;
         if (justRecoveredFromRage) return;
         if (isDead) return;
-        if (GameData.Instance.selectedPlayerType == T3 && isAttacking) return;
+        if (CharacterType == T3 && isAttacking) return;
 
-        transform.position = new Vector3(gameplayX, transform.position.y, transform.position.z);
+        if (UsesArcadeSystems)
+            transform.position = new Vector3(gameplayX, transform.position.y, transform.position.z);
 
         if (!isGrounded)
         {
@@ -1101,7 +1161,7 @@ public class Player : MonoBehaviour
         if (currentAnim == "Land") return;
 
         // T2/T4는 공격 중에는 Walk로 덮어쓰지 않음
-        if (GameData.Instance.selectedPlayerType == T2 || GameData.Instance.selectedPlayerType == T4)
+        if (CharacterType == T2 || CharacterType == T4)
         {
             if (isAttacking || currentAnim == "Attack" || currentAnim == "Flyattack")
                 return;
@@ -1111,7 +1171,7 @@ public class Player : MonoBehaviour
         }
 
         // T3는 기존처럼 착지 후 바로 Walk 복귀 유지
-        if (GameData.Instance.selectedPlayerType == T3)
+        if (CharacterType == T3)
         {
             ChangeAnimation("Walk");
             return;
@@ -1187,7 +1247,7 @@ public class Player : MonoBehaviour
 
     private bool CanProcessAirJumpWhileAttackHeld(int playerType)
     {
-        if (isGrounded || !Input.GetKey(KeyCode.DownArrow))
+        if (isGrounded || !ReadKey(KeyCode.DownArrow))
             return true;
 
         // Airborne input cases that should still allow jump:
@@ -1206,9 +1266,9 @@ public class Player : MonoBehaviour
             attackQueued = false;
             rb.gravityScale = cachedGravity;
 
-            if (Input.GetKey(KeyCode.Space))
+            if (ReadKey(KeyCode.Space))
                 blockJumpUntilReleaseAfterTransform = true;
-            else if (Input.GetKeyUp(KeyCode.Space))
+            else if (ReadKeyUp(KeyCode.Space))
                 blockJumpUntilReleaseAfterTransform = false;
 
             return;
@@ -1219,7 +1279,7 @@ public class Player : MonoBehaviour
             rb.gravityScale = cachedGravity;
             attackQueued = false;
 
-            if (!Input.GetKey(KeyCode.Space))
+            if (!ReadKey(KeyCode.Space))
                 blockJumpUntilReleaseAfterTransform = false;
 
             return;
@@ -1231,24 +1291,24 @@ public class Player : MonoBehaviour
             rb.gravityScale = cachedGravity;
             attackQueued = false;
 
-            if (!Input.GetKey(KeyCode.Space))
+            if (!ReadKey(KeyCode.Space))
                 blockJumpUntilReleaseAfterMachineGunTransfer = false;
 
             return;
         }
 
-        if (Time.time < jumpObstacleJumpLockUntil && Input.GetKey(KeyCode.Space))
+        if (Time.time < jumpObstacleJumpLockUntil && ReadKey(KeyCode.Space))
         {
             rb.gravityScale = cachedGravity;
             return;
         }
 
-        int t = GameData.Instance.selectedPlayerType;
+        int t = CharacterType;
 
         if (!CanProcessAirJumpWhileAttackHeld(t))
             return;
 
-        if (Input.GetKey(KeyCode.Space))
+        if (ReadKey(KeyCode.Space))
         {
             justRecoveredFromRage = false;
             bool overridingJumpObstacleStomp =
@@ -1289,7 +1349,7 @@ public class Player : MonoBehaviour
                 ChangeAnimation("Jump");
 
             rb.gravityScale = 0.5f;
-            int x = GameData.Instance.selectedPlayerType;
+            int x = CharacterType;
 
             float js = jumpSpeed;
             if (isRageMode && (x == T1 || x == T5))
@@ -1312,7 +1372,7 @@ public class Player : MonoBehaviour
             }
 
             // 스페이스 키를 뗄 때 예약 공격 실행
-            if (Input.GetKeyUp(KeyCode.Space) && attackQueued)
+            if (ReadKeyUp(KeyCode.Space) && attackQueued)
             {
                 if (Time.time - attackQueuedTime <= attackQueueWindow)
                 {
@@ -1356,8 +1416,8 @@ public class Player : MonoBehaviour
 
         bool shouldResumeAttack =
             isAttacking &&
-            GameData.Instance != null &&
-            (GameData.Instance.selectedPlayerType == T1 || GameData.Instance.selectedPlayerType == T5);
+            HasCharacterContext &&
+            (CharacterType == T1 || CharacterType == T5);
 
         rb.gravityScale = cachedGravity;
         rb.linearVelocity = new Vector2(rb.linearVelocity.x, yVelocity);
@@ -1380,13 +1440,13 @@ public class Player : MonoBehaviour
         if (!resumeStompAttackAfterJumpObstacle)
             return;
 
-        if (isDead || rb == null || GameData.Instance == null)
+        if (isDead || rb == null || !HasCharacterContext)
         {
             resumeStompAttackAfterJumpObstacle = false;
             return;
         }
 
-        int t = GameData.Instance.selectedPlayerType;
+        int t = CharacterType;
         if (t != T1 && t != T5)
         {
             resumeStompAttackAfterJumpObstacle = false;
@@ -1477,6 +1537,7 @@ public class Player : MonoBehaviour
             if (zig != null)
             {
                 zig.ConfigurePooling(fromPool, lightningPoolTag);
+                zig.SetOwner(this);
                 zig.damage = stats.attack;
                 zig.PlayAttackAnimation(nextP4NormalAnimationIsSecond);
                 nextP4NormalAnimationIsSecond = !nextP4NormalAnimationIsSecond;
@@ -1592,8 +1653,8 @@ public class Player : MonoBehaviour
         if (Time.time < jumpObstacleJumpLockUntil)
             return;
 
-        if (!Input.GetKeyDown(KeyCode.DownArrow)) return;
-        int t = GameData.Instance.selectedPlayerType;
+        if (!ReadKeyDown(KeyCode.DownArrow)) return;
+        int t = CharacterType;
 
         // 1) Rage 우선 처리
         if (isRageMode)
@@ -1685,6 +1746,7 @@ public class Player : MonoBehaviour
 
         rb.gravityScale = cachedGravity;
         rb.linearVelocity = new Vector2(rb.linearVelocity.x, stompSpeed);
+        OnStompStarted();
         ChangeAnimation("Flyattack");
 
         yield return null; // 착지 시 HandleLandSequencing에서 처리
@@ -1700,6 +1762,7 @@ public class Player : MonoBehaviour
 
         rb.gravityScale = cachedGravity;
         rb.linearVelocity = new Vector2(rb.linearVelocity.x, stompSpeed*1.5f);
+        OnStompStarted();
         ChangeAnimation("Flyattack");
 
         yield return null; // 착지 시 HandleLandSequencing에서 P5_DelayedLand 호출
@@ -1710,14 +1773,14 @@ public class Player : MonoBehaviour
     private void HandleLandSequencing()
     {
         if (!isAttacking || !isGrounded || hasLanded || isLanding) return;  // isLanding 추가
-        if (GameData.Instance == null) return;
+        if (!HasCharacterContext) return;
         if (!IsFlyattackStateActive()) return;
         if (IsStompFlyattackProtected()) return;
 
         hasLanded = true;
         isLanding = true;   // 추가
 
-        switch (GameData.Instance.selectedPlayerType)
+        switch (CharacterType)
         {
             case T1: StartLandingRoutine(P1_Land_Wrap()); break;
             case T5: StartLandingRoutine(P5_Land_Wrap()); break;
@@ -1739,7 +1802,7 @@ public class Player : MonoBehaviour
         bool onPlatform = groundTag == "platform";
         bool onFloor = groundTag == "floor";
 
-        int selectedType = GameData.Instance.selectedPlayerType;
+        int selectedType = CharacterType;
 
         if (isRageMode)
         {
@@ -1934,7 +1997,7 @@ public class Player : MonoBehaviour
 
     private void TriggerReducedRageSmokeShake()
     {
-        int selectedType = GameData.Instance != null ? GameData.Instance.selectedPlayerType : 0;
+        int selectedType = HasCharacterContext ? CharacterType : 0;
         if (selectedType != T1 && selectedType != T3 && selectedType != T5)
             return;
 
@@ -2156,12 +2219,14 @@ public class Player : MonoBehaviour
 
     private void OnCollisionEnter2D(Collision2D c)
     {
+        HandleEscalatorContact(c.collider);
+
         bool isJumpObstacleContact = IsJumpObstacleSource(c.gameObject) || IsJumpObstacleSource(c.collider != null ? c.collider.gameObject : null);
         bool isStompingIntoJumpObstacle =
             isJumpObstacleContact &&
             isAttacking &&
-            GameData.Instance != null &&
-            IsStompPlayerType(GameData.Instance.selectedPlayerType);
+            HasCharacterContext &&
+            IsStompPlayerType(CharacterType);
 
         if (HasSupportGroundContact(c) &&
             TryResolveGroundSurface(c.collider, out var resolvedGroundCol, out var resolvedGroundTag))
@@ -2176,7 +2241,7 @@ public class Player : MonoBehaviour
             lastGroundTag = resolvedGroundTag;
             lastGroundCol = resolvedGroundCol;
 
-            int t = GameData.Instance.selectedPlayerType;
+            int t = CharacterType;
             if (t == T3 && isAttacking && currentAnim == "Flyattack" &&
                 (lastGroundTag == "floor" || lastGroundTag == "platform"))
             {
@@ -2209,6 +2274,8 @@ public class Player : MonoBehaviour
 
     private void OnCollisionStay2D(Collision2D c)
     {
+        HandleEscalatorContact(c.collider);
+
         if (!HasSupportGroundContact(c) ||
             !TryResolveGroundSurface(c.collider, out var resolvedGroundCol, out var resolvedGroundTag))
             return;
@@ -2226,11 +2293,13 @@ public class Player : MonoBehaviour
 
     private void OnTriggerEnter2D(Collider2D other)
     {
-        if (other.CompareTag("Mana"))
+        HandleEscalatorContact(other);
+
+        if (UsesArcadeSystems && other.CompareTag("Mana"))
         {
             AddManaForLauncher(1);
 
-            if (GameData.Instance != null)
+            if (HasCharacterContext)
                 GameData.Instance.AddEnergyScore(1);
 
             Mana mana = other.GetComponent<Mana>();
@@ -2240,7 +2309,7 @@ public class Player : MonoBehaviour
             return;
         }
 
-        if (other.CompareTag("holyMana"))
+        if (UsesArcadeSystems && other.CompareTag("holyMana"))
         {
             var hm = other.GetComponent<holyMana>();
             if (hm != null) hm.Collect();
@@ -2254,6 +2323,70 @@ public class Player : MonoBehaviour
         {
             HandleHazardEnter(other, other.gameObject);
         }
+    }
+
+    private void HandleEscalatorContact(Collider2D other)
+    {
+        if (!UsesArcadeSystems || isDead || other == null || GameData.Instance == null)
+            return;
+
+        var escalator = other.GetComponentInParent<Escalator>();
+        if (escalator != null)
+            GameData.Instance.OnEscalatorContact(escalator);
+    }
+
+    private void OnTriggerStay2D(Collider2D other)
+    {
+        HandleEscalatorContact(other);
+    }
+
+    public void ShowEscalatorChewingProgress(float progress)
+    {
+        if (!UsesArcadeSystems || isDead || !isActiveAndEnabled)
+            return;
+
+        // 한 프레임에 여러 기준점을 넘어도 각 단계를 한 번씩 생성한다.
+        int targetStage = Mathf.FloorToInt(Mathf.Clamp01(progress) * 3f + 0.0001f);
+        while (chewingEffectStage < targetStage)
+        {
+            chewingEffectStage++;
+            switch (chewingEffectStage)
+            {
+                case 1: SpawnChewingEffect(chewingEffect1Prefab, chewingEffect1LocalPosition); break;
+                case 2: SpawnChewingEffect(chewingEffect2Prefab, chewingEffect2LocalPosition); break;
+                case 3: SpawnChewingEffect(chewingEffect3Prefab, chewingEffect3LocalPosition); break;
+            }
+        }
+    }
+
+    private void SpawnChewingEffect(GameObject prefab, Vector2 localPosition)
+    {
+        if (prefab == null)
+            return;
+
+        var effect = Instantiate(prefab, transform, false);
+        effect.transform.localPosition = new Vector3(localPosition.x, localPosition.y, 0f);
+        effect.SetActive(true);
+        chewingEffects.Add(effect);
+    }
+
+    public void ClearChewingEffects()
+    {
+        foreach (var effect in chewingEffects)
+        {
+            if (effect != null)
+            {
+                effect.SetActive(false);
+                Destroy(effect);
+            }
+        }
+        chewingEffects.Clear();
+        chewingEffectStage = 0;
+    }
+
+    private void OnDisable()
+    {
+        ClearChewingEffects();
     }
 
     private void CacheObstacleType(GameObject obj)
@@ -2331,8 +2464,8 @@ public class Player : MonoBehaviour
         }
 
         obstacleTouchCount++;
-        if (obstacleTouchCount == 1 && GameData.Instance != null)
-            GameData.Instance.BeginObstacleContact();
+        if (obstacleTouchCount == 1)
+            OnObstacleContactStarted();
     }
 
     private void HandleHazardExit(Collider2D hazardCollider)
@@ -2345,8 +2478,7 @@ public class Player : MonoBehaviour
         if (obstacleTouchCount <= 0)
         {
             obstacleTouchCount = 0;
-            if (GameData.Instance != null)
-                GameData.Instance.EndObstacleContact();
+            OnObstacleContactEnded();
         }
     }
 
@@ -2404,15 +2536,15 @@ public class Player : MonoBehaviour
     }
     private bool IsP3AttackInvulnerable()
     {
-        return GameData.Instance != null &&
-               GameData.Instance.selectedPlayerType == T3 &&
+        return HasCharacterContext &&
+               CharacterType == T3 &&
                isAttacking &&
                Time.time <= p3AttackHazardIgnoreUntil;
     }
 
     private void UpdateP3AttackHazardIgnoreWindow(float totalAttackDuration)
     {
-        if (GameData.Instance == null || GameData.Instance.selectedPlayerType != T3)
+        if (!HasCharacterContext || CharacterType != T3)
         {
             p3AttackHazardIgnoreUntil = -999f;
             return;
@@ -2430,7 +2562,7 @@ public class Player : MonoBehaviour
         SpawnBloodFx();
         
         ChangeAnimation("Die");
-        GameData.Instance.TriggerGameOver();
+        OnPlayerDied();
 
         rb.simulated = false;
 
@@ -2459,12 +2591,12 @@ public class Player : MonoBehaviour
     }
 
 
-    void Start()
+    protected virtual void Start()
     {
         SetAttachedRageSmokesActive(false);
-        int playerType = Mathf.Clamp(GameData.Instance.selectedPlayerType, 1, 5);
+        int playerType = Mathf.Clamp(CharacterType, 1, 5);
         PrewarmEffectPools();
-        int playerLevel = GameData.Instance.playerLevels[playerType];
+        int playerLevel = CharacterLevel;
         if (playerLevel <= 0) playerLevel = 1;
 
         stats = StatsManager.GetPlayerStats(playerType, playerLevel);
@@ -2481,7 +2613,7 @@ public class Player : MonoBehaviour
             animOverride.PreWarm();
         anim.Rebind();
         anim.Update(0f);
-        StartSpawnIntro();
+        if (UsesArcadeSystems) StartSpawnIntro();
 
     }
 
@@ -2504,7 +2636,7 @@ public class Player : MonoBehaviour
         if (lives <= 0)
         {
             Die();
-            GameData.Instance.gameOver = true;
+            if (UsesArcadeSystems && GameData.Instance != null) GameData.Instance.gameOver = true;
         }
         else
         {
@@ -2543,11 +2675,11 @@ public class Player : MonoBehaviour
         var capsule = hb.GetComponent<CapsuleCollider2D>();
         if (box == null && capsule == null) return;
 
-        int t = (GameData.Instance != null) ? GameData.Instance.selectedPlayerType : 0;
+        int t = (HasCharacterContext) ? CharacterType : 0;
         Vector2 size = box != null ? box.size : capsule.size;
         Vector2 offset = box != null ? box.offset : capsule.offset;
 
-        if (GameData.Instance.selectedPlayerType == 5)
+        if (CharacterType == 5)
         {
             float extraX5 = 12f;
             float extraY5 = 20f;
@@ -2555,7 +2687,7 @@ public class Player : MonoBehaviour
             size = new Vector2(size.x + extraX5, size.y + extraY5);
             offset = new Vector2(offset.x + extraX5 * 0.5f, offset.y);
         }
-        else if (GameData.Instance.selectedPlayerType == 1)
+        else if (CharacterType == 1)
         {
             float extraX5 = 12f;
             float extraY5 = 8f;
@@ -2563,7 +2695,7 @@ public class Player : MonoBehaviour
             size = new Vector2(size.x + extraX5, size.y + extraY5);
             offset = new Vector2(offset.x + extraX5 * 0.5f, offset.y);
         }
-        else if (GameData.Instance.selectedPlayerType == 3)
+        else if (CharacterType == 3)
         {
             // Player3 Rage는 프리팹 자체 콜라이더 크기를 그대로 사용한다.
         }
@@ -2741,6 +2873,7 @@ public class Player : MonoBehaviour
 
     public void ActivateRageMode(float duration = -1f)
     {
+        if (!UsesArcadeSystems) return;
         if (isRageMode) return;
 
         if (duration <= 0f) duration = rageDuration;
@@ -2758,7 +2891,7 @@ public class Player : MonoBehaviour
         attackStateStartTime = -999f;
         StopRangedFlyattackLatch();
         StopRageRangedGroundAttackTimer();
-        blockJumpUntilReleaseAfterTransform = Input.GetKey(KeyCode.Space);
+        blockJumpUntilReleaseAfterTransform = ReadKey(KeyCode.Space);
 
         // 원래 값 저장
         originalAttack = stats.attack;
@@ -3096,6 +3229,7 @@ public class Player : MonoBehaviour
 
     public void ResetPlayer()
     {
+        ClearChewingEffects();
         GetComponent<ArcadeFeedback>()?.ResetFeedback();
         StopSpawnIntroRoutine();
 
@@ -3156,7 +3290,7 @@ public class Player : MonoBehaviour
         anim.Rebind();
         anim.Update(0f);
         ForceAnimationState("Base Walk", "Walk");
-        StartSpawnIntro();
+        if (UsesArcadeSystems) StartSpawnIntro();
     }
     private void StartSpawnIntro()
     {
@@ -3231,7 +3365,7 @@ public class Player : MonoBehaviour
 
         // Reuse the complete spawn intro so player and attached visuals share its timing.
         yield return CoPlaySpawnIntro();
-        blockJumpUntilReleaseAfterMachineGunTransfer = Input.GetKey(KeyCode.Space);
+        blockJumpUntilReleaseAfterMachineGunTransfer = ReadKey(KeyCode.Space);
         isMachineGunTransferActive = false;
     }
 
@@ -3464,6 +3598,7 @@ public class Player : MonoBehaviour
 
     public void OnRageModeChanged(bool active)
     {
+        if (!UsesArcadeSystems) return;
         isRageMode = active;
         if (active)
         {
@@ -3495,7 +3630,7 @@ public class Player : MonoBehaviour
     {
         if (isLanding) return;
 
-        int type = GameData.Instance.selectedPlayerType;
+        int type = CharacterType;
         bool shouldForceLand =
             (type == T1 || type == T5) &&
             currentAnim == "Flyattack";
@@ -3891,9 +4026,9 @@ public class Player : MonoBehaviour
 
     private void RecoverStuckGroundAttack()
     {
-        if (GameData.Instance == null || rb == null) return;
+        if (!HasCharacterContext || rb == null) return;
 
-        int t = GameData.Instance.selectedPlayerType;
+        int t = CharacterType;
         if (!IsStompPlayerType(t)) return;
         if (!isAttacking || !IsFlyattackStateActive()) return;
         if (IsStompFlyattackProtected()) return;
@@ -3918,9 +4053,9 @@ public class Player : MonoBehaviour
 
     private void RecoverGroundedStompState()
     {
-        if (GameData.Instance == null || rb == null) return;
+        if (!HasCharacterContext || rb == null) return;
 
-        int t = GameData.Instance.selectedPlayerType;
+        int t = CharacterType;
         if (!IsStompPlayerType(t)) return;
         if (IsStompFlyattackProtected()) return;
 
@@ -3989,10 +4124,10 @@ public class Player : MonoBehaviour
         if (Time.time > flyattackProtectedUntil)
             return false;
 
-        if (GameData.Instance == null)
+        if (!HasCharacterContext)
             return false;
 
-        int t = GameData.Instance.selectedPlayerType;
+        int t = CharacterType;
         if (!IsStompPlayerType(t))
             return false;
 
@@ -4220,7 +4355,7 @@ public class Player : MonoBehaviour
         if (lastGroundTag != "floor" && lastGroundTag != "platform")
             return false;
 
-        if (GameData.Instance == null)
+        if (!UsesArcadeSystems || GameData.Instance == null)
             return true;
 
         float currentMult = GameData.Instance.GetStageSpeedMult();
@@ -4340,7 +4475,7 @@ public class Player : MonoBehaviour
         }
     }
 
-    private GameObject SpawnHitboxFromPool(GameObject prefab, string tag, Vector3 pos)
+    protected GameObject SpawnHitboxFromPool(GameObject prefab, string tag, Vector3 pos)
     {
         bool fromPool;
         var go = SpawnWithPool(prefab, tag, pos, Quaternion.identity, out fromPool, 8);
@@ -4589,6 +4724,10 @@ public class Player : MonoBehaviour
 
     private void PrewarmPool(string tag, GameObject prefab, int size)
     {
+        if (!UsesArcadeSystems && (tag == p4RageLightningPoolTag || tag == p2RageLaserPoolTag ||
+            tag == rage24SmokePoolTag || tag == rage1SmokePoolTag || tag == rage3SmokePoolTag ||
+            tag == rageSmokePoolTag || tag == rageSmokePoolTagSecondary ||
+            tag == rageAttackSmokePoolTag || tag == rageAttackSmokePoolTagSecondary || tag == speedEffectPoolTag)) return;
         if (ObjectPool.Instance == null || prefab == null || string.IsNullOrEmpty(tag)) return;
         ObjectPool.Instance.EnsurePoolSize(tag, prefab, size);
     }

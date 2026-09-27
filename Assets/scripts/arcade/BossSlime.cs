@@ -16,6 +16,9 @@ public class BossSlime : MonoBehaviour, IReinitializeOnEnable
     public Slider hpSlider;
     public Slider timerSlider;
 
+    [Header("Hit Count")]
+    [SerializeField] private HitCount hitCountPrefab;
+
     [Header("Entry")]
     public Vector3 entryFxWorldPos = new Vector3(12f, 1.4f, 0f);
     public float entryFxDuration = 2.5f;
@@ -626,6 +629,8 @@ public class BossSlime : MonoBehaviour, IReinitializeOnEnable
         hp -= appliedDamage;
         if (hp < 0) hp = 0;
 
+        SpawnHitCount();
+
         SpawnDamagingFx();
         TryTriggerHpAnimations();
 
@@ -647,6 +652,13 @@ public class BossSlime : MonoBehaviour, IReinitializeOnEnable
     public void Hit(int damage)
     {
         TakeDamage(damage);
+    }
+
+    private void SpawnHitCount()
+    {
+        if (hitCountPrefab == null) return;
+        HitCount popup = Instantiate(hitCountPrefab, transform.position, Quaternion.identity);
+        popup.Play(HitCount.CalculateValue(maxHp));
     }
 
     public void RegisterActiveArm(BossSlimeArm arm)

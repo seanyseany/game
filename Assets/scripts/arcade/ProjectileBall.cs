@@ -432,6 +432,9 @@ public class ProjectileBall : MonoBehaviour, IRageTransformPauseHandler
             }
         }
     }
+    public Player Owner => owner;
+    public void DespawnNow() => Despawn();
+
     public void SetOwner(Player p)
     {
         owner = p;

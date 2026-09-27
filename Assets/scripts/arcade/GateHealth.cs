@@ -8,6 +8,7 @@ public class GateHealth : MonoBehaviour
 
     public static GateHealth Instance;
     public static System.Action OnOpenHoldStarted;
+    public static System.Action OnGateBroken;
 
     [Header("Sprites - 단계별(0,1,2)")]
     public Sprite[] closedSprites;
@@ -75,6 +76,8 @@ public class GateHealth : MonoBehaviour
 
     private void TakeHit()
     {
+        if (state == GateState.Broken) return;
+
         hitCount++;
         CameraShakeManager.ShakeDefaultHalf();
         SpawnGateDamageFx();
@@ -87,6 +90,7 @@ public class GateHealth : MonoBehaviour
             state = GateState.Broken;
             if (sr != null)
                 sr.sprite = brokenSprite;
+            OnGateBroken?.Invoke();
             GameData.Instance.TriggerGameOver();
             return;
         }
@@ -342,6 +346,7 @@ public class GateHealth : MonoBehaviour
         state = GateState.Broken;
         if (sr != null)
             sr.sprite = brokenSprite;
+        OnGateBroken?.Invoke();
         GameData.Instance.TriggerGameOver();
     }
 }

@@ -227,8 +227,8 @@ Transform:
   m_GameObject: {fileID: 19456630}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.0286, y: -2.23, z: -4}
-  m_LocalScale: {x: 28.89031, y: 10.6285, z: 1}
+  m_LocalPosition: {x: -0.0286, y: -2.78, z: -4}
+  m_LocalScale: {x: 28.89031, y: 7.960747, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -947,6 +947,10 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 6842220691773557582, guid: d9010360614484cc3b42a691cec5c126, type: 3}
     - target: {fileID: -6289232600392512900, guid: ae16f2249eafc434385fd8b711d4e84f, type: 3}
+      propertyPath: hitCountPrefab
+      value: 
+      objectReference: {fileID: 5314092163754573522, guid: e316144cc0aec469baa6fe79cea3b851, type: 3}
+    - target: {fileID: -6289232600392512900, guid: ae16f2249eafc434385fd8b711d4e84f, type: 3}
       propertyPath: canonShotInterval
       value: 1
       objectReference: {fileID: 0}
@@ -1021,6 +1025,14 @@ PrefabInstance:
     - target: {fileID: 5355824696261288074, guid: ae16f2249eafc434385fd8b711d4e84f, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5554094535464626057, guid: ae16f2249eafc434385fd8b711d4e84f, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 0.2
+      objectReference: {fileID: 0}
+    - target: {fileID: 5554094535464626057, guid: ae16f2249eafc434385fd8b711d4e84f, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: 0.82
       objectReference: {fileID: 0}
     - target: {fileID: 6948530102703927140, guid: ae16f2249eafc434385fd8b711d4e84f, type: 3}
       propertyPath: m_SizeDelta.y
@@ -4110,7 +4122,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2006843320572366924, guid: fae4c319019f9402eaeee6e7645d9498, type: 3}
       propertyPath: selectedPlayerType
-      value: 5
+      value: 2
       objectReference: {fileID: 0}
     - target: {fileID: 2006843320572366924, guid: fae4c319019f9402eaeee6e7645d9498, type: 3}
       propertyPath: holyLightSpawnPos.x
@@ -4296,6 +4308,10 @@ PrefabInstance:
       propertyPath: 'enemyPhases.Array.data[2]'
       value: 
       objectReference: {fileID: 8795090786694110836, guid: 2dc4601294c9c460b82307f62eba68da, type: 3}
+    - target: {fileID: 2006843320572366924, guid: fae4c319019f9402eaeee6e7645d9498, type: 3}
+      propertyPath: escalatorSlowdownStrength
+      value: 0.16
+      objectReference: {fileID: 0}
     - target: {fileID: 2006843320572366924, guid: fae4c319019f9402eaeee6e7645d9498, type: 3}
       propertyPath: 'normalPhases.Array.data[0]'
       value: 
@@ -5704,12 +5720,16 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7979713225138129571, guid: e9b0a36386b6945d0a6d09b73e737dfa, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -0.000022963
+      value: -0.000022888184
       objectReference: {fileID: 0}
     - target: {fileID: 8528856290866381985, guid: e9b0a36386b6945d0a6d09b73e737dfa, type: 3}
       propertyPath: m_AnchorMax.y
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8548843159647306672, guid: e9b0a36386b6945d0a6d09b73e737dfa, type: 3}
+      propertyPath: hitCountPrefab
+      value: 
+      objectReference: {fileID: 5314092163754573522, guid: e316144cc0aec469baa6fe79cea3b851, type: 3}
     - target: {fileID: 8548843159647306672, guid: e9b0a36386b6945d0a6d09b73e737dfa, type: 3}
       propertyPath: fireRepeatCount
       value: 4
@@ -6105,7 +6125,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   testPhasePrefabs:
-  - {fileID: 2659614723417223950, guid: a72c1401e0d3543ceb8319395edbfd50, type: 3}
+  - {fileID: 2659614723417223950, guid: 3f47abeccb9894731bd6f32049ff2a9c, type: 3}
+  - {fileID: 2659614723417223950, guid: f7f0e5e00d21f4526b8ddf0c8a11dbc8, type: 3}
+  - {fileID: 2659614723417223950, guid: f7f0e5e00d21f4526b8ddf0c8a11dbc8, type: 3}
+  - {fileID: 2659614723417223950, guid: 04c826b3df47c45bd95fb0d6e1f7487f, type: 3}
   stage1PhasePrefabs:
   - {fileID: 2659614723417223950, guid: a72c1401e0d3543ceb8319395edbfd50, type: 3}
   - {fileID: 2659614723417223950, guid: f2580553c03134ef08bffc7fa9000e68, type: 3}
@@ -6238,9 +6261,9 @@ MonoBehaviour:
   ragePhaseSpawnX: 38
   despawnX: -25
   speedUp1: 6
-  speedUp2: 14
-  speedUp3: 31
-  speedUp4: 50
+  speedUp2: 15
+  speedUp3: 32
+  speedUp4: 51
   speedMult1: 2.82
   speedMult2: 2.75
   speedMult3: 2.82
@@ -6447,8 +6470,8 @@ Transform:
   m_GameObject: {fileID: 1655524662}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.0793, y: 1.53, z: -3}
-  m_LocalScale: {x: 28.842545, y: 10.628502, z: 1}
+  m_LocalPosition: {x: -0.0793, y: 2.68, z: -3}
+  m_LocalScale: {x: 28.842545, y: 7.556865, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1130753858}
@@ -7688,37 +7711,13 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 2232245992524951650, guid: 42630aeaca50a4871958339b16e2b696, type: 3}
     - target: {fileID: 1375860378352231304, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
-      propertyPath: introTotalDuration
-      value: 1.12
-      objectReference: {fileID: 0}
-    - target: {fileID: 1375860378352231304, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
-      propertyPath: runningSmokePrefab
-      value: 
-      objectReference: {fileID: 0}
-    - target: {fileID: 1375860378352231304, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
       propertyPath: speedEffectMoveSpeed
       value: 26
       objectReference: {fileID: 0}
     - target: {fileID: 1375860378352231304, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
-      propertyPath: introAppearPosition.x
-      value: -6.88
-      objectReference: {fileID: 0}
-    - target: {fileID: 1375860378352231304, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
-      propertyPath: introAppearPosition.y
-      value: -2.1
-      objectReference: {fileID: 0}
-    - target: {fileID: 1375860378352231304, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
-      propertyPath: rageAttachedSmokePrimary
-      value: 
-      objectReference: {fileID: 355036415693431835, guid: b37e66bb50d37402ebd03a2c8595f846, type: 3}
-    - target: {fileID: 1375860378352231304, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
       propertyPath: normalJumpParticleMaterial
       value: 
       objectReference: {fileID: 2100000, guid: a354dac193dfa4049bf97ecfd6097e1f, type: 2}
-    - target: {fileID: 1375860378352231304, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
-      propertyPath: rageAttachedSmokeSecondary
-      value: 
-      objectReference: {fileID: 3336143885285111855, guid: 76b1481179122452986e6ab357a8d616, type: 3}
     - target: {fileID: 1375860378352231304, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
       propertyPath: rageAttackSmokePrefabSecondary
       value: 
@@ -7792,37 +7791,9 @@ PrefabInstance:
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 6015082372541791020, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
-      propertyPath: m_Sprite
-      value: 
-      objectReference: {fileID: -3513733115348785796, guid: 24b907aba651e4e42a0ce08ceca90079, type: 3}
-    - target: {fileID: 6015082372541791020, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
       propertyPath: m_SortingOrder
       value: 13
       objectReference: {fileID: 0}
-    - target: {fileID: 7619116827110755597, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
-      propertyPath: 'attackClips.Array.data[0]'
-      value: 
-      objectReference: {fileID: 7400000, guid: f7acbec869641419c84b3f0cb220ad73, type: 2}
-    - target: {fileID: 7619116827110755597, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
-      propertyPath: 'attackClips.Array.data[4]'
-      value: 
-      objectReference: {fileID: 7400000, guid: 7694da37e42294d7a9d66b8a2c21ac55, type: 2}
-    - target: {fileID: 7619116827110755597, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
-      propertyPath: 'flyAttackClips.Array.data[0]'
-      value: 
-      objectReference: {fileID: 7400000, guid: f7acbec869641419c84b3f0cb220ad73, type: 2}
-    - target: {fileID: 7619116827110755597, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
-      propertyPath: 'flyAttackClips.Array.data[4]'
-      value: 
-      objectReference: {fileID: 7400000, guid: 96425361a5de449b2a970c1ac732ffca, type: 2}
-    - target: {fileID: 7619116827110755597, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
-      propertyPath: 'rageAttackClips.Array.data[0]'
-      value: 
-      objectReference: {fileID: 7400000, guid: 2f98c894ebcb647368ce79211f7f2359, type: 2}
-    - target: {fileID: 7619116827110755597, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
-      propertyPath: 'rageAttackClips.Array.data[4]'
-      value: 
-      objectReference: {fileID: 7400000, guid: dedaa7abdd5934fad990a9c2cc5200a1, type: 2}
     - target: {fileID: 7683074617469704678, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
       propertyPath: m_Name
       value: player

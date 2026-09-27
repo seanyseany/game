@@ -1,0 +1,71 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &8919468322151963301
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1498347496579508313}
+  - component: {fileID: 5314092163754573522}
+  m_Layer: 0
+  m_Name: hitCount
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1498347496579508313
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8919468322151963301}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -4.7694, y: 0.19887, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &5314092163754573522
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8919468322151963301}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 48b45cc21ec64108b3c04c409b5e8340, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HitCount
+  digitSprites:
+  - {fileID: 5254775087235137420, guid: f53b61beee32d4cd6b2c4d43bc8f991a, type: 3}
+  - {fileID: 7285680056606402887, guid: f53b61beee32d4cd6b2c4d43bc8f991a, type: 3}
+  - {fileID: 4206111043624030419, guid: f53b61beee32d4cd6b2c4d43bc8f991a, type: 3}
+  - {fileID: -5304774906956625181, guid: f53b61beee32d4cd6b2c4d43bc8f991a, type: 3}
+  - {fileID: -8685965449577825223, guid: f53b61beee32d4cd6b2c4d43bc8f991a, type: 3}
+  - {fileID: -430673545386059845, guid: f53b61beee32d4cd6b2c4d43bc8f991a, type: 3}
+  - {fileID: -4962366178309907026, guid: f53b61beee32d4cd6b2c4d43bc8f991a, type: 3}
+  - {fileID: -7907835103781942384, guid: f53b61beee32d4cd6b2c4d43bc8f991a, type: 3}
+  - {fileID: 1217073496212395734, guid: f53b61beee32d4cd6b2c4d43bc8f991a, type: 3}
+  - {fileID: 4774382987109721328, guid: f53b61beee32d4cd6b2c4d43bc8f991a, type: 3}
+  digitGap: 0.05
+  digitSpacingAdjustments:
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0
+  sortingLayerName: Default
+  sortingOrder: 100

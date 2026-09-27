@@ -71,6 +71,7 @@ public class Train : MonoBehaviour, IReinitializeOnEnable
         GameData.OnMachineGunTrigger += HandleMachineGunTrigger;
         GameData.OnRageStart += HandleRageStart;
         GameData.OnRageEnd += HandleRageEnd;
+        GateHealth.OnGateBroken += HandleGateBroken;
         Reinit();
     }
 
@@ -79,6 +80,7 @@ public class Train : MonoBehaviour, IReinitializeOnEnable
         GameData.OnMachineGunTrigger -= HandleMachineGunTrigger;
         GameData.OnRageStart -= HandleRageStart;
         GameData.OnRageEnd -= HandleRageEnd;
+        GateHealth.OnGateBroken -= HandleGateBroken;
         ResetRageMovement();
 
         if (routine != null)
@@ -142,7 +144,7 @@ public class Train : MonoBehaviour, IReinitializeOnEnable
     {
         GameData gameData = GameData.Instance;
         Player player = Player.Instance;
-        if (gameData == null || gameData.IsResetting || gameData.gameOver || gameData.rageMode ||
+        if (gameData == null || gameData.IsResetting || gameData.gameOver || IsGateBroken() || gameData.rageMode ||
             gameData.IsMachineGunSequenceActive() || routine != null || machineGunSequenceNotified ||
             rageMovementRoutine != null || RageTransformFreezeController.ShouldSkipGameplayFrame() ||
             player == null || !player.isActiveAndEnabled || player.IsSpawnOrTransferActive || player.IsRageModeActive())
@@ -170,7 +172,7 @@ public class Train : MonoBehaviour, IReinitializeOnEnable
 
     private void HandleRageStart()
     {
-        if (!isActiveAndEnabled)
+        if (!isActiveAndEnabled || IsGateBroken())
             return;
 
         StopRageMovement();
@@ -183,11 +185,22 @@ public class Train : MonoBehaviour, IReinitializeOnEnable
 
     private void HandleRageEnd()
     {
-        if (!isActiveAndEnabled)
+        if (!isActiveAndEnabled || IsGateBroken())
             return;
 
         StopRageMovement();
         rageMovementRoutine = StartCoroutine(CoRageReturn());
+    }
+
+    private void HandleGateBroken()
+    {
+        normalMoveActive = false;
+        StopRageMovement();
+    }
+
+    private static bool IsGateBroken()
+    {
+        return GateHealth.Instance != null && GateHealth.Instance.IsBroken;
     }
 
     private IEnumerator CoRageReturn()

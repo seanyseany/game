@@ -59,7 +59,7 @@ ParticleSystemRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 19b82204f82f6489cb1647eba1d82d03, type: 2}
+  - {fileID: 2100000, guid: a354dac193dfa4049bf97ecfd6097e1f, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -80,7 +80,7 @@ ParticleSystemRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 11
   m_RenderMode: 0
   m_MeshDistribution: 0
   m_SortMode: 0
@@ -4895,7 +4895,7 @@ ParticleSystemRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 19b82204f82f6489cb1647eba1d82d03, type: 2}
+  - {fileID: 2100000, guid: a354dac193dfa4049bf97ecfd6097e1f, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -4916,7 +4916,7 @@ ParticleSystemRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 10
   m_RenderMode: 0
   m_MeshDistribution: 0
   m_SortMode: 0
@@ -9703,7 +9703,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7683074617469704678}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 0.8, y: 0.8, z: 0.8}
   m_ConstrainProportionsScale: 0
@@ -9758,7 +9758,7 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 11
+  m_SortingOrder: 13
   m_Sprite: {fileID: -3513733115348785796, guid: 24b907aba651e4e42a0ce08ceca90079, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -9807,7 +9807,7 @@ Rigidbody2D:
   m_Mass: 1
   m_LinearDamping: 0
   m_AngularDamping: 0.05
-  m_GravityScale: 1.45
+  m_GravityScale: 1.4
   m_Material: {fileID: 0}
   m_IncludeLayers:
     serializedVersion: 2
@@ -9837,7 +9837,7 @@ MonoBehaviour:
   bloodMissile: {fileID: 6281009650039447236, guid: 83fc287b43e27405d98f368fc8219d0e, type: 3}
   bloodSaw: {fileID: 5083141507383861281, guid: f9c15b596e4514726a9e3894d8e45556, type: 3}
   bloodHill: {fileID: 6281009650039447236, guid: 83fc287b43e27405d98f368fc8219d0e, type: 3}
-  jumpSpeed: 3.7
+  jumpSpeed: 3.55
   hitboxPrefabP1: {fileID: 4729909129128647462, guid: c62a71cd626d748ca848518c3652e2f2, type: 3}
   hitboxPrefabP3: {fileID: 6801875311862280507, guid: 06170db2bf6c94be4b18e6af871b928e, type: 3}
   hitboxPrefabP5: {fileID: 2062212525942846678, guid: c76b885e8ab4140ca8fea10e870fa704, type: 3}
@@ -9865,6 +9865,7 @@ MonoBehaviour:
   rageSmokePoolTag: transformSmoke
   rageSmokePoolTagSecondary: transformSmoke
   rageAttackSmokePoolTag: p5ragesmoke
+  rageAttackSmokePoolTagSecondary: p5ragesmoke_secondary
   hitboxP1PoolTag: PlayerHitboxP1
   hitboxP3PoolTag: PlayerHitboxP3
   hitboxP5PoolTag: PlayerHitboxP5
@@ -9895,22 +9896,23 @@ MonoBehaviour:
   p5RageBrickSpawnWorldPos: {x: 4, y: -2.6}
   p5RageBrickSpawnZ: -1
   rageDuration: 15
-  rageSmokePrefab: {fileID: 0}
+  rageSmokePrefab: {fileID: 2232245992524951650, guid: 42630aeaca50a4871958339b16e2b696, type: 3}
   rageSmokePrefabSecondary: {fileID: 2232245992524951650, guid: 38ada9301408d49eea14957e284cfc28, type: 3}
   rageAttackSmokePrefab: {fileID: 857786050246401123, guid: 8112aa079f6054c858b9666dc6cc3ef8, type: 3}
+  rageAttackSmokePrefabSecondary: {fileID: 2577070295848788730, guid: 60752a9129b04401e9d99bd978e341e7, type: 3}
   rageAttachedSmokePrimary: {fileID: 355036415693431835, guid: b37e66bb50d37402ebd03a2c8595f846, type: 3}
   rageAttachedSmokeSecondary: {fileID: 3336143885285111855, guid: 76b1481179122452986e6ab357a8d616, type: 3}
   rageTransformHitboxSize: {x: 15, y: 2}
   rageTransformHitboxOffset: {x: 0, y: 0}
   rageSmokeOffset: {x: 0, y: 0, z: 0}
   rageSmokeOffsetSecondary: {x: 0, y: 0, z: 0}
-  rageAttachedSmokeLocalPosPrimary: {x: -0.225, y: 0.315}
-  rageAttachedSmokeLocalPosSecondary: {x: -0.161, y: 0.031}
+  rageAttachedSmokeLocalPosPrimary: {x: 0, y: 0.27}
+  rageAttachedSmokeLocalPosSecondary: {x: 0.2, y: 0.029}
   speedEffectPrefab: {fileID: 8730433929646113536, guid: ce10425395c6b46709c9216c07ed749c, type: 3}
   speedEffectSpawnWorldPositions:
   - {x: 27, y: -3.57}
   - {x: 27, y: 4.27}
-  speedEffectMoveSpeed: 23
+  speedEffectMoveSpeed: 26
   speedEffectSpawnInterval: 0.6
   speedEffectDespawnX: -20
   transformLockDuration: 0.9
@@ -9927,6 +9929,12 @@ MonoBehaviour:
   runningSmokeLocalOffset: {x: -1.4, y: -0.45, z: 0}
   runningSmokeNormalSpeed: 1
   runningSmokeRageSpeed: 1.5
+  chewingEffect1Prefab: {fileID: 5625231957842990663, guid: ca93c6b2a583746d5a9c34358b69932f, type: 3}
+  chewingEffect1LocalPosition: {x: 0.033, y: -0.037}
+  chewingEffect2Prefab: {fileID: 1203135140545392286, guid: 8203d3c1335b64aaaaec603884b5ca31, type: 3}
+  chewingEffect2LocalPosition: {x: -0.363, y: 0.429}
+  chewingEffect3Prefab: {fileID: 6117126276943240679, guid: aec6df2c6932748a790fc227790aa181, type: 3}
+  chewingEffect3LocalPosition: {x: 0.404, y: 0.25}
   slowToReverseDuration: 0.8
   baseMoverSpeed: 6
   resumeDelay: 0
@@ -9938,7 +9946,7 @@ MonoBehaviour:
   bumpDuration: 0.1
   jumpParticleObject: {fileID: 6157399209794370035}
   jumpParticleObject2: {fileID: 6667838905485725023}
-  normalJumpParticleMaterial: {fileID: 2100000, guid: 1f69467adc656409eb050cb5c82f63a4, type: 2}
+  normalJumpParticleMaterial: {fileID: 2100000, guid: a354dac193dfa4049bf97ecfd6097e1f, type: 2}
   rageJumpParticleMaterial: {fileID: 2100000, guid: 77f4fac06d34f445fac677f2b488c232, type: 2}
 --- !u!114 &7619116827110755597
 MonoBehaviour:
@@ -10100,7 +10108,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e3762963c1c04afb9da59ee7028f71e0, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ArcadeFeedback
   boomPrefab: {fileID: 5582986152051508971, guid: 520db062b982e4f529b7fb60fed9b752, type: 3}
   goodPrefab: {fileID: 5024498338609336080, guid: 50adf4825cd7242c69929fa5b80f58c9, type: 3}
