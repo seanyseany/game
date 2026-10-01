@@ -132,17 +132,22 @@ public class BossSlimeCanonBall : MonoBehaviour, IReinitializeOnEnable
 
         if (other.CompareTag(gateTag) || other.GetComponent<GateHealth>() != null)
         {
+            // 문 피격의 0.5배 흔들림이 발생하면 포탄 흔들림은 중복 적용하지 않는다.
+            bool gateWillShake = damageGateOnHit && GateHealth.Instance != null && !GateHealth.Instance.IsBroken;
             if (damageGateOnHit && GateHealth.Instance != null)
                 GateHealth.Instance.TakeBossMissileHit();
 
-            ExplodeAndDie(true);
+            ExplodeAndDie(true, shakeCamera: !gateWillShake);
         }
     }
 
-    private void ExplodeAndDie(bool spawnFx)
+    private void ExplodeAndDie(bool spawnFx, bool shakeCamera = true)
     {
         if (dead) return;
         dead = true;
+
+        if (shakeCamera)
+            CameraShakeManager.ShakeDefaultHalf();
 
         if (rb != null)
         {

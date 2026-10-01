@@ -150,6 +150,7 @@ public class StageManager : MonoBehaviour
     private bool pendingBossExtraNormalPhase = false;
     private bool postBossSlimeMixedPhaseUnlocked = false;
     private GameObject activeBoss;
+    public bool HasActiveBoss => activeBoss != null && activeBoss.activeInHierarchy;
     private bool activeBossIsSceneObject = false;
     private Coroutine bossFlowRoutine;
 

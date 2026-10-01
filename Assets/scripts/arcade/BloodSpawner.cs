@@ -20,6 +20,10 @@ public class BloodSpawner : MonoBehaviour
         {
             float delay = Random.Range(minSpawnInterval, maxSpawnInterval);
             yield return new WaitForSeconds(delay);
+
+            if (GameData.Instance != null && GameData.Instance.gameOver)
+                continue;
+
             Instantiate(bloodPrefab, spawnPos, Quaternion.identity);
         }
     }

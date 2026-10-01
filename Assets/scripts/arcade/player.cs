@@ -261,17 +261,18 @@ public class Player : MonoBehaviour
     public float runningSmokeRageSpeed = 1.5f;
 
     [Header("Escalator Chewing Effects")]
-    [Tooltip("설정된 감속량의 1/3에 도달하면 플레이어 자식으로 생성합니다.")]
+    [Tooltip("접촉 지연 후 생성되며, 생성 즉시 설정된 감속 강도의 1/3을 적용합니다.")]
     public GameObject chewingEffect1Prefab;
     public Vector2 chewingEffect1LocalPosition;
-    [Tooltip("설정된 감속량의 2/3에 도달하면 추가로 생성합니다.")]
+    [Tooltip("접촉 중 두 번째 단계에 추가되며, 이펙트 2개가 있으면 설정된 감속 강도의 2/3을 적용합니다.")]
     public GameObject chewingEffect2Prefab;
     public Vector2 chewingEffect2LocalPosition;
-    [Tooltip("설정된 감속량 전체에 도달하면 추가로 생성합니다. 속도 복구 후 모두 즉시 제거합니다.")]
+    [Tooltip("접촉 중 세 번째 단계에 추가되며, 이펙트 3개가 있으면 설정된 감속 강도 전체를 적용합니다. 에스컬레이터에서 떨어지면 모두 제거하고 속도 복구를 시작합니다.")]
     public GameObject chewingEffect3Prefab;
     public Vector2 chewingEffect3LocalPosition;
 
     private readonly List<GameObject> chewingEffects = new List<GameObject>(3);
+    private readonly HashSet<Collider2D> activeEscalatorContacts = new HashSet<Collider2D>();
     private int chewingEffectStage;
 
 
@@ -2331,8 +2332,11 @@ public class Player : MonoBehaviour
             return;
 
         var escalator = other.GetComponentInParent<Escalator>();
-        if (escalator != null)
+        if (escalator != null && !escalator.IsBreaking && escalator.isActiveAndEnabled)
+        {
+            activeEscalatorContacts.Add(other);
             GameData.Instance.OnEscalatorContact(escalator);
+        }
     }
 
     private void OnTriggerStay2D(Collider2D other)
@@ -2340,13 +2344,27 @@ public class Player : MonoBehaviour
         HandleEscalatorContact(other);
     }
 
-    public void ShowEscalatorChewingProgress(float progress)
+    public int ActiveChewingEffectCount
     {
-        if (!UsesArcadeSystems || isDead || !isActiveAndEnabled)
+        get
+        {
+            int count = 0;
+            foreach (var effect in chewingEffects)
+            {
+                if (effect != null && effect.activeInHierarchy)
+                    count++;
+            }
+            return count;
+        }
+    }
+
+    public void ShowEscalatorChewingStage(int stage)
+    {
+        if (!UsesArcadeSystems || isDead || !isActiveAndEnabled || !IsTouchingIntactEscalator())
             return;
 
         // 한 프레임에 여러 기준점을 넘어도 각 단계를 한 번씩 생성한다.
-        int targetStage = Mathf.FloorToInt(Mathf.Clamp01(progress) * 3f + 0.0001f);
+        int targetStage = Mathf.Clamp(stage, 0, 3);
         while (chewingEffectStage < targetStage)
         {
             chewingEffectStage++;
@@ -2357,6 +2375,23 @@ public class Player : MonoBehaviour
                 case 3: SpawnChewingEffect(chewingEffect3Prefab, chewingEffect3LocalPosition); break;
             }
         }
+    }
+
+    public bool IsTouchingIntactEscalator()
+    {
+        if (rb == null || !rb.simulated)
+            return false;
+
+        // Exit 콜백이 누락되거나 블럭이 풀에서 재사용되어도 실제 접촉만 인정한다.
+        activeEscalatorContacts.RemoveWhere(contact => contact == null || !contact.enabled ||
+            !contact.gameObject.activeInHierarchy || !rb.IsTouching(contact));
+        foreach (var contact in activeEscalatorContacts)
+        {
+            var escalator = contact.GetComponentInParent<Escalator>();
+            if (escalator != null && !escalator.IsBreaking && escalator.isActiveAndEnabled)
+                return true;
+        }
+        return false;
     }
 
     private void SpawnChewingEffect(GameObject prefab, Vector2 localPosition)
@@ -2386,6 +2421,7 @@ public class Player : MonoBehaviour
 
     private void OnDisable()
     {
+        activeEscalatorContacts.Clear();
         ClearChewingEffects();
     }
 
@@ -2403,6 +2439,7 @@ public class Player : MonoBehaviour
 
     private void OnTriggerExit2D(Collider2D other)
     {
+        activeEscalatorContacts.Remove(other);
         if (other.CompareTag("Obstacle") || other.CompareTag("missile"))
         {
             HandleHazardExit(other);
@@ -2411,6 +2448,7 @@ public class Player : MonoBehaviour
 
     private void OnCollisionExit2D(Collision2D c)
     {
+        activeEscalatorContacts.Remove(c.collider);
         if (TryResolveGroundSurface(c.collider, out _, out _) &&
             c.collider == lastGroundCol)
         {
@@ -3229,6 +3267,7 @@ public class Player : MonoBehaviour
 
     public void ResetPlayer()
     {
+        activeEscalatorContacts.Clear();
         ClearChewingEffects();
         GetComponent<ArcadeFeedback>()?.ResetFeedback();
         StopSpawnIntroRoutine();

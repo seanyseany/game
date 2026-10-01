@@ -5,6 +5,8 @@ using UnityEngine.UI;
 [RequireComponent(typeof(RectTransform))]
 public class ArcadeScoreDisplay : MonoBehaviour
 {
+    private const float ScoreRevealDelayAfterBoss = 3f;
+
     private enum DigitLayoutMode
     {
         SpriteWidth,
@@ -36,6 +38,17 @@ public class ArcadeScoreDisplay : MonoBehaviour
     private Sprite displayedUnitSprite;
     private float displayedUnitGap = -1f;
     private Vector2 displayedUnitOffset = new Vector2(float.NaN, float.NaN);
+    private CanvasGroup scoreCanvasGroup;
+    private float alphaBeforeBoss;
+    private bool hiddenForBoss;
+    private float bossRevealDelayRemaining;
+
+    private void Awake()
+    {
+        scoreCanvasGroup = GetComponent<CanvasGroup>();
+        if (scoreCanvasGroup == null)
+            scoreCanvasGroup = gameObject.AddComponent<CanvasGroup>();
+    }
 
     private void OnEnable()
     {
@@ -48,8 +61,50 @@ public class ArcadeScoreDisplay : MonoBehaviour
         Refresh();
     }
 
+    private void OnDisable()
+    {
+        RestoreVisibility();
+    }
+
+    private void UpdateBossVisibility()
+    {
+        bool shouldHide = StageManager.Instance != null
+            && StageManager.Instance.isActiveAndEnabled
+            && StageManager.Instance.HasActiveBoss;
+        if (shouldHide)
+        {
+            bossRevealDelayRemaining = ScoreRevealDelayAfterBoss;
+            if (!hiddenForBoss)
+            {
+                alphaBeforeBoss = scoreCanvasGroup.alpha;
+                scoreCanvasGroup.alpha = 0f;
+                hiddenForBoss = true;
+            }
+            return;
+        }
+
+        if (!hiddenForBoss || RageTransformFreezeController.ShouldSkipGameplayFrame())
+            return;
+
+        bossRevealDelayRemaining -= Time.deltaTime;
+        if (bossRevealDelayRemaining <= 0f)
+            RestoreVisibility();
+    }
+
+    private void RestoreVisibility()
+    {
+        bossRevealDelayRemaining = 0f;
+        if (!hiddenForBoss) return;
+
+        if (scoreCanvasGroup != null)
+            scoreCanvasGroup.alpha = alphaBeforeBoss;
+        hiddenForBoss = false;
+    }
+
     private void Refresh()
     {
+        UpdateBossVisibility();
+
         if (GameData.Instance == null)
             return;
 

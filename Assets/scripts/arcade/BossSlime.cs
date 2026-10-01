@@ -807,14 +807,26 @@ public class BossSlime : MonoBehaviour, IReinitializeOnEnable
                 GameData.Instance.TriggerGameOver();
         }
 
-        if (activeCanon != null)
-            SafeReturnOrDestroy(activeCanon, canonPoolTag);
+        PlayCanonDeathExit(activeCanon);
         activeCanon = null;
-        ClearTimeoutExtraCanonsNow();
+        for (int i = 0; i < timeoutExtraCanons.Count; i++)
+            PlayCanonDeathExit(timeoutExtraCanons[i]);
+        timeoutExtraCanons.Clear();
 
         state = State.Dead;
         deathRoutine = null;
         gameObject.SetActive(false);
+    }
+
+    private void PlayCanonDeathExit(GameObject canonObject)
+    {
+        if (canonObject == null) return;
+
+        var canon = canonObject.GetComponent<BossSlimeCanon>();
+        if (canon != null && canonObject.activeInHierarchy)
+            canon.PlayDeathExit();
+        else
+            SafeReturnOrDestroy(canonObject, canonPoolTag);
     }
 
     private IEnumerator CoPrepareTimeoutCanons()

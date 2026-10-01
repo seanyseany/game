@@ -25,6 +25,8 @@ public class BossSlimeCanon : MonoBehaviour, IReinitializable
 
     private Coroutine fireRoutine;
     private Coroutine flashRoutine;
+    private Coroutine deathExitRoutine;
+    private bool isExiting;
     private Renderer[] cachedRenderers;
     private List<Color[]> originalColors = new List<Color[]>();
 
@@ -38,6 +40,13 @@ public class BossSlimeCanon : MonoBehaviour, IReinitializable
 
     public void Reinit()
     {
+        if (deathExitRoutine != null)
+        {
+            StopCoroutine(deathExitRoutine);
+            deathExitRoutine = null;
+        }
+        isExiting = false;
+
         if (fireRoutine != null)
         {
             StopCoroutine(fireRoutine);
@@ -61,6 +70,59 @@ public class BossSlimeCanon : MonoBehaviour, IReinitializable
         SetZRotation(idleZ);
     }
 
+    private void OnDisable()
+    {
+        StopAllCoroutines();
+        fireRoutine = null;
+        flashRoutine = null;
+        deathExitRoutine = null;
+        isExiting = false;
+    }
+
+    public void PlayDeathExit()
+    {
+        if (isExiting || !gameObject.activeInHierarchy) return;
+
+        StopAllCoroutines();
+        fireRoutine = null;
+        flashRoutine = null;
+        RestoreRendererColors();
+        isExiting = true;
+
+        // The boss is disabled immediately after spawning its death effect.
+        // Keep the cannon alive independently until its downward movement ends.
+        transform.SetParent(null, true);
+        deathExitRoutine = StartCoroutine(CoDeathExit());
+    }
+
+    private IEnumerator CoDeathExit()
+    {
+        const float duration = 2f;
+        Vector3 start = transform.position;
+        Vector3 end = start + Vector3.down * 4f;
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            if (RageTransformFreezeController.ShouldSkipGameplayFrame())
+            {
+                yield return null;
+                continue;
+            }
+
+            elapsed += Time.deltaTime;
+            transform.position = Vector3.Lerp(start, end, Mathf.Clamp01(elapsed / duration));
+            yield return null;
+        }
+
+        transform.position = end;
+        deathExitRoutine = null;
+        if (ObjectPool.Instance != null && ObjectPool.Instance.TryReturnActive(gameObject))
+            yield break;
+
+        Destroy(gameObject);
+    }
+
     public void AddZRotation(float deltaZ)
     {
         transform.localRotation = Quaternion.Euler(0f, 0f, transform.localEulerAngles.z + deltaZ);
@@ -73,6 +135,7 @@ public class BossSlimeCanon : MonoBehaviour, IReinitializable
 
     public void PlayFireAnimation()
     {
+        if (isExiting) return;
         if (canonAnimator == null || string.IsNullOrEmpty(fireTrigger)) return;
         if (fireRoutine != null) StopCoroutine(fireRoutine);
         fireRoutine = StartCoroutine(CoPlayFireThenIdle());
@@ -92,6 +155,7 @@ public class BossSlimeCanon : MonoBehaviour, IReinitializable
 
     public GameObject SpawnCanonBall(float shotAngleDeg, int forcedVersionIndex = -1)
     {
+        if (isExiting) return null;
         Vector3 worldPos = transform.TransformPoint(canonBallStartLocalOffset);
 
         GameObject ball = null;
@@ -123,6 +187,7 @@ public class BossSlimeCanon : MonoBehaviour, IReinitializable
 
     public void TriggerHitFlash(Color color, float duration)
     {
+        if (isExiting) return;
         if (flashRoutine != null)
             StopCoroutine(flashRoutine);
         flashRoutine = StartCoroutine(CoFlash(color, duration));

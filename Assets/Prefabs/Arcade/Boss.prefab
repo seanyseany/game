@@ -1244,6 +1244,7 @@ MonoBehaviour:
   lifeTimeSeconds: 80
   hpSlider: {fileID: 2941179702751974242}
   timerSlider: {fileID: 3035340850401823202}
+  hitCountPrefab: {fileID: 0}
   enterTargetWorldPos: {x: 6, y: 0, z: 0}
   enterMoveTime: 4
   roamCenterWorldPos: {x: 7, y: 0, z: 0}
@@ -1280,7 +1281,7 @@ MonoBehaviour:
   bossRageMissileLocalOffset: {x: -1.47, y: -0.59, z: 0}
   bossRageFirePrefab: {fileID: 8378490850483826176, guid: 5ea943efde389433d86ea8ca76ea54ac, type: 3}
   rageDoorOpenTime: 0.8
-  rageFirstShotDelay: 1
+  rageFirstShotDelay: 2.2
   rageMoveToStopYTime: 0.5
   rageBurstCount: 4
   rageBurstFireDuration: 1.5
@@ -1306,8 +1307,8 @@ MonoBehaviour:
   bossMissilePrefab: {fileID: 2138515272002722746, guid: 428ab485d1ad842309e6eb6b9851420e, type: 3}
   bossCapRightPrefab: {fileID: 6244982353558447776, guid: 3c18ea6e7ec484a6c8f2e6b83701be32, type: 3}
   bossCapLeftPrefab: {fileID: 6235373037444041652, guid: 9167ab1203e944c8a9e0b7e88323b6eb, type: 3}
-  hitColor: {r: 1, g: 0, b: 0, a: 1}
-  hitFlashDuration: 0.1
+  hitColor: {r: 1, g: 0.32278907, b: 0, a: 1}
+  hitFlashDuration: 0.07
   visualRoot: {fileID: 6749335236560566316}
   shakeLeft: 0.1
   shakeRight: 0.2

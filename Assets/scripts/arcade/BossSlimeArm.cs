@@ -124,12 +124,16 @@ public class BossSlimeArm : MonoBehaviour, IReinitializable
         if (versionIndices == null || versionIndices.Length == 0)
             versionIndices = new int[] { -1 };
 
+        bool spawnedAny = false;
         // 선택된 그룹의 버전을 전부 스폰한다. (포인트가 부족하면 순환 사용)
         for (int i = 0; i < versionIndices.Length; i++)
         {
             Vector3 spawnPoint = points[i % points.Length];
-            SpawnOneJellyAtWorld(spawnPoint, -1f, versionIndices[i]);
+            spawnedAny |= SpawnOneJellyAtWorld(spawnPoint, -1f, versionIndices[i]);
         }
+
+        if (spawnedAny)
+            CameraShakeManager.ShakeDefault();
     }
 
     // 선택된 그룹의 버전 인덱스를 모두 가져온다.
@@ -157,7 +161,7 @@ public class BossSlimeArm : MonoBehaviour, IReinitializable
         return fallback;
     }
 
-    private void SpawnOneJellyAtWorld(Vector3 worldPos, float dirX, int forcedVersionIndex)
+    private bool SpawnOneJellyAtWorld(Vector3 worldPos, float dirX, int forcedVersionIndex)
     {
         GameObject jellyObj = null;
         if (usePool && ObjectPool.Instance != null && !string.IsNullOrEmpty(jellyPoolTag) && ObjectPool.Instance.HasPool(jellyPoolTag))
@@ -165,10 +169,10 @@ public class BossSlimeArm : MonoBehaviour, IReinitializable
         else if (jellyPrefab != null)
             jellyObj = Instantiate(jellyPrefab, worldPos, Quaternion.identity);
 
-        if (jellyObj == null) return;
+        if (jellyObj == null) return false;
 
         var jelly = jellyObj.GetComponent<BossSlimeJelly>();
-        if (jelly == null) return;
+        if (jelly == null) return false;
 
         jelly.usePool = usePool;
         jelly.poolTag = jellyPoolTag;
@@ -183,6 +187,7 @@ public class BossSlimeArm : MonoBehaviour, IReinitializable
         }
 
         jelly.Launch(new Vector2(dirX, 1f));
+        return true;
     }
 
     public void TriggerHitFlash(Color color, float duration)
