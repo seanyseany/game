@@ -105,10 +105,8 @@ public class GameData : MonoBehaviour
     // ===================== BOSS TRIGGER =====================
     [Header("Boss Trigger (Debug)")]
     public bool debugForceBossStage3 = false;
-    public bool debugForceBossStage4 = false;
 
     private bool bossStage3Triggered = false;
-    private bool bossStage4Triggered = false;
     private bool arcadeSceneActive;
     private int initializedSceneHandle = int.MinValue;
     public bool IsResetting { get; private set; }
@@ -166,13 +164,6 @@ public class GameData : MonoBehaviour
             if (StageManager.Instance != null)
                 StageManager.Instance.TriggerBossEncounter(3);
         }
-        if (debugForceBossStage4)
-        {
-            debugForceBossStage4 = false;
-            bossStage4Triggered = true;
-            if (StageManager.Instance != null)
-                StageManager.Instance.TriggerBossEncounter(4);
-        }
 
         if (rageMode && Time.time >= rageEndTime)
         {
@@ -222,12 +213,6 @@ public class GameData : MonoBehaviour
         {
             bossStage3Triggered = true;
             sm.TriggerBossEncounter(3);
-        }
-
-        if (!bossStage4Triggered && currentPhaseSpawnCount == sm.speedUp4)
-        {
-            bossStage4Triggered = true;
-            sm.TriggerBossEncounter(4);
         }
     }
 
@@ -566,9 +551,7 @@ public class GameData : MonoBehaviour
 
         // ✅ 보스 트리거 리셋
         bossStage3Triggered = false;
-        bossStage4Triggered = false;
         debugForceBossStage3 = false;
-        debugForceBossStage4 = false;
 
         if (obstacleRoutine != null)
         {

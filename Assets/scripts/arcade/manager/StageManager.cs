@@ -22,11 +22,10 @@ public class StageManager : MonoBehaviour
     private const int RagePhaseStage = -1;
     private const int MinPhaseStage = 1;
     private const int MaxPhaseStage = 4;
-    private const int PostBossSlimeMixedStage = 104;
+    private const int PostBossMixedStage = 104;
     private const string MachineGunStageTag = "MachineGunStage";
     private const string MiniBossStageTag = "miniBoss";
     private const int BossStage3 = 3;
-    private const int BossStage4 = 4;
     private const float PostMachineGunObstacleProtectionDuration = 0.5f;
 
     [Header("Test Phase Prefabs")]
@@ -62,13 +61,14 @@ public class StageManager : MonoBehaviour
     [Header("Speed Up Thresholds")]
     public int speedUp1 = 3;
     public int speedUp2 = 6;
+    [Tooltip("스테이지 3 이후 보스 전투를 예약하는 누적 페이즈 스폰 수")]
     public int speedUp3 = 9;
-    public int speedUp4 = 12;
 
     [Header("Speed Up Multipliers")]
     public float speedMult1 = 1.1f;
     public float speedMult2 = 1.25f;
     public float speedMult3 = 1.4f;
+    [Tooltip("보스 이후 스테이지 3·4 혼합 구간의 속도 배율")]
     public float speedMult4 = 1.55f;
 
     [Header("Pooling")]
@@ -100,7 +100,6 @@ public class StageManager : MonoBehaviour
     private readonly Queue<GameObject> prewarmQueue = new Queue<GameObject>();
     private readonly HashSet<GameObject> pendingPrewarm = new HashSet<GameObject>();
     private Coroutine prewarmRoutine;
-    private bool cavePoolInitialized;
     private GameObject[] mixedPhasePrefabs;
     private SpecialPhaseEntry[] mixedSpecialPhasePrefabs;
 
@@ -129,16 +128,10 @@ public class StageManager : MonoBehaviour
 
     // ============================ BOSS ============================
     [Header("Boss Settings")]
+    [FormerlySerializedAs("stage3BossPrefab")]
     [FormerlySerializedAs("bossA")]
-    public GameObject stage3BossPrefab;
-    [FormerlySerializedAs("bossB")]
-    public GameObject stage4BossPrefab;
+    public GameObject bossPrefab;
     public string bossPhaseTriggerTag = "Boss";
-    public string bossSlimePhaseTriggerTag = "BossSlime";
-
-    [Header("Boss Spawn Fallback (Optional)")]
-    public GameObject bossA;
-    public GameObject bossB;
     public float bossResumeDelay = 3f;
 
     private bool bossTriggered = false;
@@ -148,28 +141,16 @@ public class StageManager : MonoBehaviour
     private int bossTriggerStage = 0;
     private int pendingMachineGunBossStage = 0;
     private bool pendingBossExtraNormalPhase = false;
-    private bool postBossSlimeMixedPhaseUnlocked = false;
+    private bool postBossMixedPhaseUnlocked = false;
     private GameObject activeBoss;
     public bool HasActiveBoss => activeBoss != null && activeBoss.activeInHierarchy;
     private bool activeBossIsSceneObject = false;
     private Coroutine bossFlowRoutine;
 
-    [Header("Stage 3 -> 4 Transition")]
-    public GameObject cavePrefab;
-    public GameObject background1Prefab;
-    public GameObject background2Prefab;
-    public stage2prefabSpawner stage4PhasePrefabSpawner;
-    public Vector3 caveStartWorldPos = new Vector3(42f, 0.3f, 0f);
-    public Vector3 caveEndWorldPos = new Vector3(-45f, 0.3f, 0f);
-    public float caveBackgroundSwitchX = -1f;
-    public float caveMoveSpeed = 18f;
-    public float stage4StartDelayAfterBgSwitch = 2f;
-    public float stage4SpawnerResumeDelay = 0.35f;
-    public int cavePoolSize = 1;
+    [Header("Background")]
+    [FormerlySerializedAs("background1Prefab")]
+    public GameObject backgroundPrefab;
 
-    private readonly Queue<GameObject> cavePool = new Queue<GameObject>();
-    private GameObject activeCaveObj;
-    private Coroutine caveMoveRoutine;
     private Coroutine stageLoopRoutine;
 
     void Awake()
@@ -558,7 +539,6 @@ public class StageManager : MonoBehaviour
         stageLoopRoutine = null;
         ragePhaseRoutine = null;
         bossFlowRoutine = null;
-        caveMoveRoutine = null;
         prewarmRoutine = null;
         prewarmQueue.Clear();
         pendingPrewarm.Clear();
@@ -576,12 +556,10 @@ public class StageManager : MonoBehaviour
         miniBossPhasePauseActive = false;
         phaseShuffleByStage.Clear();
         isDelayActive = false;
-        StopStage4PhasePrefabSpawner();
 
         // ✅ 보스 상태 리셋
         ResetBossState();
-        SetBackgroundVisible(background1Prefab, true);
-        SetBackgroundVisible(background2Prefab, false);
+        SetBackgroundVisible(backgroundPrefab, true);
     }
 
     private void SpawnPhase()
@@ -616,11 +594,6 @@ public class StageManager : MonoBehaviour
         while (pendingPrewarm.Count > 0)
             yield return null;
 
-        if (!cavePoolInitialized)
-        {
-            InitCavePool();
-            cavePoolInitialized = true;
-        }
         PrewarmUpcomingStage();
 
         float delay = Mathf.Max(0f, startSpawnDelay - (Time.time - startedAt));
@@ -701,8 +674,8 @@ public class StageManager : MonoBehaviour
 
     public void TriggerBossEncounter(int stage)
     {
-        if (bossRunning) return;
-        if (bossTriggered) return;
+        if (stage != BossStage3 || postBossMixedPhaseUnlocked || bossRunning || bossTriggered)
+            return;
 
         bossTriggered = true;
         bossTriggerStage = stage;
@@ -715,7 +688,7 @@ public class StageManager : MonoBehaviour
 
     public void QueueBossEncounterAfterMachineGun(int stage)
     {
-        if (stage < BossStage3 || stage > BossStage4)
+        if (stage != BossStage3 || postBossMixedPhaseUnlocked || bossRunning || bossTriggered)
             return;
 
         pendingMachineGunBossStage = stage;
@@ -724,7 +697,7 @@ public class StageManager : MonoBehaviour
     public bool TryResolveBossStageFromTaggedObject(GameObject source, out int stage)
     {
         stage = 0;
-        if (source == null)
+        if (source == null || postBossMixedPhaseUnlocked)
             return false;
 
         string tag = source.tag;
@@ -734,18 +707,12 @@ public class StageManager : MonoBehaviour
             return true;
         }
 
-        if (!string.IsNullOrEmpty(bossSlimePhaseTriggerTag) && tag == bossSlimePhaseTriggerTag)
-        {
-            stage = BossStage4;
-            return true;
-        }
-
         return false;
     }
 
     private void StartBossEncounterNow(int stage)
     {
-        if (bossRunning || bossTriggered)
+        if (stage != BossStage3 || postBossMixedPhaseUnlocked || bossRunning || bossTriggered)
             return;
 
         bossTriggered = true;
@@ -765,28 +732,26 @@ public class StageManager : MonoBehaviour
     private IEnumerator CoRunBossEncounter()
     {
         bossRunning = true;
-        DeactivateBossTemplatesIfSceneObjects();
-        StopStage4PhasePrefabSpawner();
+        DeactivateBossTemplateIfSceneObject();
 
-        // 1) Stage별 보스 스폰
+        // 1) 등록된 보스 활성화
         ClearActiveBossInstance();
 
-        GameObject source = PickBossPrefabForStage(bossTriggerStage);
+        GameObject source = bossPrefab;
         if (source == null)
         {
             yield return WaitForSecondsRespectingGameplayPause(bossResumeDelay);
-            ResumeAfterBoss(startStage4PrefabSpawner: bossTriggerStage >= 4);
+            ResumeAfterBoss();
             yield break;
         }
 
         // StageManager는 좌표를 정하지 않는다.
-        // 씬에 배치된 보스 오브젝트면 그대로 활성화해서 사용,
-        // 에셋 프리팹이면 원본 transform 기준으로 인스턴스화한다.
+        // 씬에 배치된 보스 오브젝트를 그대로 활성화해서 사용한다.
         activeBossIsSceneObject = source.scene.IsValid();
         if (!activeBossIsSceneObject)
         {
             yield return WaitForSecondsRespectingGameplayPause(bossResumeDelay);
-            ResumeAfterBoss(startStage4PrefabSpawner: bossTriggerStage >= 4);
+            ResumeAfterBoss();
             yield break;
         }
 
@@ -820,7 +785,7 @@ public class StageManager : MonoBehaviour
         else
         {
             yield return WaitForSecondsRespectingGameplayPause(bossResumeDelay);
-            ResumeAfterBoss(startStage4PrefabSpawner: bossTriggerStage >= 4);
+            ResumeAfterBoss();
             yield break;
         }
 
@@ -828,56 +793,24 @@ public class StageManager : MonoBehaviour
         while (activeBoss != null && activeBoss.activeInHierarchy)
             yield return null;
 
-        int completedBossStage = bossTriggerStage;
-        if (completedBossStage == 3)
-        {
-            yield return CoCaveBackgroundTransition(
-                fromBackground: background1Prefab,
-                toBackground: background2Prefab,
-                waitForRageEnd: true);
-            ResumeAfterBoss(startStage4PrefabSpawner: true);
-        }
-        else if (completedBossStage >= 4)
-        {
-            postBossSlimeMixedPhaseUnlocked = true;
-            yield return CoCaveBackgroundTransition(
-                fromBackground: background2Prefab,
-                toBackground: background1Prefab,
-                waitForRageEnd: true);
-            ResumeAfterBoss(startStage4PrefabSpawner: false);
-        }
-        else
-        {
-            // 4) 3초 딜레이 후 스폰 재개
-            yield return WaitForSecondsRespectingGameplayPause(bossResumeDelay);
-            ResumeAfterBoss(startStage4PrefabSpawner: false);
-        }
+        yield return WaitForSecondsRespectingGameplayPause(bossResumeDelay);
+        ResumeAfterBoss();
     }
 
-    private void ResumeAfterBoss(bool startStage4PrefabSpawner = false)
+    private void ResumeAfterBoss()
     {
+        // The single boss unlocks the combined stage 3/4 pool for the rest of this run.
+        postBossMixedPhaseUnlocked = true;
         bossRunning = false;
         bossTriggered = false;
         bossAwaitingFinalPass = false;
         bossTriggerStage = 0;
+        pendingMachineGunBossStage = 0;
         pendingBossExtraNormalPhase = false;
         spawnPaused = false;
 
-        // ✅ 바로 다음 페이즈 다시 스폰 재개
+        RequestStagePrewarm(PostBossMixedStage);
         SpawnPhase();
-
-        if (startStage4PrefabSpawner)
-            StartCoroutine(CoStartStage4SpawnerDeferred());
-
-    }
-
-    private IEnumerator CoStartStage4SpawnerDeferred()
-    {
-        float delay = Mathf.Max(0f, stage4SpawnerResumeDelay);
-        if (delay > 0f)
-            yield return WaitForSecondsRespectingGameplayPause(delay);
-
-        StartStage4PhasePrefabSpawner();
     }
 
     private void ResetBossState()
@@ -888,7 +821,7 @@ public class StageManager : MonoBehaviour
         bossTriggerStage = 0;
         pendingMachineGunBossStage = 0;
         pendingBossExtraNormalPhase = false;
-        postBossSlimeMixedPhaseUnlocked = false;
+        postBossMixedPhaseUnlocked = false;
 
         if (bossFlowRoutine != null)
         {
@@ -897,166 +830,14 @@ public class StageManager : MonoBehaviour
         }
 
         ClearActiveBossInstance();
-        ClearActiveCaveInstance();
 
-        DeactivateBossTemplatesIfSceneObjects();
+        DeactivateBossTemplateIfSceneObject();
     }
 
     // 게임오버 시 보스 전투 오브젝트 즉시 정리용
     public void ForceClearBossNow()
     {
         ResetBossState();
-        StopStage4PhasePrefabSpawner();
-    }
-
-    private void InitCavePool()
-    {
-        cavePool.Clear();
-        if (cavePrefab == null) return;
-
-        int count = Mathf.Max(1, cavePoolSize);
-        for (int i = 0; i < count; i++)
-        {
-            var go = Instantiate(cavePrefab);
-            go.name = cavePrefab.name + "_Pooled";
-            go.SetActive(false);
-            cavePool.Enqueue(go);
-        }
-    }
-
-    private GameObject GetCaveFromPool()
-    {
-        if (cavePrefab == null) return null;
-
-        GameObject go = (cavePool.Count > 0) ? cavePool.Dequeue() : Instantiate(cavePrefab);
-        if (go.name.IndexOf("_Pooled") < 0)
-            go.name = cavePrefab.name + "_Pooled";
-
-        go.transform.SetPositionAndRotation(caveStartWorldPos, Quaternion.identity);
-        go.SetActive(true);
-        foreach (var r in go.GetComponentsInChildren<IReinitializable>(true))
-            r.Reinit();
-        return go;
-    }
-
-    private void ReturnCaveToPool(GameObject go)
-    {
-        if (go == null) return;
-        foreach (var mb in go.GetComponentsInChildren<MonoBehaviour>(true))
-            mb.StopAllCoroutines();
-
-        go.SetActive(false);
-        go.transform.position = new Vector3(-999f, -999f, 0f);
-        cavePool.Enqueue(go);
-    }
-
-    private IEnumerator CoCaveBackgroundTransition(GameObject fromBackground, GameObject toBackground, bool waitForRageEnd)
-    {
-        if (waitForRageEnd)
-        {
-            // Stage3 보스 처치 후 즉시 cave를 띄우지 않고, 플레이어 분노(rage)가 끝난 뒤 전환 시작
-            while (GameData.Instance != null && GameData.Instance.rageMode)
-            {
-                if (gameplayPauseByTransform)
-                {
-                    yield return null;
-                    continue;
-                }
-                yield return null;
-            }
-        }
-
-        yield return WaitForSecondsRespectingGameplayPause(1f);
-
-        ClearActiveCaveInstance();
-        activeCaveObj = GetCaveFromPool();
-        if (activeCaveObj == null)
-        {
-            yield return WaitForSecondsRespectingGameplayPause(stage4StartDelayAfterBgSwitch);
-            yield break;
-        }
-
-        if (caveMoveRoutine != null)
-            StopCoroutine(caveMoveRoutine);
-        caveMoveRoutine = StartCoroutine(CoMoveCaveAndRecycle(activeCaveObj));
-
-        bool switched = false;
-        while (activeCaveObj != null && activeCaveObj.activeSelf)
-        {
-            if (!switched && activeCaveObj.transform.position.x <= caveBackgroundSwitchX)
-            {
-                switched = true;
-                SetBackgroundVisible(fromBackground, false);
-                SetBackgroundVisible(toBackground, true);
-                yield return WaitForSecondsRespectingGameplayPause(Mathf.Max(0f, stage4StartDelayAfterBgSwitch));
-                yield break;
-            }
-            yield return null;
-        }
-
-        // cave가 빨리 사라진 예외 케이스에서도 stage4 시작 지연은 보장
-        yield return WaitForSecondsRespectingGameplayPause(Mathf.Max(0f, stage4StartDelayAfterBgSwitch));
-    }
-
-    private IEnumerator CoMoveCaveAndRecycle(GameObject caveObj)
-    {
-        if (caveObj == null) yield break;
-
-        Vector3 end = caveEndWorldPos;
-        float speed = Mathf.Max(0.01f, caveMoveSpeed);
-
-        while (caveObj != null && caveObj.activeSelf)
-        {
-            if (gameplayPauseByTransform)
-            {
-                yield return null;
-                continue;
-            }
-
-            caveObj.transform.position = Vector3.MoveTowards(caveObj.transform.position, end, speed * Time.deltaTime);
-            if (caveObj.transform.position.x <= end.x)
-                break;
-            yield return null;
-        }
-
-        if (caveObj != null)
-            ReturnCaveToPool(caveObj);
-
-        if (activeCaveObj == caveObj)
-            activeCaveObj = null;
-        caveMoveRoutine = null;
-    }
-
-    private void ClearActiveCaveInstance()
-    {
-        if (caveMoveRoutine != null)
-        {
-            StopCoroutine(caveMoveRoutine);
-            caveMoveRoutine = null;
-        }
-
-        if (activeCaveObj != null)
-        {
-            ReturnCaveToPool(activeCaveObj);
-            activeCaveObj = null;
-        }
-    }
-
-    private void StartStage4PhasePrefabSpawner()
-    {
-        if (stage4PhasePrefabSpawner == null)
-            return;
-
-        stage4PhasePrefabSpawner.SetBossSlimePaused(false);
-        stage4PhasePrefabSpawner.BeginSpawn();
-    }
-
-    private void StopStage4PhasePrefabSpawner()
-    {
-        if (stage4PhasePrefabSpawner == null)
-            return;
-
-        stage4PhasePrefabSpawner.SetBossSlimePaused(true);
     }
 
     private void SetBackgroundVisible(GameObject bg, bool visible)
@@ -1068,44 +849,9 @@ public class StageManager : MonoBehaviour
             if (mrs[i] != null) mrs[i].enabled = visible;
     }
 
-    private void DeactivateBossTemplatesIfSceneObjects()
+    private void DeactivateBossTemplateIfSceneObject()
     {
-        // 씬 레퍼런스로 들고 있는 보스 템플릿만 비활성화하면 충분하다.
-        // 매 전투 시작마다 씬 전체 FindObjectsByType를 돌면 후반부에서 미세 스파이크가 날 수 있다.
-        DeactivateIfSceneObject(stage3BossPrefab);
-        DeactivateIfSceneObject(stage4BossPrefab);
-        DeactivateIfSceneObject(bossA);
-        DeactivateIfSceneObject(bossB);
-    }
-
-    private GameObject PickBossPrefabForStage(int stage)
-    {
-        if (stage == 3)
-        {
-            if (stage3BossPrefab != null) return stage3BossPrefab;
-            if (bossA != null) return bossA;
-            return bossB;
-        }
-
-        if (stage == 4)
-        {
-            if (stage4BossPrefab != null) return stage4BossPrefab;
-            if (bossB != null) return bossB;
-            return bossA;
-        }
-
-        if (stage3BossPrefab != null && stage4BossPrefab != null)
-            return (Random.value < 0.5f) ? stage3BossPrefab : stage4BossPrefab;
-
-        if (stage3BossPrefab != null) return stage3BossPrefab;
-        if (stage4BossPrefab != null) return stage4BossPrefab;
-
-        if (bossA != null && bossB != null)
-            return (Random.value < 0.5f) ? bossA : bossB;
-        if (bossA != null) return bossA;
-        if (bossB != null) return bossB;
-
-        return null;
+        DeactivateIfSceneObject(bossPrefab);
     }
 
     private void ClearActiveBossInstance()
@@ -1476,8 +1222,8 @@ public class StageManager : MonoBehaviour
             return TestPhaseStage;
 
         int speedStage = GetSpeedStage();
-        if (postBossSlimeMixedPhaseUnlocked && speedStage >= BossStage4)
-            return PostBossSlimeMixedStage;
+        if (postBossMixedPhaseUnlocked)
+            return PostBossMixedStage;
 
         return speedStage;
     }
@@ -1516,7 +1262,7 @@ public class StageManager : MonoBehaviour
             return null;
         }
 
-        if (stage == PostBossSlimeMixedStage)
+        if (stage == PostBossMixedStage)
             return mixedPhasePrefabs ??= CombinePhasePrefabs(stage3PhasePrefabs, stage4PhasePrefabs);
 
         switch (Mathf.Clamp(stage, MinPhaseStage, MaxPhaseStage))
@@ -1605,10 +1351,10 @@ public class StageManager : MonoBehaviour
 
     private void ReserveNormalPhaseBeforeBoss(List<GameObject> cycle, int stage, GameObject[] normalPrefabs, SpecialPhaseEntry[] specialEntries)
     {
-        if (bossTriggered || bossRunning || (stage != BossStage3 && stage != BossStage4))
+        if (postBossMixedPhaseUnlocked || bossTriggered || bossRunning || stage != BossStage3)
             return;
 
-        int bossPhaseCount = stage == BossStage3 ? speedUp3 : speedUp4;
+        int bossPhaseCount = speedUp3;
         int finalPhaseIndex = bossPhaseCount - phaseSpawnCount - 1;
         // A stage can refill its cycle before reaching the boss threshold.
         if (finalPhaseIndex < 0 || finalPhaseIndex >= cycle.Count)
@@ -1653,13 +1399,15 @@ public class StageManager : MonoBehaviour
 
     private int GetPhaseCycleCountForStage(int stage)
     {
-        if (stage == PostBossSlimeMixedStage)
-            return Mathf.Max(1, speedUp4 - speedUp3);
+        if (stage == PostBossMixedStage || stage == MaxPhaseStage)
+        {
+            GameObject[] normalPrefabs = GetPhasePrefabsForStage(stage);
+            SpecialPhaseEntry[] specialEntries = GetSpecialPhaseEntriesForStage(stage);
+            return Mathf.Max(1, (normalPrefabs?.Length ?? 0) + (specialEntries?.Length ?? 0));
+        }
 
         switch (Mathf.Clamp(stage, MinPhaseStage, MaxPhaseStage))
         {
-            case 4:
-                return Mathf.Max(1, speedUp4 - speedUp3);
             case 3:
                 return Mathf.Max(1, speedUp3 - speedUp2);
             case 2:
@@ -1671,7 +1419,7 @@ public class StageManager : MonoBehaviour
 
     private SpecialPhaseEntry[] GetSpecialPhaseEntriesForStage(int stage)
     {
-        if (stage == PostBossSlimeMixedStage)
+        if (stage == PostBossMixedStage)
             return mixedSpecialPhasePrefabs ??= CombineSpecialPhaseEntries(stage3SpecialPhasePrefabs, stage4SpecialPhasePrefabs);
 
         if (stage < MinPhaseStage || stage > MaxPhaseStage)
@@ -1695,7 +1443,7 @@ public class StageManager : MonoBehaviour
         if (target == null)
             return;
 
-        if (stage != PostBossSlimeMixedStage && (stage < MinPhaseStage || stage > MaxPhaseStage))
+        if (stage != PostBossMixedStage && (stage < MinPhaseStage || stage > MaxPhaseStage))
         {
             AddAvailableNormalPrefabs(target, normalPrefabs, allowMachineGunStage);
             return;
@@ -1719,6 +1467,21 @@ public class StageManager : MonoBehaviour
 
                 availableSpecials.Add(entry);
             }
+        }
+
+        if (stage == PostBossMixedStage)
+        {
+            // Endless mixed cycles include every normal prefab, independent of speed thresholds.
+            // Specials are additional chance-based entries, so they cannot replace all normal phases.
+            target.AddRange(availableNormals);
+            for (int i = 0; i < availableSpecials.Count; i++)
+            {
+                SpecialPhaseEntry special = availableSpecials[i];
+                float chance = Mathf.Clamp01(special.spawnChance);
+                if (chance > 0f && (chance >= 1f || Random.value < chance))
+                    target.Add(special.prefab);
+            }
+            return;
         }
 
         int totalCycleCount = GetPhaseCycleCountForStage(stage);

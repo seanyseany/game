@@ -294,6 +294,15 @@ public class BossSlime : MonoBehaviour, IReinitializeOnEnable
         state = State.Entering;
         SetBossVisualActive(false);
         SetBossUIVisible(false);
+        // Show the cannon at the encounter position immediately, while the boss
+        // is still waiting offscreen or moving in from its entrance position.
+        EnsureCanon();
+        if (activeCanon != null)
+        {
+            Vector3 canonWorldPos = startWorldPos + transform.TransformVector(canonLocalOffset);
+            activeCanon.transform.SetParent(null, true);
+            activeCanon.transform.position = canonWorldPos;
+        }
 
         if (entranceStartDelay > 0f)
             yield return RageTransformFreezeController.WaitForSecondsRespectingGameplayPause(entranceStartDelay);
@@ -313,7 +322,11 @@ public class BossSlime : MonoBehaviour, IReinitializeOnEnable
         SetBossVisualActive(true);
         yield return MoveToOverTime(startWorldPos, moveToStartTime);
 
-        EnsureCanon();
+        if (activeCanon != null)
+        {
+            activeCanon.transform.SetParent(transform, true);
+            activeCanon.transform.localPosition = canonLocalOffset;
+        }
 
         state = State.Active;
         SetBossUIVisible(true);

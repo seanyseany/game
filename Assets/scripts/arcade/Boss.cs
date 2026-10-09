@@ -66,6 +66,11 @@ public class Boss : MonoBehaviour, IReinitializeOnEnable
     public float monsterSpawnInterval = 0.3f;
 
     [Header("Missile")]
+    [Min(0f)]
+    [Tooltip("분노 공격 전, 처음 일반 공격에서 발사하는 미사일 속도")]
+    public float initialMissileSpeed = 12f;
+    [Min(0f)]
+    [Tooltip("분노 공격 이후 일반 공격에서 발사하는 미사일 속도")]
     public float missileSpeed = 6f;
 
     [Header("Rage Laser Sequence")]
@@ -466,6 +471,8 @@ public class Boss : MonoBehaviour, IReinitializeOnEnable
             var bm = missile.GetComponent<BossMissile>();
             if (bm)
             {
+                bm.moveSpeed = initialMissileSpeed;
+                bm.rageMoveSpeed = missileSpeed;
                 bm.SetUseRageMoveSpeed(useRageBossMissileSpeed);
                 bm.usePool = usePool;
                 bm.poolTag = bossMissilePoolTag;
@@ -490,7 +497,7 @@ public class Boss : MonoBehaviour, IReinitializeOnEnable
                 Instantiate(monsterPrefab, monsterSpawnWorldPos, Quaternion.identity);
 
             spawned++;
-            yield return CoWait(interval);
+            yield return CoRoamForSeconds(interval);
         }
 
         // 스폰 후 텀(기본 5초) 동안 로밍 유지
