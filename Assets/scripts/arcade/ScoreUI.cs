@@ -8,24 +8,38 @@ public class ScoreUI : MonoBehaviour
     public TextMeshProUGUI gameplayEnergyText;
     public TextMeshProUGUI gameplayO2Text;
     private Transform gameplayHudRoot;
+    private float nextResolveTime;
+    private int displayedEnergy = int.MinValue;
+    private int displayedOxygen = int.MinValue;
+    private string energyLabel;
+    private string oxygenLabel;
+
+    private void OnEnable() { nextResolveTime = 0f; displayedEnergy = displayedOxygen = int.MinValue; }
 
     void Update()
     {
         if (GameData.Instance == null) return;
 
-        ResolveGameplayTexts();
+        if ((gameplayEnergyText == null || gameplayO2Text == null) && Time.unscaledTime >= nextResolveTime)
+        {
+            ResolveGameplayTexts();
+            nextResolveTime = Time.unscaledTime + 0.5f;
+        }
 
-        string energy = GameData.Instance.GetCleanScore().ToString();
-        string o2 = GameData.Instance.GetO2Score().ToString();
+        int energy = GameData.Instance.GetCleanScore();
+        int oxygen = GameData.Instance.GetO2Score();
+        if (energy != displayedEnergy) { displayedEnergy = energy; energyLabel = energy.ToString(); }
+        if (oxygen != displayedOxygen) { displayedOxygen = oxygen; oxygenLabel = oxygen.ToString(); }
 
-        if (scoreText != null)
-            scoreText.text = energy;
-        if (o2Text != null)
-            o2Text.text = o2;
-        if (gameplayEnergyText != null)
-            gameplayEnergyText.text = energy;
-        if (gameplayO2Text != null)
-            gameplayO2Text.text = o2;
+        SetLabel(scoreText, energyLabel);
+        SetLabel(o2Text, oxygenLabel);
+        SetLabel(gameplayEnergyText, energyLabel);
+        SetLabel(gameplayO2Text, oxygenLabel);
+    }
+
+    private static void SetLabel(TMP_Text text, string value)
+    {
+        if (text != null && text.text != value) text.text = value;
     }
 
     private void ResolveGameplayTexts()

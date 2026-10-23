@@ -64,6 +64,12 @@ public class O2Icon : MonoBehaviour
 
         ApplyFloatingMotion();
         Refresh();
+        if (Tycoon.DeliveryRuntime.BlocksWorldInput)
+        {
+            activeTouchId = -1;
+            mousePressedOnIcon = false;
+            return;
+        }
         HandleTouchInput();
         HandleMouseInput();
     }
@@ -129,6 +135,9 @@ public class O2Icon : MonoBehaviour
 
     private bool IsScreenPointOverIcon(Vector2 screenPoint)
     {
+        if (Tycoon.DeliveryPointer.FindUiTarget(screenPoint) != null)
+            return false;
+
         if (hitCollider == null)
             return false;
 

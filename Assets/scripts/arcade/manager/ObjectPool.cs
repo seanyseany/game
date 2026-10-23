@@ -22,6 +22,9 @@ public class ObjectPool : MonoBehaviour
     private Dictionary<string, HashSet<GameObject>> activeByTag;
     private Dictionary<string, GameObject> prefabByTag;
     private Dictionary<GameObject, CachedRefs> cacheByObject;
+    private readonly Dictionary<GameObject, string> tagByObject = new Dictionary<GameObject, string>();
+    private readonly HashSet<GameObject> availableObjects = new HashSet<GameObject>();
+    private readonly List<GameObject> returnBuffer = new List<GameObject>();
     private bool initialized;
 
     private sealed class CachedRefs
@@ -35,6 +38,7 @@ public class ObjectPool : MonoBehaviour
         public Animator[] animators;
         public IReinitializable[] reinitializables;
         public Missile missile;
+        public Vector3 initialScale;
     }
 
     private void EnsureInitialized()
@@ -59,7 +63,7 @@ public class ObjectPool : MonoBehaviour
                 var q = new Queue<GameObject>();
                 int create = Mathf.Max(0, def.size);
                 for (int n = 0; n < create; n++)
-                    q.Enqueue(CreatePooledObject(def.prefab));
+                    q.Enqueue(CreatePooledObject(def.prefab, def.tag));
 
                 poolDictionary[def.tag] = q;
                 activeByTag[def.tag] = new HashSet<GameObject>();
@@ -111,7 +115,7 @@ public class ObjectPool : MonoBehaviour
         var q = new Queue<GameObject>();
         int create = Mathf.Max(0, size);
         for (int i = 0; i < create; i++)
-            q.Enqueue(CreatePooledObject(prefab));
+            q.Enqueue(CreatePooledObject(prefab, tag));
 
         poolDictionary[tag] = q;
         activeByTag[tag] = new HashSet<GameObject>();
@@ -143,7 +147,7 @@ public class ObjectPool : MonoBehaviour
         int currentTotal = q.Count + activeSet.Count;
         int addCount = targetSize - currentTotal;
         for (int i = 0; i < addCount; i++)
-            q.Enqueue(CreatePooledObject(prefab));
+            q.Enqueue(CreatePooledObject(prefab, tag));
     }
 
     private bool EnsureCapacity(string tag, int addCount)
@@ -155,15 +159,18 @@ public class ObjectPool : MonoBehaviour
 
         int count = Mathf.Max(1, addCount);
         for (int i = 0; i < count; i++)
-            q.Enqueue(CreatePooledObject(prefab));
+            q.Enqueue(CreatePooledObject(prefab, tag));
 
         return true;
     }
 
-    private GameObject CreatePooledObject(GameObject prefab)
+    private GameObject CreatePooledObject(GameObject prefab, string tag)
     {
         var obj = Instantiate(prefab);
         obj.SetActive(false);
+        obj.transform.SetParent(transform, false);
+        tagByObject[obj] = tag;
+        availableObjects.Add(obj);
         GetOrCreateRefs(obj);
         return obj;
     }
@@ -181,7 +188,8 @@ public class ObjectPool : MonoBehaviour
             spriteRenderers = obj.GetComponentsInChildren<SpriteRenderer>(true),
             animators = obj.GetComponentsInChildren<Animator>(true),
             reinitializables = obj.GetComponentsInChildren<IReinitializable>(true),
-            missile = obj.GetComponent<Missile>()
+            missile = obj.GetComponent<Missile>(),
+            initialScale = obj.transform.localScale
         };
 
         if (refs.spriteRenderers != null)
@@ -209,7 +217,13 @@ public class ObjectPool : MonoBehaviour
         while (q.Count > 0)
         {
             var obj = q.Dequeue();
+            availableObjects.Remove(obj);
             if (obj != null) return obj;
+            if (!ReferenceEquals(obj, null))
+            {
+                cacheByObject.Remove(obj);
+                tagByObject.Remove(obj);
+            }
         }
         return null;
     }
@@ -217,6 +231,7 @@ public class ObjectPool : MonoBehaviour
     private void ResetSpawned(GameObject obj, string tag)
     {
         var refs = GetOrCreateRefs(obj);
+        if (refs != null) obj.transform.localScale = refs.initialScale;
         // Pool keys are independent of Unity gameplay tags; preserve the prefab tag.
         obj.SetActive(true);
 
@@ -315,6 +330,7 @@ public class ObjectPool : MonoBehaviour
             return null;
         }
 
+        obj.transform.SetParent(null, false);
         obj.transform.SetPositionAndRotation(pos, rot);
         ResetSpawned(obj, tag);
 
@@ -326,6 +342,10 @@ public class ObjectPool : MonoBehaviour
     {
         EnsureInitialized();
         if (obj == null) return;
+        // A caller can supply an alias or stale tag. Never enqueue the same
+        // instance into two pools or add it twice after a duplicate return.
+        if (tagByObject.TryGetValue(obj, out string registeredTag)) tag = registeredTag;
+        if (availableObjects.Contains(obj)) return;
 
         bool isPhaseOwned = obj.GetComponentInParent<PhaseLayoutSnapshot>(true) != null;
 
@@ -374,14 +394,16 @@ public class ObjectPool : MonoBehaviour
             }
         }
 
-        obj.transform.SetParent(null, false);
         obj.SetActive(false);
+        obj.transform.SetParent(transform, false);
         obj.transform.position = Vector3.zero;
         obj.transform.rotation = Quaternion.identity;
 
         if (activeSet != null)
             activeSet.Remove(obj);
 
+        tagByObject[obj] = tag;
+        availableObjects.Add(obj);
         poolDictionary[tag].Enqueue(obj);
     }
 
@@ -390,13 +412,10 @@ public class ObjectPool : MonoBehaviour
         EnsureInitialized();
         if (obj == null) return false;
 
-        foreach (var kv in activeByTag)
-        {
-            if (!kv.Value.Contains(obj)) continue;
-            ReturnToPool(kv.Key, obj);
-            return true;
-        }
-        return false;
+        if (!tagByObject.TryGetValue(obj, out string tag) ||
+            !activeByTag.TryGetValue(tag, out var set) || !set.Contains(obj)) return false;
+        ReturnToPool(tag, obj);
+        return true;
     }
 
     public void ReturnAllActive(params string[] tags)
@@ -406,13 +425,30 @@ public class ObjectPool : MonoBehaviour
         {
             var tag = tags[t];
             if (!activeByTag.TryGetValue(tag, out var set)) continue;
-            var arr = new List<GameObject>(set);
-            for (int i = 0; i < arr.Count; i++)
+            returnBuffer.Clear();
+            returnBuffer.AddRange(set);
+            for (int i = 0; i < returnBuffer.Count; i++)
             {
-                var o = arr[i];
+                var o = returnBuffer[i];
                 if (o) ReturnToPool(tag, o);
             }
             set.Clear();
         }
+        returnBuffer.Clear();
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
+        if (cacheByObject == null) return;
+        foreach (var entry in cacheByObject)
+        {
+            if (entry.Key == null || entry.Key.transform.IsChildOf(transform)) continue;
+            if (Application.isPlaying) Destroy(entry.Key);
+            else DestroyImmediate(entry.Key);
+        }
+        cacheByObject.Clear();
+        tagByObject.Clear();
+        availableObjects.Clear();
     }
 }

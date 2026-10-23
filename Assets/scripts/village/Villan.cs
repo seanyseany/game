@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Serialization;
+using UnityEngine.SceneManagement;
 
 [RequireComponent(typeof(Collider2D))]
 [RequireComponent(typeof(Rigidbody2D))]
@@ -11,6 +12,17 @@ public class Villan : MonoBehaviour
     private const float ArriveDistance = 0.03f;
     private const int SortingOrderOffsetCycle = 20;
     private static int nextSortingOrderOffset;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetScenePools()
+    {
+        PoolsByPrefab.Clear();
+        nextSortingOrderOffset = 0;
+        SceneManager.sceneUnloaded -= ClearUnloadedScene;
+        SceneManager.sceneUnloaded += ClearUnloadedScene;
+    }
+
+    private static void ClearUnloadedScene(Scene scene) => ScenePoolCleanup.RemoveUnloaded(PoolsByPrefab, scene);
 
     [FormerlySerializedAs("baseMoveSpeed")]
     [SerializeField] private float moveSpeed = 2f;

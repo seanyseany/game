@@ -1,9 +1,11 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Profiling;
 
 public class Player : MonoBehaviour
 {
+    private static readonly ProfilerMarker UpdateSample = new ProfilerMarker("Arcade.PlayerInput");
 
     // Virtual context preserves the arcade controller and all serialized tuning in race slots.
     protected virtual bool UsesArcadeSystems => true;
@@ -197,6 +199,9 @@ public class Player : MonoBehaviour
     private Collider2D lastGroundCol = null;
     private readonly Collider2D[] groundOverlapResults = new Collider2D[8];
     private readonly ContactPoint2D[] groundContactPoints = new ContactPoint2D[16];
+    private Animator parameterCacheAnimator;
+    private RuntimeAnimatorController parameterCacheController;
+    private readonly Dictionary<int, AnimatorControllerParameterType> animatorParameters = new Dictionary<int, AnimatorControllerParameterType>(16);
     bool attackQueued = false;
     private float attackQueuedTime = 0f;   // 공격키 예약 시각 기록
     private float attackQueueWindow = 0.2f;
@@ -366,6 +371,8 @@ public class Player : MonoBehaviour
         }
 
         if (!rb) rb = GetComponent<Rigidbody2D>();
+        if (UsesArcadeSystems && rb.interpolation == RigidbodyInterpolation2D.None)
+            rb.interpolation = RigidbodyInterpolation2D.Interpolate;
         if (!anim) anim = GetComponent<Animator>();
         sr = GetComponent<SpriteRenderer>();
         bodyCollider = GetComponent<Collider2D>();
@@ -382,6 +389,7 @@ public class Player : MonoBehaviour
 
     protected virtual void Update()
     {
+        using var sample = UpdateSample.Auto();
         if (isDead)
         {
             ClearRunningSmokeImmediate();
@@ -767,7 +775,7 @@ public class Player : MonoBehaviour
             if (playerType == T1)
                 yield return StartCoroutine(P1_Land(isRageMode));
             else
-                yield return StartCoroutine(P5_Land(true));
+                yield return StartCoroutine(P5_Land(true, shakeOnFloor: false));
 
             isLanding = false;
             yield break;
@@ -918,12 +926,20 @@ public class Player : MonoBehaviour
         anim.speed = baseWalkAnimSpeed;
     }
 
-    private static bool HasParam(Animator a, string name,
+    private bool HasParam(Animator a, string name,
         AnimatorControllerParameterType t = AnimatorControllerParameterType.Trigger)
     {
-        foreach (var p in a.parameters) if (p.type == t && p.name == name) return true;
-        return false;
+        if (a == null || a.runtimeAnimatorController == null) return false;
+        if (parameterCacheAnimator != a || parameterCacheController != a.runtimeAnimatorController)
+        {
+            parameterCacheAnimator = a;
+            parameterCacheController = a.runtimeAnimatorController;
+            animatorParameters.Clear();
+            foreach (var parameter in a.parameters)
+                animatorParameters[parameter.nameHash] = parameter.type;
         }
+        return animatorParameters.TryGetValue(Animator.StringToHash(name), out var type) && type == t;
+    }
 
     private bool IsRangedPlayerType()
     {
@@ -1135,8 +1151,10 @@ public class Player : MonoBehaviour
         if (isDead) return;
         if (CharacterType == T3 && isAttacking) return;
 
-        if (UsesArcadeSystems)
-            transform.position = new Vector3(gameplayX, transform.position.y, transform.position.z);
+        // Keep physics Y intact. Writing the rendered Transform every Update
+        // teleports the body and invalidates Rigidbody interpolation each frame.
+        if (UsesArcadeSystems && !Mathf.Approximately(rb.position.x, gameplayX))
+            rb.position = new Vector2(gameplayX, rb.position.y);
 
         if (!isGrounded)
         {
@@ -1500,6 +1518,7 @@ public class Player : MonoBehaviour
                 proj.smokePrefab = smokeEffectPrefab; // 바닥 충돌 시 스모크
                 proj.ConfigureSmokePooling(p2ProjectileSmokePoolTag);
                 proj.SetOwner(this);
+                proj.ConfigureFloorImpactShake(!isRageMode);
                 proj.Fire(p2Muzzle.position, shootDir, projectileSpeed); // 20
             }
         }
@@ -1563,6 +1582,7 @@ public class Player : MonoBehaviour
                 dummy.smokePrefab = p4Smoke;
                 dummy.ConfigureSmokePooling(p4SmokeTag);
                 dummy.SetOwner(this);
+                dummy.ConfigureFloorImpactShake(!isRageMode);
                 dummy.Fire(p4Emitter.position, down45, dummyProjectileSpeed); // ← 더 빠르게(예: 28~32)
             }
         }
@@ -1596,6 +1616,7 @@ public class Player : MonoBehaviour
         hasLanded = false;
         attackStateStartTime = Time.time;
         ForceAnimationState("Base Attack", "Attack");
+        TriggerNormalFloorAttackShake();
 
         var hb = SpawnHitboxFromPool(hitboxPrefabP1, hitboxP1PoolTag, transform.position);
         if (hb != null)
@@ -1625,6 +1646,7 @@ public class Player : MonoBehaviour
         hasLanded = false;
         attackStateStartTime = Time.time;
         ForceAnimationState("Base Attack", "Attack");
+        TriggerNormalFloorAttackShake();
 
         var hb = SpawnHitboxFromPool(hitboxPrefabP5, hitboxP5PoolTag, transform.position);
         if (hb != null)
@@ -1648,14 +1670,16 @@ public class Player : MonoBehaviour
 
     private void HandleAttackInput()
     {
+        if (!ReadKeyDown(KeyCode.DownArrow)) return;
+        int t = CharacterType;
+        if (isRageMode && (t == T2 || t == T3 || t == T4))
+            CameraShakeManager.ShakePlayerAttack(t, rage: true);
+
         if (isTransformLock)
             return;
 
         if (Time.time < jumpObstacleJumpLockUntil)
             return;
-
-        if (!ReadKeyDown(KeyCode.DownArrow)) return;
-        int t = CharacterType;
 
         // 1) Rage 우선 처리
         if (isRageMode)
@@ -1897,6 +1921,7 @@ public class Player : MonoBehaviour
     private IEnumerator P3_AirStomp(bool chainedAttack = false)
     {
         if (isRageMode || isAttacking) yield break;
+        CameraShakeManager.ShakePlayerAttack(T3, rage: false);
         p3NormalAttackQueued = false;
         isAttacking = true;
         UpdateP3AttackHazardIgnoreWindow(p3NormalAttackDuration);
@@ -2002,21 +2027,16 @@ public class Player : MonoBehaviour
         if (selectedType != T1 && selectedType != T3 && selectedType != T5)
             return;
 
-        CameraShakeManager.ShakeDefaultHalf();
+        if (selectedType == T3)
+            CameraShakeManager.Shake(CameraShakeManager.ShakeEvent.RagePlayer3Landing);
+        else
+            CameraShakeManager.ShakePlayerAttack(selectedType, rage: true);
     }
 
-    private void TriggerQuarterDefaultShake()
+    private void TriggerNormalFloorAttackShake()
     {
-        CameraShakeManager manager = CameraShakeManager.Instance;
-        if (manager == null)
-            return;
-
-        CameraShakeManager.Shake(
-            manager.defaultDuration,
-            manager.defaultMagnitudeX * 0.25f,
-            manager.defaultMagnitudeY * 0.25f,
-            manager.defaultFrequency,
-            decay: true);
+        if (!isRageMode && lastGroundTag == "floor")
+            CameraShakeManager.ShakePlayerAttack(CharacterType, rage: false);
     }
 
 
@@ -2033,6 +2053,8 @@ public class Player : MonoBehaviour
         ChangeAnimation("Land");
         bool landedOnFloor = (lastGroundTag == "floor");
         bool landedOnPlatform = (lastGroundTag == "platform");
+
+        if (spawnLandingSmoke) TriggerNormalFloorAttackShake();
 
         if (spawnLandingSmoke && isRageMode)
         {
@@ -2157,7 +2179,7 @@ public class Player : MonoBehaviour
     }
 
 
-    private IEnumerator P5_Land(bool spawnLandingSmoke = true)
+    private IEnumerator P5_Land(bool spawnLandingSmoke = true, bool shakeOnFloor = true)
     {
         if (isTransformLock || currentAnim == "Transform")
         {
@@ -2169,6 +2191,8 @@ public class Player : MonoBehaviour
         ChangeAnimation("Land");
         bool landedOnFloor = (lastGroundTag == "floor");
         bool landedOnPlatform = (lastGroundTag == "platform");
+
+        if (shakeOnFloor) TriggerNormalFloorAttackShake();
 
         var hb = SpawnHitboxFromPool(hitboxPrefabP5, hitboxP5PoolTag, transform.position);
         if (hb != null)
@@ -2812,9 +2836,6 @@ public class Player : MonoBehaviour
             }
         }
 
-        if (spawnedLaser)
-            TriggerQuarterDefaultShake();
-
         if (airborneAttack)
         {
             BeginRangedFlyattackLatch();
@@ -2833,8 +2854,6 @@ public class Player : MonoBehaviour
         {
             Vector3 pos = new Vector3(transform.position.x, transform.position.y - 0.5f, -0.5f);
             var go = SpawnP3RageSmokeInstance(pos);
-            if (go != null)
-                TriggerQuarterDefaultShake();
             var zig = go != null ? go.GetComponent<ZigzagLightning>() : null;
             if (zig)
             {
@@ -2887,9 +2906,6 @@ public class Player : MonoBehaviour
                 SpawnSmokeFromPrefab(smokeEffectPrefab, pos, smokePoolTag);
             }
         }
-
-        if (spawnedLightning)
-            TriggerQuarterDefaultShake();
 
         yield break;
     }
@@ -3055,8 +3071,9 @@ public class Player : MonoBehaviour
 
         ApplyRageSmokeDirectionToAll(force: true);
 
-        if (activeRageSmokePrimary != null || activeRageSmokeSecondary != null)
-            TriggerReducedRageSmokeShake();
+        if ((activeRageSmokePrimary != null || activeRageSmokeSecondary != null) &&
+            (CharacterType == T1 || CharacterType == T3 || CharacterType == T5))
+            CameraShakeManager.Shake(CameraShakeManager.ShakeEvent.RageTransform);
     }
 
     private GameObject SpawnTrackedRageSmoke(GameObject prefab, string poolTag, Vector3 offset)
@@ -3863,10 +3880,12 @@ public class Player : MonoBehaviour
         Transform current = sourceCollider.transform;
         while (current != null)
         {
-            if (IsGroundSurfaceTag(current.tag))
+            if (current.CompareTag("floor")) resolvedTag = "floor";
+            else if (current.CompareTag("platform")) resolvedTag = "platform";
+            else if (current.CompareTag("Obstacle")) resolvedTag = "Obstacle";
+            if (resolvedTag != null)
             {
                 resolvedCollider = sourceCollider;
-                resolvedTag = current.tag;
                 return true;
             }
 
@@ -3966,13 +3985,13 @@ public class Player : MonoBehaviour
         Bounds bounds = bodyCollider.bounds;
         float y = bounds.min.y + 0.02f;
         float inset = Mathf.Min(bounds.extents.x * 0.8f, 0.2f);
-        float[] xs = { bounds.center.x, bounds.center.x - inset, bounds.center.x + inset };
         bool foundFloor = false;
         bool foundPlatform = false;
 
-        for (int i = 0; i < xs.Length; i++)
+        for (int i = 0; i < 3; i++)
         {
-            RaycastHit2D hit = Physics2D.Raycast(new Vector2(xs[i], y), Vector2.down, groundProbeDistance);
+            float x = bounds.center.x + (i == 1 ? -inset : i == 2 ? inset : 0f);
+            RaycastHit2D hit = Physics2D.Raycast(new Vector2(x, y), Vector2.down, groundProbeDistance);
             if (hit.collider == null || hit.collider == bodyCollider) continue;
             RegisterGroundSurfaceCandidate(hit.collider, ref groundCol, ref groundTag, ref foundFloor, ref foundPlatform);
         }
@@ -4256,7 +4275,8 @@ public class Player : MonoBehaviour
         if (mover != null)
             mover.ConfigurePooling(fromPool, poolTag);
 
-        RestartAnimatorFromBeginning(go);
+        // ObjectPool already rebinds and evaluates its cached Animators once.
+        if (!fromPool) RestartAnimatorFromBeginning(go);
 
         return go;
     }

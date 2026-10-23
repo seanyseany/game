@@ -133,7 +133,7 @@ public class BossSlimeArm : MonoBehaviour, IReinitializable
         }
 
         if (spawnedAny)
-            CameraShakeManager.ShakeDefault();
+            CameraShakeManager.Shake(CameraShakeManager.ShakeEvent.BossSlimeArmImpact);
     }
 
     // 선택된 그룹의 버전 인덱스를 모두 가져온다.

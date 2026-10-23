@@ -41,7 +41,7 @@ public class VillageManagement : MonoBehaviour
         public string buildingId;
         public string buildingType;
         public int level;
-        public int currentSalary;
+        public float currentSalary;
         public int maxSalary;
         public bool isPlaced;
         public bool isWorking;
@@ -101,6 +101,7 @@ public class VillageManagement : MonoBehaviour
         public List<BuildingState> buildings = new List<BuildingState>();
         public List<TurretState> turrets = new List<TurretState>();
         public List<OxygenGeneratorState> oxygenGenerators = new List<OxygenGeneratorState>();
+        public List<Tycoon.BoxInventoryState> boxInventories = new List<Tycoon.BoxInventoryState>();
         public List<LiftState> lifts = new List<LiftState>();
         public List<PurchaseLevelState> turretPurchaseLevels = new List<PurchaseLevelState>();
         public List<PurchaseLevelState> oxygenPurchaseLevels = new List<PurchaseLevelState>();
@@ -161,6 +162,7 @@ public class VillageManagement : MonoBehaviour
 
     public event Action<ResourceSnapshot> ResourceChanged;
     public event Action<VillageSaveData> SaveDataChanged;
+    public event Action BoxInventoriesReloaded;
     public event Action<int> EmergencyDifficultyChanged;
 
     [Header("Persistence")]
@@ -194,6 +196,10 @@ public class VillageManagement : MonoBehaviour
     private Coroutine restoreSceneRoutine;
     private Coroutine debugProxyAttachRoutine;
     private VillageManagementDebugProxy debugProxy;
+    private bool ownsDebugProxyObject;
+    private int preparedSceneHandle = int.MinValue;
+    private readonly List<GameObject> sceneRoots = new List<GameObject>();
+    private readonly List<MonoBehaviour> sceneBehaviours = new List<MonoBehaviour>();
 
     public VillageSaveData SaveData => saveData;
     public VillageManagementTestControls DebugControls => debugControls;
@@ -253,14 +259,13 @@ public class VillageManagement : MonoBehaviour
         SceneManager.sceneLoaded += HandleSceneLoaded;
         SceneManager.activeSceneChanged += HandleActiveSceneChanged;
         Load();
-        EnsureDebugProxy();
-        StartDebugProxyAttachRoutine();
+        RefreshSceneContext(SceneManager.GetActiveScene());
         InstanceReady?.Invoke(this);
     }
 
     private void Start()
     {
-        ScheduleRestoreSceneState(SceneManager.GetActiveScene());
+        RefreshSceneContext(SceneManager.GetActiveScene());
     }
 
     private void OnDestroy()
@@ -270,10 +275,12 @@ public class VillageManagement : MonoBehaviour
             SceneManager.sceneLoaded -= HandleSceneLoaded;
             SceneManager.activeSceneChanged -= HandleActiveSceneChanged;
             FlushPendingSave();
+            Instance = null;
         }
 
         if (debugProxyAttachRoutine != null)
             StopCoroutine(debugProxyAttachRoutine);
+        DisposeDebugProxy();
     }
 
     private void Update()
@@ -313,6 +320,32 @@ public class VillageManagement : MonoBehaviour
         NotifyAllResourceSnapshots();
         SaveDataChanged?.Invoke(saveData);
         EmergencyDifficultyChanged?.Invoke(saveData.emergencyDifficulty);
+        BoxInventoriesReloaded?.Invoke();
+    }
+
+    public Tycoon.BoxInventoryState GetBoxInventory(string inventoryId)
+    {
+        return saveData.boxInventories?.Find(state => state != null && state.inventoryId == inventoryId);
+    }
+
+    public void SaveBoxInventory(string inventoryId, IReadOnlyList<Tycoon.SavedBoxOrder> orders)
+    {
+        if (string.IsNullOrEmpty(inventoryId)) return;
+        if (saveData.boxInventories == null) saveData.boxInventories = new List<Tycoon.BoxInventoryState>();
+        var state = new Tycoon.BoxInventoryState { inventoryId = inventoryId };
+        var ids = new HashSet<string>();
+        foreach (Tycoon.SavedBoxOrder order in orders)
+            if (order != null && order.IsValid && ids.Add(order.id)) state.boxes.Add(order.Copy());
+        saveData.boxInventories.RemoveAll(existing => existing == null || existing.inventoryId == inventoryId);
+        saveData.boxInventories.Add(state);
+        SaveAndBroadcast(SaveMode.Immediate);
+    }
+
+    public void CompleteSavedBoxDelivery(string inventoryId, string orderId)
+    {
+        Tycoon.BoxInventoryState state = GetBoxInventory(inventoryId);
+        if (state?.boxes == null || state.boxes.RemoveAll(order => order != null && order.id == orderId) == 0) return;
+        SaveAndBroadcast(SaveMode.Immediate);
     }
 
     public void FlushPendingSaveNow()
@@ -344,6 +377,7 @@ public class VillageManagement : MonoBehaviour
         NotifyAllResourceSnapshots();
         SaveDataChanged?.Invoke(saveData);
         EmergencyDifficultyChanged?.Invoke(saveData.emergencyDifficulty);
+        BoxInventoriesReloaded?.Invoke();
     }
 
     public void ResetAllVillageProgress()
@@ -358,11 +392,13 @@ public class VillageManagement : MonoBehaviour
         saveData.lifetimeArcadeOxygenEarned = 0;
         saveData.lifetimeArcadeEnergyEarned = 0;
         saveData.lastSavedUtc = string.Empty;
+        saveData.boxInventories?.Clear();
 
         Save(false);
         NotifyAllResourceSnapshots();
         SaveDataChanged?.Invoke(saveData);
         EmergencyDifficultyChanged?.Invoke(saveData.emergencyDifficulty);
+        BoxInventoriesReloaded?.Invoke();
     }
 
     public void ClearPlacedVillageObjects()
@@ -854,17 +890,63 @@ public class VillageManagement : MonoBehaviour
 
     private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        FlushPendingSave();
+        if (mode == LoadSceneMode.Additive && scene != SceneManager.GetActiveScene()) return;
+        RefreshSceneContext(scene);
+    }
+
+    private void HandleActiveSceneChanged(Scene previousScene, Scene nextScene)
+    {
+        RefreshSceneContext(nextScene);
+    }
+
+    private void RefreshSceneContext(Scene scene)
+    {
+        if (!scene.IsValid() || !scene.isLoaded || preparedSceneHandle == scene.handle) return;
+        preparedSceneHandle = scene.handle;
+        if (hasPendingDelayedSave) FlushPendingSave();
+        if (restoreSceneRoutine != null) StopCoroutine(restoreSceneRoutine);
+        restoreSceneRoutine = null;
+        if (debugProxyAttachRoutine != null) StopCoroutine(debugProxyAttachRoutine);
+        debugProxyAttachRoutine = null;
+
+        // Keep the save data across scenes, but do not run village restoration
+        // or debug-host searches in arcade/race scenes.
+        if (!ContainsVillageSystems(scene))
+        {
+            DisposeDebugProxy();
+            return;
+        }
         EnsureDebugProxy();
         StartDebugProxyAttachRoutine();
         ScheduleRestoreSceneState(scene);
     }
 
-    private void HandleActiveSceneChanged(Scene previousScene, Scene nextScene)
+    private bool ContainsVillageSystems(Scene scene)
     {
-        FlushPendingSave();
-        EnsureDebugProxy();
-        StartDebugProxyAttachRoutine();
+        scene.GetRootGameObjects(sceneRoots);
+        bool found = false;
+        foreach (GameObject root in sceneRoots)
+        {
+            root.GetComponentsInChildren(true, sceneBehaviours);
+            foreach (MonoBehaviour behaviour in sceneBehaviours)
+                if (behaviour is Path || behaviour is BuildingListUI || behaviour is ShopPlaceholderUI || behaviour is LiftSpot)
+                { found = true; break; }
+            if (found) break;
+        }
+        sceneRoots.Clear();
+        sceneBehaviours.Clear();
+        return found;
+    }
+
+    private void DisposeDebugProxy()
+    {
+        if (debugProxy != null)
+        {
+            if (ownsDebugProxyObject) Destroy(debugProxy.gameObject);
+            else Destroy(debugProxy);
+        }
+        debugProxy = null;
+        ownsDebugProxyObject = false;
     }
 
     private void ScheduleRestoreSceneState(Scene scene)
@@ -891,7 +973,7 @@ public class VillageManagement : MonoBehaviour
 
     private void EnsureDebugProxy()
     {
-        if (!Application.isPlaying)
+        if (!Application.isPlaying || !Application.isEditor)
             return;
 
         if (debugProxy == null)
@@ -901,7 +983,10 @@ public class VillageManagement : MonoBehaviour
         {
             GameObject proxyObject = FindRuntimeDebugUpdaterHost();
             if (proxyObject == null)
+            {
                 proxyObject = new GameObject("VillageManagement Debug");
+                ownsDebugProxyObject = true;
+            }
 
             debugProxy = proxyObject.AddComponent<VillageManagementDebugProxy>();
         }
@@ -915,7 +1000,7 @@ public class VillageManagement : MonoBehaviour
 
     private void StartDebugProxyAttachRoutine()
     {
-        if (!Application.isPlaying)
+        if (!Application.isPlaying || !Application.isEditor)
             return;
 
         if (debugProxyAttachRoutine != null)
@@ -939,8 +1024,8 @@ public class VillageManagement : MonoBehaviour
                 yield break;
             }
 
-            yield return null;
-            elapsed += Time.unscaledDeltaTime;
+            yield return new WaitForSecondsRealtime(0.25f);
+            elapsed += 0.25f;
         }
 
         debugProxyAttachRoutine = null;
@@ -963,7 +1048,9 @@ public class VillageManagement : MonoBehaviour
             hostProxy = runtimeHost.AddComponent<VillageManagementDebugProxy>();
 
         hostProxy.Bind(this);
-        Destroy(debugProxy.gameObject);
+        if (ownsDebugProxyObject) Destroy(debugProxy.gameObject);
+        else Destroy(debugProxy);
+        ownsDebugProxyObject = false;
         debugProxy = hostProxy;
     }
 
@@ -1351,6 +1438,8 @@ public class VillageManagement : MonoBehaviour
 
         if (saveData.buildings == null)
             saveData.buildings = new List<BuildingState>();
+        if (saveData.boxInventories == null)
+            saveData.boxInventories = new List<Tycoon.BoxInventoryState>();
         if (saveData.turrets == null)
             saveData.turrets = new List<TurretState>();
         if (saveData.oxygenGenerators == null)

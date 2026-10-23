@@ -137,6 +137,18 @@ public class VillageCameraScroller : MonoBehaviour
         if (worldCamera == null)
             return;
 
+        if (Tycoon.DeliveryRuntime.BlocksWorldInput)
+        {
+            pointerActive = false;
+            draggingCamera = false;
+            inertialVelocityY = 0f;
+            accumulatedDragWorldY = 0f;
+            // Camera toolbar buttons remain usable; only pointer panning and
+            // its release inertia are blocked by the popup.
+            if (moveToTargetActive) ApplyIdleMotion();
+            return;
+        }
+
         if (!TryGetPrimaryPointer(out Vector2 screenPosition, out bool isPressed, out bool pressedThisFrame, out bool releasedThisFrame))
         {
             ApplyIdleMotion();

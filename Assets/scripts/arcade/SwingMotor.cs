@@ -11,20 +11,19 @@ public class SwingMotor : MonoBehaviour, IReinitializeOnEnable
     private Vector3 initialLocalPosition;
     private Quaternion initialLocalRotation;
     private Coroutine restartRoutine;
+    private static readonly WaitForFixedUpdate NextPhysicsStep = new WaitForFixedUpdate();
 
     private void Awake()
     {
         CacheReferences();
+        // Render the swing between fixed physics steps, including under a scrolling phase.
+        if (rb != null && rb.interpolation == RigidbodyInterpolation2D.None)
+            rb.interpolation = RigidbodyInterpolation2D.Interpolate;
         initialLocalPosition = transform.localPosition;
         initialLocalRotation = transform.localRotation;
     }
 
     private void OnEnable()
-    {
-        Reinit();
-    }
-
-    private void Start()
     {
         Reinit();
     }
@@ -53,14 +52,14 @@ public class SwingMotor : MonoBehaviour, IReinitializeOnEnable
             hinge.connectedBody.WakeUp();
 
         rb.WakeUp();
-        Physics2D.SyncTransforms();
-
         restartRoutine = StartCoroutine(CoRestartSwing());
     }
 
     private IEnumerator CoRestartSwing()
     {
-        yield return new WaitForFixedUpdate();
+        // Unity synchronizes bodies before the next physics step. Per-rope
+        // global SyncTransforms calls repeat the whole world's work on spawn.
+        yield return NextPhysicsStep;
 
         if (rb == null)
             yield break;
@@ -68,7 +67,7 @@ public class SwingMotor : MonoBehaviour, IReinitializeOnEnable
         rb.WakeUp();
         rb.AddTorque(initialTorque, ForceMode2D.Impulse);
 
-        yield return new WaitForFixedUpdate();
+        yield return NextPhysicsStep;
 
         if (rb == null)
             yield break;

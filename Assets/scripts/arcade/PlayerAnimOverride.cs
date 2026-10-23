@@ -42,7 +42,7 @@ public class PlayerAnimOverride : MonoBehaviour
     private AnimatorOverrideController aoc;
     private int cachedType = -1;
     private bool isRageMode = false;
-    private bool needRebind = false;
+    private readonly List<KeyValuePair<AnimationClip, AnimationClip>> overrideMap = new List<KeyValuePair<AnimationClip, AnimationClip>>(9);
 
     void Awake()
     {
@@ -66,15 +66,11 @@ public class PlayerAnimOverride : MonoBehaviour
         ApplyOverrides(force: true);
     }
 
-    void Update()
+    void OnDestroy()
     {
-        // 필요 시 즉시 Rebind 수행
-        if (needRebind)
-        {
-            anim.Rebind();
-            anim.Update(0f);
-            needRebind = false;
-        }
+        // Runtime controllers are native Unity objects; destroying the player
+        // does not release them automatically when returning to another scene.
+        if (aoc != null) Destroy(aoc);
     }
 
     // ✅ 외부에서 호출 가능하도록 public
@@ -85,7 +81,8 @@ public class PlayerAnimOverride : MonoBehaviour
         int i = Mathf.Clamp(owner != null ? owner.CharacterType : GameData.Instance.selectedPlayerType, 1, 5) - 1;
         if (!force && cachedType == i) return;
 
-        var map = new List<KeyValuePair<AnimationClip, AnimationClip>>();
+        var map = overrideMap;
+        map.Clear();
 
         if (isRageMode)
         {

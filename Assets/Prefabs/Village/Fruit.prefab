@@ -156,47 +156,42 @@ MonoBehaviour:
   level: 1
   isPlaced: 1
   isWorking: 1
-  currentSalary: 100
+  currentBoxStock: 100
   level1:
     buildingPrefab: {fileID: 4865985353867097668}
-    oxygenPrice: 10
+    purchaseOxygenCost: 10
     constructionTime: 3
-    totalSalaryCapacity: 100
-    salaryPrice30: 3
-    salaryPrice60: 6
-    salaryPrice100: 8
+    boxStockCapacity: 100
   level1BossPrefab: {fileID: 6854581867317879360}
   level2:
     buildingPrefab: {fileID: 7169702370894237175}
-    oxygenPrice: 10
+    purchaseOxygenCost: 10
     constructionTime: 3
-    totalSalaryCapacity: 300
-    salaryPrice30: 6
-    salaryPrice60: 12
-    salaryPrice100: 17
+    boxStockCapacity: 300
   ownerLocalPosition: {x: -1.075, y: -0.6733198}
   ownerDefaultFacesRight: 0
   customerDefaultFacesRight: 1
   itemPrefab: {fileID: 8313370062286852829, guid: 7a4335f1c86ab4df485ae33504ce14b7, type: 3}
   bossCustomerPointPrefab: {fileID: 4162782990305676690}
   customerPointPrefab: {fileID: 6705639673009994865}
-  energyValue: 5
-  level1WorkTickSeconds: 6
-  level2WorkTickSeconds: 3
-  customerSalaryCost: 2
+  oxygenProducedPerTrade: 5
+  level1StockConsumptionIntervalSeconds: 6
+  level2StockConsumptionIntervalSeconds: 3
+  stockConsumedPerCustomer: 2
+  customerPointRequiredTag: CustomerPoint
   line1LocalX: -0.6
   line2LocalX: -1.2
-  line1PointPrefab: {fileID: 7606052446276284672}
-  line2PointPrefab: {fileID: 4746686521985351294}
+  line1PointPrefab: {fileID: 4746686521985351294}
+  line2PointPrefab: {fileID: 7606052446276284672}
   ownerPatrolFromPointPrefab: {fileID: 5140793926981006916}
   ownerPatrolToPointPrefab: {fileID: 2175039009632153656}
   bottomAnchor: {fileID: 1221207767989239386}
   uiAnchor: {fileID: 3788886004415212106}
-  exclamationPrefab: {fileID: 6381973523456147728, guid: 179dfece3a225412e93b3e82f7c07663, type: 3}
+  exclamationPrefab: {fileID: 6381973523456147728, guid: f5f6b572f143472dadd376f0b35c36b6, type: 3}
   exclamationAnchor: {fileID: 8596599240373468320}
   exclamationDuration: 0.8
   exclamationMoveSpeed: 1.2
-  salaryControlledPrefabs:
+  stockControlledPrefabs:
   - {fileID: 7995065157208563145}
   - {fileID: 2292661245405475881}
   - {fileID: 1451609202437453620}
@@ -207,10 +202,9 @@ MonoBehaviour:
   - {fileID: 7138597945373548764}
   - {fileID: 8849953868737843803}
   - {fileID: 1304699504131528446}
-  customerPointRequiredTag: CustomerPoint
-  salaryStatusBar: {fileID: 7679806276014166935}
-  salaryStatusBarLevel1Anchor: {fileID: 5081818250637638336}
-  salaryStatusBarLevel2Anchor: {fileID: 7461581718743684653}
+  boxStockGauge: {fileID: 7679806276014166935}
+  boxStockGaugeLevel1Anchor: {fileID: 5081818250637638336}
+  boxStockGaugeLevel2Anchor: {fileID: 7461581718743684653}
 --- !u!61 &5516281977968631422
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -1744,8 +1738,8 @@ Transform:
   m_GameObject: {fileID: 7606052446276284672}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -2.98, y: -2.32, z: 0}
-  m_LocalScale: {x: 4.3478265, y: 4.347826, z: 1}
+  m_LocalPosition: {x: 0.7, y: -2.63, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1451810933007243112}

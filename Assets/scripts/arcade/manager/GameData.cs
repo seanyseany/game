@@ -131,6 +131,7 @@ public class GameData : MonoBehaviour
         if (Instance == this)
         {
             SceneManager.sceneLoaded -= HandleSceneLoaded;
+            GameplayFramePacing.Release(this);
             Instance = null;
         }
     }
@@ -196,7 +197,10 @@ public class GameData : MonoBehaviour
         ApplyPendingSelectedPlayer();
 
         if (arcadeSceneActive)
+        {
+            GameplayFramePacing.Acquire(this);
             ResetGame();
+        }
         else
             SuspendForNonArcadeScene();
     }
@@ -676,7 +680,7 @@ public class GameData : MonoBehaviour
 
         ReturnAllSceneObjectsOfType<Monster>();
         ReturnAllSceneObjectsOfType<speedEffect>();
-        DestroyAllSceneObjectsOfType<Blood>();
+        ReturnAllSceneObjectsOfType<Blood>();
 
         if (scoreUI != null)
         {
@@ -733,28 +737,6 @@ public class GameData : MonoBehaviour
                 continue;
 
             Object.Destroy(item.gameObject);
-        }
-    }
-
-    private void DestroyAllSceneObjectsOfType<T>() where T : Component
-    {
-        var all = Object.FindObjectsByType<T>(FindObjectsSortMode.None);
-        foreach (var c in all)
-        {
-            if (c && c.gameObject.scene.IsValid())
-            {
-                var rb = c.GetComponent<Rigidbody2D>();
-                if (rb != null)
-                {
-                    rb.linearVelocity = Vector2.zero;
-                    rb.angularVelocity = 0f;
-                }
-
-                var mb = c as MonoBehaviour;
-                if (mb != null) mb.StopAllCoroutines();
-
-                Object.Destroy(c.gameObject);
-            }
         }
     }
 
@@ -1009,6 +991,7 @@ public class GameData : MonoBehaviour
 
     private void SuspendForNonArcadeScene()
     {
+        GameplayFramePacing.Release(this);
         arcadeSceneActive = false;
         gameOver = true;
         StopRuntimeCoroutines();

@@ -521,6 +521,9 @@ public class Lift : MonoBehaviour, IColliderPointerTarget
 
     private bool CanStartPointerInteraction()
     {
+        if (Tycoon.DeliveryRuntime.BlocksWorldInput)
+            return false;
+
         if (!allowPointerRelocation)
             return false;
 

@@ -46,6 +46,9 @@ public class Bank : MonoBehaviour
 
     private void OnMouseUpAsButton()
     {
+        if (Tycoon.DeliveryRuntime.BlocksWorldInput)
+            return;
+
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
             return;
 

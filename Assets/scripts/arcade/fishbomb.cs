@@ -239,7 +239,7 @@ public class fishbomb : MonoBehaviour, IReinitializeOnEnable
         if (delay > 0f)
             yield return new WaitForSeconds(delay);
 
-        CameraShakeManager.ShakeDefault();
+        CameraShakeManager.Shake(CameraShakeManager.ShakeEvent.FishBombExplosion);
         cameraShakeRoutine = null;
     }
 }

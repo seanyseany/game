@@ -27,6 +27,9 @@ public class ProjectileBall : MonoBehaviour, IRageTransformPauseHandler
     private ContactFilter2D castFilter;
     private bool castFilterInitialized = false;
     private bool pendingSurfaceHit = false;
+    private bool pendingFloorHit;
+    private bool shakeOnFloorHit;
+    private int shakePlayerType;
     private Vector2 pendingSurfacePos = Vector2.zero;
     private float despawnAtTime = -1f;
     private float pausedRemainingLife = -1f;
@@ -52,6 +55,9 @@ public class ProjectileBall : MonoBehaviour, IRageTransformPauseHandler
     {
         isDespawning = false;
         pendingSurfaceHit = false;
+        pendingFloorHit = false;
+        shakeOnFloorHit = false;
+        shakePlayerType = 0;
         pendingSurfacePos = Vector2.zero;
         if (!selfCollider) selfCollider = GetComponent<Collider2D>();
         if (selfCollider != null) selfCollider.enabled = true;
@@ -64,6 +70,9 @@ public class ProjectileBall : MonoBehaviour, IRageTransformPauseHandler
         if (rb != null) rb.linearVelocity = Vector2.zero;
         isDespawning = false;
         pendingSurfaceHit = false;
+        pendingFloorHit = false;
+        shakeOnFloorHit = false;
+        shakePlayerType = 0;
         despawnAtTime = -1f;
         pausedRemainingLife = -1f;
     }
@@ -72,6 +81,7 @@ public class ProjectileBall : MonoBehaviour, IRageTransformPauseHandler
     {
         isDespawning = false;
         pendingSurfaceHit = false;
+        pendingFloorHit = false;
         transform.position = new Vector3(origin.x, origin.y, -0.5f);
         transform.rotation = Quaternion.identity;
         rb.linearVelocity = (overrideSpeed ?? speed) * dir.normalized;
@@ -99,6 +109,12 @@ public class ProjectileBall : MonoBehaviour, IRageTransformPauseHandler
     public void SetSpawnSeparateHitbox(bool enabled)
     {
         spawnSeparateHitbox = enabled;
+    }
+
+    public void ConfigureFloorImpactShake(bool enabled)
+    {
+        shakeOnFloorHit = enabled;
+        shakePlayerType = owner != null ? owner.CharacterType : 2;
     }
 
     void Update()
@@ -177,12 +193,16 @@ public class ProjectileBall : MonoBehaviour, IRageTransformPauseHandler
         if (!isDespawning && pendingSurfaceHit)
         {
             pendingSurfaceHit = false;
+            bool hitFloor = pendingFloorHit;
+            pendingFloorHit = false;
             if (TryHitNearbyEnemy())
             {
                 Despawn();
             }
             else
             {
+                if (hitFloor && shakeOnFloorHit && (owner == null || !owner.IsRageModeActive()))
+                    CameraShakeManager.ShakePlayerAttack(shakePlayerType, rage: false);
                 SpawnSmoke(pendingSurfacePos);
                 Despawn();
             }
@@ -207,8 +227,7 @@ public class ProjectileBall : MonoBehaviour, IRageTransformPauseHandler
         // floor/platform은 적 판정 다음으로 처리
         if (IsSmokeSurface(other))
         {
-            pendingSurfaceHit = true;
-            pendingSurfacePos = other.ClosestPoint(transform.position);
+            RecordSurfaceHit(other);
             return true;
         }
 
@@ -361,9 +380,15 @@ public class ProjectileBall : MonoBehaviour, IRageTransformPauseHandler
         // 바닥/플랫폼은 즉시 소멸하지 않고 물리 프레임 끝에서 재검사 후 처리
         if (IsSmokeSurface(other))
         {
-            pendingSurfaceHit = true;
-            pendingSurfacePos = other.ClosestPoint(transform.position);
+            RecordSurfaceHit(other);
         }
+    }
+
+    private void RecordSurfaceHit(Collider2D other)
+    {
+        pendingSurfaceHit = true;
+        pendingSurfacePos = other.ClosestPoint(transform.position);
+        pendingFloorHit |= HasTagInHierarchy(other, "floor");
     }
 
     private static bool IsSmokeSurface(Collider2D other)
@@ -480,6 +505,7 @@ public class ProjectileBall : MonoBehaviour, IRageTransformPauseHandler
         if (isDespawning) return;
         isDespawning = true;
         pendingSurfaceHit = false;
+        pendingFloorHit = false;
 
         CancelInvoke();
         if (rb != null) rb.linearVelocity = Vector2.zero;

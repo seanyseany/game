@@ -1372,7 +1372,7 @@ public class MiniBoss : MonoBehaviour
 
         if (landedFromAttack)
         {
-            CameraShakeManager.ShakeDefaultHalf();
+            CameraShakeManager.Shake(CameraShakeManager.ShakeEvent.MiniBossLanding);
             bool showNegativeEmoji = gateDamagedDuringAttack || playerDamageReactionPending;
             playerDamageReactionPending = false;
             ScheduleAttackReaction(showNegativeEmoji);

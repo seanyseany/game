@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.Rendering;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 public class Building : MonoBehaviour
@@ -11,12 +12,13 @@ public class Building : MonoBehaviour
     public class LevelDefinition
     {
         public GameObject buildingPrefab;
-        public int oxygenPrice = 10;
+        [Tooltip("건물 구매 또는 업그레이드에 사용하는 산소 비용입니다.")]
+        [FormerlySerializedAs("oxygenPrice")]
+        public int purchaseOxygenCost = 10;
         public float constructionTime = 3f;
-        public int totalSalaryCapacity = 10;
-        public int salaryPrice30 = 3;
-        public int salaryPrice60 = 6;
-        public int salaryPrice100 = 10;
+        [Tooltip("상자 배달로 채우는 재고 게이지의 최대값입니다. 1레벨은 배달당 1/6, 2레벨은 1/3이 채워집니다.")]
+        [FormerlySerializedAs("totalSalaryCapacity")]
+        public int boxStockCapacity = 10;
     }
 
     public enum QueueSlot
@@ -34,7 +36,8 @@ public class Building : MonoBehaviour
     [SerializeField] private int level = 1;
     [SerializeField] private bool isPlaced = true;
     [SerializeField] private bool isWorking = true;
-    [SerializeField] private int currentSalary = 0;
+    [FormerlySerializedAs("currentSalary")]
+    [SerializeField] private float currentBoxStock = 0f;
 
     [Header("Level 1")]
     [SerializeField] private LevelDefinition level1 = new LevelDefinition();
@@ -50,12 +53,23 @@ public class Building : MonoBehaviour
     [SerializeField] private GameObject itemPrefab;
     [SerializeField] private GameObject bossCustomerPointPrefab;
     [SerializeField] private GameObject customerPointPrefab;
-    [Header("Trade Reward")]
-    [Tooltip("Amount of total energy awarded whenever this building completes a customer transaction.")]
-    [SerializeField] private int energyValue = 1;
-    [SerializeField] private float level1WorkTickSeconds = 5f;
-    [SerializeField] private float level2WorkTickSeconds = 5f;
-    [SerializeField] private int customerSalaryCost = 1;
+    [Header("산소 생성")]
+    [Tooltip("고객 거래를 한 번 완료할 때 마을에 지급하는 산소량입니다.")]
+    [FormerlySerializedAs("energyValue")]
+    [FormerlySerializedAs("oxygenValue")]
+    [SerializeField] private int oxygenProducedPerTrade = 1;
+    [Header("상자 재고 소모")]
+    [SerializeField, Tooltip("배치된 건물의 재고를 1씩 소모하는 주기입니다. 0이면 시간에 따른 소모를 중지합니다.")]
+    [FormerlySerializedAs("level1WorkTickSeconds")]
+    private float level1StockConsumptionIntervalSeconds = 5f;
+    [SerializeField, Tooltip("배치된 건물의 재고를 1씩 소모하는 주기입니다. 0이면 시간에 따른 소모를 중지합니다.")]
+    [FormerlySerializedAs("level2WorkTickSeconds")]
+    private float level2StockConsumptionIntervalSeconds = 5f;
+    [SerializeField]
+    [FormerlySerializedAs("customerSalaryCost")]
+    private int stockConsumedPerCustomer = 1;
+    [Header("Queue Points")]
+    [SerializeField] private string customerPointRequiredTag = "CustomerPoint";
     [SerializeField] private float line1LocalX = -0.6f;
     [SerializeField] private float line2LocalX = -1.2f;
     [SerializeField] private GameObject line1PointPrefab;
@@ -68,11 +82,15 @@ public class Building : MonoBehaviour
     [SerializeField] private Transform exclamationAnchor;
     [SerializeField] private float exclamationDuration = 0.8f;
     [SerializeField] private float exclamationMoveSpeed = 1.2f;
-    [SerializeField] private GameObject[] salaryControlledPrefabs;
-    [SerializeField] private string customerPointRequiredTag = "CustomerPoint";
-    [SerializeField] private Canvas salaryStatusBar;
-    [SerializeField] private Transform salaryStatusBarLevel1Anchor;
-    [SerializeField] private Transform salaryStatusBarLevel2Anchor;
+    [Header("상자 재고 게이지")]
+    [FormerlySerializedAs("salaryControlledPrefabs")]
+    [SerializeField] private GameObject[] stockControlledPrefabs;
+    [FormerlySerializedAs("salaryStatusBar")]
+    [SerializeField] private Canvas boxStockGauge;
+    [FormerlySerializedAs("salaryStatusBarLevel1Anchor")]
+    [SerializeField] private Transform boxStockGaugeLevel1Anchor;
+    [FormerlySerializedAs("salaryStatusBarLevel2Anchor")]
+    [SerializeField] private Transform boxStockGaugeLevel2Anchor;
 
     private const float QueueLocalY = 0f;
     private const string Line1AnchorName = "_Line1Point";
@@ -97,14 +115,14 @@ public class Building : MonoBehaviour
     private Transform line1Point;
     private Transform line2Point;
     private SortingGroup sortingGroup;
-    private BuildingUI cachedBuildingUI;
     private Vector3 initialScale;
     private Vector3 dragPointerOffset;
     private Path currentPath;
     private Path dragOriginPath;
     private Vector3 dragOriginWorldPosition;
     private float pointerDownStartedAt = -1f;
-    private bool tapPending;
+    private int activeTouchId = -1;
+    private Vector2 lastPointerScreenPosition;
     private bool pointerHeld;
     private bool isDragging;
     private bool dragPreparationActive;
@@ -119,15 +137,17 @@ public class Building : MonoBehaviour
     private const float SalaryLowFillThreshold = 1f / 3f;
     private Color salaryStatusNormalFillColor = Color.green;
 
+    internal static readonly System.Collections.Generic.List<Building> DeliveryBuildings = new System.Collections.Generic.List<Building>();
+
     public string SlotId => slotId;
     public string BuildingId => SanitizeId(name);
     public string DisplayName => SanitizeDisplayName(name);
     public int Level => level;
     public bool IsPlaced => isPlaced;
     public bool IsWorking => isPlaced && isWorking;
-    public int EnergyValue => energyValue;
-    public int CurrentSalary => currentSalary;
-    public int MaxSalary => GetDefinitionForLevel(level).totalSalaryCapacity;
+    public int OxygenValue => oxygenProducedPerTrade;
+    public float CurrentSalary => currentBoxStock;
+    public int MaxSalary => GetDefinitionForLevel(level).boxStockCapacity;
     public GameObject ItemPrefab => itemPrefab;
     public Transform OwnerPoint => runtimeBossCustomerPointObject != null ? runtimeBossCustomerPointObject.transform : transform;
     public Transform CustomerPoint => runtimeCustomerPointObject != null ? runtimeCustomerPointObject.transform : transform;
@@ -169,8 +189,14 @@ public class Building : MonoBehaviour
         PushStateToVillageManagement();
     }
 
+    private void OnEnable()
+    {
+        if (!DeliveryBuildings.Contains(this)) DeliveryBuildings.Add(this);
+    }
+
     private void OnDisable()
     {
+        DeliveryBuildings.Remove(this);
         VillagePointerCapture.Release(this);
 
         if (salaryRoutine != null)
@@ -189,13 +215,13 @@ public class Building : MonoBehaviour
         EnsureInteractionCollider();
         EnsureSortingGroup();
         level = Mathf.Clamp(level, 1, 2);
-        currentSalary = Mathf.Max(0, currentSalary);
-        level1.totalSalaryCapacity = Mathf.Max(0, level1.totalSalaryCapacity);
-        level2.totalSalaryCapacity = Mathf.Max(0, level2.totalSalaryCapacity);
-        energyValue = Mathf.Max(0, energyValue);
-        level1WorkTickSeconds = Mathf.Max(0f, level1WorkTickSeconds);
-        level2WorkTickSeconds = Mathf.Max(0f, level2WorkTickSeconds);
-        customerSalaryCost = Mathf.Max(0, customerSalaryCost);
+        currentBoxStock = Mathf.Max(0, currentBoxStock);
+        level1.boxStockCapacity = Mathf.Max(0, level1.boxStockCapacity);
+        level2.boxStockCapacity = Mathf.Max(0, level2.boxStockCapacity);
+        oxygenProducedPerTrade = Mathf.Max(0, oxygenProducedPerTrade);
+        level1StockConsumptionIntervalSeconds = Mathf.Max(0f, level1StockConsumptionIntervalSeconds);
+        level2StockConsumptionIntervalSeconds = Mathf.Max(0f, level2StockConsumptionIntervalSeconds);
+        stockConsumedPerCustomer = Mathf.Max(0, stockConsumedPerCustomer);
         exclamationDuration = Mathf.Max(0.05f, exclamationDuration);
         exclamationMoveSpeed = Mathf.Max(0f, exclamationMoveSpeed);
 
@@ -220,12 +246,10 @@ public class Building : MonoBehaviour
     private void Update()
     {
         RefreshStatusBarAnchor();
+        TryBeginTouchHold();
 
         if ((pointerHeld || isDragging) && !IsPointerStillPressed())
         {
-            if (tapPending && !isDragging)
-                TryOpenManagementUiFromTap();
-
             ReleasePointerHold();
         }
 
@@ -241,26 +265,65 @@ public class Building : MonoBehaviour
 
     private void OnMouseDown()
     {
-        if (!CanStartPointerInteraction())
+        // Touch is handled directly, independent of mouse emulation settings.
+        if (Input.touchCount > 0)
             return;
 
+        TryBeginPointerHold(Input.mousePosition, -1);
+    }
+
+    private bool TryBeginPointerHold(Vector2 screenPosition, int touchId)
+    {
+        if (pointerHeld || isDragging || VillagePointerCapture.HasActiveCapture || !CanStartPointerInteraction(screenPosition))
+            return false;
+
+        currentPath = GetComponentInParent<Path>();
         VillagePointerCapture.Acquire(this);
+        activeTouchId = touchId;
+        lastPointerScreenPosition = screenPosition;
         pointerHeld = true;
-        tapPending = true;
         pointerDownStartedAt = Time.unscaledTime;
         dragOriginPath = currentPath;
         dragOriginWorldPosition = transform.position;
+        return true;
+    }
+
+    private void TryBeginTouchHold()
+    {
+        if (pointerHeld || isDragging || Input.touchCount == 0)
+            return;
+
+        Camera cameraRef = Camera.main;
+        if (cameraRef == null)
+            return;
+
+        for (int i = 0; i < Input.touchCount; i++)
+        {
+            Touch touch = Input.GetTouch(i);
+            if (touch.phase != TouchPhase.Began)
+                continue;
+
+            if (FindBuildingAtScreenPoint(touch.position, cameraRef) == this && TryBeginPointerHold(touch.position, touch.fingerId))
+                return;
+        }
+    }
+
+    private static Building FindBuildingAtScreenPoint(Vector2 screenPosition, Camera cameraRef)
+    {
+        Ray ray = cameraRef.ScreenPointToRay(screenPosition);
+        foreach (RaycastHit2D hit in Physics2D.GetRayIntersectionAll(ray, Mathf.Infinity, cameraRef.cullingMask))
+        {
+            Building building = hit.collider.GetComponentInParent<Building>();
+            if (building != null && building.isActiveAndEnabled && building.IsPlaced)
+                return building;
+        }
+        return null;
     }
 
     private void OnMouseUp()
     {
-        TryOpenManagementUiFromTap();
-        ReleasePointerHold();
-    }
-
-    private void OnMouseUpAsButton()
-    {
-        TryOpenManagementUiFromTap();
+        if (activeTouchId < 0)
+            ReleasePointerHold();
     }
 
     public float GetPurchaseChance()
@@ -296,81 +359,7 @@ public class Building : MonoBehaviour
 
     public int GetPurchasePriceForLevel(int targetLevel)
     {
-        return GetDefinitionForLevel(targetLevel).oxygenPrice;
-    }
-
-    public int GetSalaryPriceForPercent(int percent)
-    {
-        LevelDefinition definition = GetDefinitionForLevel(level);
-        switch (percent)
-        {
-            case 30:
-                return definition.salaryPrice30;
-            case 60:
-                return definition.salaryPrice60;
-            default:
-                return GetFullSalaryRefillPrice();
-        }
-    }
-
-    public int GetFullSalaryRefillPrice()
-    {
-        LevelDefinition definition = GetDefinitionForLevel(level);
-        int maxSalary = Mathf.Max(0, MaxSalary);
-        if (maxSalary <= 0 || currentSalary >= maxSalary)
-            return 0;
-
-        int remainingAmount = Mathf.Max(0, maxSalary - currentSalary);
-        float remainingRatio = remainingAmount / (float)maxSalary;
-        return Mathf.CeilToInt(definition.salaryPrice100 * remainingRatio);
-    }
-
-    public int GetSalaryAmountForPercent(int percent)
-    {
-        return Mathf.CeilToInt(GetDefinitionForLevel(level).totalSalaryCapacity * GetFillFraction(percent));
-    }
-
-    public bool CanReceiveSalaryPercent(int percent)
-    {
-        int maxSalary = Mathf.Max(0, MaxSalary);
-        if (maxSalary <= 0)
-            return false;
-
-        if (percent >= 100)
-            return currentSalary < maxSalary;
-
-        int amountToAdd = GetSalaryAmountForPercent(percent);
-        return amountToAdd > 0 && currentSalary <= maxSalary - amountToAdd;
-    }
-
-    public bool TryAddSalaryPercent(int percent)
-    {
-        if (!CanReceiveSalaryPercent(percent))
-            return false;
-
-        if (percent >= 100)
-            currentSalary = MaxSalary;
-        else
-            currentSalary = Mathf.Clamp(currentSalary + GetSalaryAmountForPercent(percent), 0, MaxSalary);
-
-        UpdateWorkingStateFromSalary(true);
-        RestartSalaryRoutine();
-        RefreshStatusBar();
-        PushStateToVillageManagement(true);
-        return true;
-    }
-
-    private static float GetFillFraction(int percent)
-    {
-        switch (percent)
-        {
-            case 30:
-                return 1f / 3f;
-            case 60:
-                return 2f / 3f;
-            default:
-                return 1f;
-        }
+        return GetDefinitionForLevel(targetLevel).purchaseOxygenCost;
     }
 
     public bool TryEnterQueue(CustomerBlood customer, out QueueSlot slot, out Transform target)
@@ -454,11 +443,11 @@ public class Building : MonoBehaviour
         PromoteQueue();
     }
 
-    public void AwardTradeEnergy()
+    public void AwardTradeOxygen()
     {
         VillageManagement villageManagement = VillageManagement.EnsureInstance();
-        if (villageManagement != null && energyValue > 0)
-            villageManagement.AddEnergy(energyValue);
+        if (villageManagement != null && oxygenProducedPerTrade > 0)
+            villageManagement.AddOxygen(oxygenProducedPerTrade);
 
         ShowTradeExclamation();
     }
@@ -475,7 +464,7 @@ public class Building : MonoBehaviour
     public void SetWorking(bool working)
     {
         bool previousWorking = IsWorking;
-        isWorking = working && currentSalary > 0;
+        isWorking = working && currentBoxStock > 0;
         ToggleWorkObjects(IsWorking);
         UpdateExclamation();
         RefreshStatusBar();
@@ -488,11 +477,11 @@ public class Building : MonoBehaviour
             TryStartService();
     }
 
-    public void SetSalary(int current, int max)
+    public void SetSalary(float current, int max)
     {
         LevelDefinition definition = GetDefinitionForLevel(level);
-        definition.totalSalaryCapacity = Mathf.Max(0, max);
-        currentSalary = Mathf.Clamp(current, 0, definition.totalSalaryCapacity);
+        definition.boxStockCapacity = Mathf.Max(0, max);
+        currentBoxStock = Mathf.Clamp(current, 0, definition.boxStockCapacity);
         UpdateWorkingStateFromSalary(true);
         RestartSalaryRoutine();
         RefreshStatusBar();
@@ -506,8 +495,9 @@ public class Building : MonoBehaviour
         if (activeOwnerBlood != null)
             activeOwnerBlood.CancelCurrentService(false);
 
-        level = Mathf.Clamp(nextLevel, 1, 2);
-        currentSalary = Mathf.Clamp(currentSalary, 0, MaxSalary);
+        int clampedLevel = Mathf.Clamp(nextLevel, 1, 2);
+        level = clampedLevel;
+        currentBoxStock = Mathf.Clamp(currentBoxStock, 0, MaxSalary);
         ApplyLevelPresentation();
         RefreshStatusBarAnchor();
         UpdateWorkingStateFromSalary(true);
@@ -530,6 +520,39 @@ public class Building : MonoBehaviour
         PushStateToVillageManagement();
     }
 
+    public bool TryReceiveDelivery()
+    {
+        if (!CanRefillGauge())
+            return false;
+
+        AddGauge(MaxSalary / (level >= 2 ? 3f : 6f), true);
+        return true;
+    }
+
+    private bool CanRefillGauge()
+    {
+        if (!isActiveAndEnabled || !isPlaced)
+            return false;
+
+        if (currentPath == null)
+            currentPath = GetComponentInParent<Path>();
+
+        return currentPath == null || (!currentPath.HasActiveConstruction && currentPath.Building == this);
+    }
+
+    private void AddGauge(float amount, bool immediate = false)
+    {
+        if (amount <= 0f || currentBoxStock >= MaxSalary)
+            return;
+
+        currentBoxStock = Mathf.Clamp(currentBoxStock + amount, 0f, MaxSalary);
+        if (Mathf.Approximately(currentBoxStock, MaxSalary))
+            currentBoxStock = MaxSalary;
+        UpdateWorkingStateFromSalary(true);
+        RefreshStatusBar();
+        PushStateToVillageManagement(immediate);
+    }
+
     public void PushStateToVillageManagement(bool immediate = false)
     {
         VillageManagement villageManagement = VillageManagement.EnsureInstance();
@@ -547,7 +570,7 @@ public class Building : MonoBehaviour
             slotId = slotId,
             buildingId = BuildingId,
             level = level,
-            currentSalary = currentSalary,
+            currentSalary = currentBoxStock,
             maxSalary = MaxSalary,
             isPlaced = isPlaced,
             isWorking = IsWorking,
@@ -605,16 +628,23 @@ public class Building : MonoBehaviour
         TryStartService();
     }
 
-    private bool CanStartPointerInteraction()
+    private bool CanStartPointerInteraction(Vector2 screenPosition)
     {
+        if (Tycoon.DeliveryRuntime.BlocksWorldInput)
+            return false;
+
         if (!isPlaced)
             return false;
 
         if (EventSystem.current != null)
         {
-            if (EventSystem.current.IsPointerOverGameObject())
+            var hits = new List<RaycastResult>();
+            EventSystem.current.RaycastAll(new PointerEventData(EventSystem.current) { position = screenPosition }, hits);
+            foreach (RaycastResult hit in hits)
             {
-                return false;
+                // Physics raycasts and this building's gauge are not blocking menus.
+                if (hit.module is GraphicRaycaster && !hit.gameObject.transform.IsChildOf(transform))
+                    return false;
             }
         }
 
@@ -626,13 +656,8 @@ public class Building : MonoBehaviour
         if (isDragging || currentPath == null)
             return;
 
-        BuildingUI ui = GetBuildingUI();
-        if (ui != null)
-            ui.Close();
-
         isDragging = true;
         dragPreparationActive = false;
-        tapPending = false;
         customerPurchaseBlockedUntil = Mathf.Max(customerPurchaseBlockedUntil, Time.time + CustomerPurchaseReentryBlockSeconds);
         transform.localScale = initialScale * DragScaleMultiplier;
         RaiseSortingForDrag();
@@ -828,9 +853,11 @@ public class Building : MonoBehaviour
 
         VillagePointerCapture.Release(this);
         bool wasDragging = isDragging;
+        if (wasDragging)
+            UpdateDragPosition();
         pointerHeld = false;
         pointerDownStartedAt = -1f;
-        tapPending = false;
+        activeTouchId = -1;
 
         if (!wasDragging)
             EndDragPreparation();
@@ -856,45 +883,36 @@ public class Building : MonoBehaviour
         dragPreparationActive = false;
     }
 
-    private void TryOpenManagementUiFromTap()
+    private Vector3 GetCurrentPointerScreenPosition()
     {
-        if (!tapPending)
-            return;
-
-        if (isDragging || Time.unscaledTime - lastDragFinishedAt < 0.1f)
-            return;
-
-        if (Time.unscaledTime - pointerDownStartedAt >= HoldDurationSeconds)
-            return;
-
-        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
-            return;
-
-        if (currentPath == null)
-            currentPath = GetComponentInParent<Path>();
-
-        if (currentPath == null)
-            return;
-
-        BuildingUI buildingUI = GetBuildingUI();
-        if (buildingUI != null)
-            buildingUI.Open(currentPath, this);
-    }
-
-    private static Vector3 GetCurrentPointerScreenPosition()
-    {
-        if (Input.touchCount > 0)
-            return Input.GetTouch(0).position;
+        if (activeTouchId >= 0)
+        {
+            for (int i = 0; i < Input.touchCount; i++)
+            {
+                Touch touch = Input.GetTouch(i);
+                if (touch.fingerId == activeTouchId)
+                {
+                    lastPointerScreenPosition = touch.position;
+                    break;
+                }
+            }
+            return lastPointerScreenPosition;
+        }
 
         return Input.mousePosition;
     }
 
-    private static bool IsPointerStillPressed()
+    private bool IsPointerStillPressed()
     {
-        if (Input.touchCount > 0)
+        if (activeTouchId >= 0)
         {
-            TouchPhase phase = Input.GetTouch(0).phase;
-            return phase != TouchPhase.Ended && phase != TouchPhase.Canceled;
+            for (int i = 0; i < Input.touchCount; i++)
+            {
+                Touch touch = Input.GetTouch(i);
+                if (touch.fingerId == activeTouchId)
+                    return touch.phase != TouchPhase.Ended && touch.phase != TouchPhase.Canceled;
+            }
+            return false;
         }
 
         return Input.GetMouseButton(0);
@@ -1078,8 +1096,8 @@ public class Building : MonoBehaviour
     private void UpdateWorkingStateFromSalary(bool notifyEntranceManagement)
     {
         bool previousWorking = IsWorking;
-        currentSalary = Mathf.Clamp(currentSalary, 0, MaxSalary);
-        isWorking = currentSalary > 0 && isPlaced;
+        currentBoxStock = Mathf.Clamp(currentBoxStock, 0, MaxSalary);
+        isWorking = currentBoxStock > 0 && isPlaced;
 
         if (previousWorking && !IsWorking)
             CancelWaitingCustomersForRelocation();
@@ -1097,12 +1115,12 @@ public class Building : MonoBehaviour
 
     private void ToggleWorkObjects(bool working)
     {
-        if (salaryControlledPrefabs == null)
+        if (stockControlledPrefabs == null)
             return;
 
-        for (int i = 0; i < salaryControlledPrefabs.Length; i++)
+        for (int i = 0; i < stockControlledPrefabs.Length; i++)
         {
-            GameObject target = salaryControlledPrefabs[i];
+            GameObject target = stockControlledPrefabs[i];
             if (target == null)
                 continue;
 
@@ -1151,20 +1169,12 @@ public class Building : MonoBehaviour
         }
     }
 
-    private BuildingUI GetBuildingUI()
-    {
-        if (cachedBuildingUI == null)
-            cachedBuildingUI = BuildingUI.EnsureInstance();
-
-        return cachedBuildingUI;
-    }
-
     private void ResolveStatusBar()
     {
-        if (salaryStatusBar == null)
-            salaryStatusBar = GetComponentInChildren<Canvas>(true);
+        if (boxStockGauge == null)
+            boxStockGauge = GetComponentInChildren<Canvas>(true);
 
-        salaryStatusSlider = salaryStatusBar != null ? salaryStatusBar.GetComponentInChildren<Slider>(true) : null;
+        salaryStatusSlider = boxStockGauge != null ? boxStockGauge.GetComponentInChildren<Slider>(true) : null;
         salaryStatusFillImage = ResolveSalaryStatusFillImage();
         if (salaryStatusFillImage != null)
             salaryStatusNormalFillColor = salaryStatusFillImage.color;
@@ -1174,29 +1184,29 @@ public class Building : MonoBehaviour
 
     private void RefreshStatusBarAnchor()
     {
-        if (salaryStatusBar == null)
+        if (boxStockGauge == null)
             return;
 
-        Transform anchor = level >= 2 && salaryStatusBarLevel2Anchor != null
-            ? salaryStatusBarLevel2Anchor
-            : salaryStatusBarLevel1Anchor;
+        Transform anchor = level >= 2 && boxStockGaugeLevel2Anchor != null
+            ? boxStockGaugeLevel2Anchor
+            : boxStockGaugeLevel1Anchor;
 
         if (anchor != null)
         {
-            salaryStatusBar.transform.position = anchor.position;
-            salaryStatusBar.transform.rotation = Quaternion.identity;
+            boxStockGauge.transform.position = anchor.position;
+            boxStockGauge.transform.rotation = Quaternion.identity;
         }
     }
 
     private void RefreshStatusBar()
     {
-        if (salaryStatusBar == null)
+        if (boxStockGauge == null)
             ResolveStatusBar();
 
-        if (salaryStatusBar == null)
+        if (boxStockGauge == null)
             return;
 
-        float normalized = MaxSalary > 0 ? Mathf.Clamp01((float)currentSalary / MaxSalary) : 0f;
+        float normalized = MaxSalary > 0 ? Mathf.Clamp01((float)currentBoxStock / MaxSalary) : 0f;
         if (salaryStatusSlider != null)
         {
             salaryStatusSlider.minValue = 0f;
@@ -1213,7 +1223,7 @@ public class Building : MonoBehaviour
                 ? SalaryLowFillColor
                 : salaryStatusNormalFillColor;
 
-        salaryStatusBar.gameObject.SetActive(normalized > 0f || !Application.isPlaying);
+        boxStockGauge.gameObject.SetActive(normalized > 0f || !Application.isPlaying);
         RefreshStatusBarAnchor();
     }
 
@@ -1222,10 +1232,10 @@ public class Building : MonoBehaviour
         if (salaryStatusSlider != null && salaryStatusSlider.fillRect != null)
             return salaryStatusSlider.fillRect.GetComponent<Image>();
 
-        if (salaryStatusBar == null)
+        if (boxStockGauge == null)
             return null;
 
-        Image[] images = salaryStatusBar.GetComponentsInChildren<Image>(true);
+        Image[] images = boxStockGauge.GetComponentsInChildren<Image>(true);
         for (int i = 0; i < images.Length; i++)
         {
             if (images[i] != null && images[i].name.ToLowerInvariant().Contains("fill"))
@@ -1260,10 +1270,10 @@ public class Building : MonoBehaviour
 
             yield return new WaitForSeconds(tickSeconds);
 
-            if (!isPlaced || currentSalary <= 0)
+            if (!isPlaced || currentBoxStock <= 0)
                 continue;
 
-            currentSalary = Mathf.Max(0, currentSalary - 1);
+            currentBoxStock = Mathf.Max(0, currentBoxStock - 1);
             UpdateWorkingStateFromSalary(true);
             RefreshStatusBar();
             PushStateToVillageManagement();
@@ -1272,16 +1282,16 @@ public class Building : MonoBehaviour
 
     private float GetWorkTickSecondsForCurrentLevel()
     {
-        return level >= 2 ? level2WorkTickSeconds : level1WorkTickSeconds;
+        return level >= 2 ? level2StockConsumptionIntervalSeconds : level1StockConsumptionIntervalSeconds;
     }
 
     private void ConsumeSalaryForCustomer()
     {
-        int amount = Mathf.Max(0, customerSalaryCost);
-        if (amount <= 0 || currentSalary <= 0)
+        int amount = Mathf.Max(0, stockConsumedPerCustomer);
+        if (amount <= 0 || currentBoxStock <= 0)
             return;
 
-        currentSalary = Mathf.Max(0, currentSalary - amount);
+        currentBoxStock = Mathf.Max(0, currentBoxStock - amount);
         UpdateWorkingStateFromSalary(true);
         RestartSalaryRoutine();
         RefreshStatusBar();

@@ -49,6 +49,7 @@ public class Shop : MonoBehaviour
 
     private void OnEnable()
     {
+        if (panelRoot != null) Tycoon.DeliveryWindows.Register(panelRoot.gameObject, CloseShop);
         if (!AllShops.Contains(this))
             AllShops.Add(this);
 
@@ -70,7 +71,8 @@ public class Shop : MonoBehaviour
         ResolveSectionReferences();
         BuildUiIfNeeded();
         RebuildSectionOrder();
-        SetPanelVisible(true);
+        Tycoon.DeliveryWindows.Register(panelRoot.gameObject, CloseShop);
+        Tycoon.DeliveryWindows.Open(panelRoot.gameObject);
         panelRoot.SetAsLastSibling();
         ShowSection(GetDefaultSection());
     }
@@ -315,7 +317,10 @@ public class Shop : MonoBehaviour
     private void SetPanelVisible(bool visible)
     {
         if (panelRoot != null)
+        {
+            if (visible) Tycoon.DeliveryModal.Track(panelRoot.gameObject);
             panelRoot.gameObject.SetActive(visible);
+        }
     }
 
     private void RefreshTabColors()

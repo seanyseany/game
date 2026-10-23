@@ -59,6 +59,8 @@ public class BombHitBox : MonoBehaviour
         TryAffectTarget(other);
     }
 
+    internal void ApplyImpact(Collider2D other) { TryAffectTarget(other); }
+
     private void TryAffectTarget(Collider2D other)
     {
         if (other == null)

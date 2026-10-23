@@ -280,6 +280,9 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
 
     private bool CanStartPointerInteraction()
     {
+        if (Tycoon.DeliveryRuntime.BlocksWorldInput)
+            return false;
+
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
             return false;
 

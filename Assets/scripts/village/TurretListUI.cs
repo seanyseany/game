@@ -102,7 +102,10 @@ public class TurretListUI : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
         visualSelection = selectedIndex;
         centerPulseStartTime = Time.unscaledTime;
         if (panel != null)
+        {
+            Tycoon.DeliveryModal.Track(panel);
             panel.SetActive(true);
+        }
         Refresh();
     }
 

@@ -84,29 +84,23 @@ public class BombLauncher : MonoBehaviour
 
     public void FireAt(Transform target)
     {
-        if (!CanFire()) return;
-        if (target == null) return;
+        TryFireAt(target);
+    }
+
+    internal bool TryFireAt(Transform target)
+    {
+        if (!CanFire()) return false;
+        if (target == null || !target.gameObject.activeInHierarchy) return false;
 
         int idx = GetNextAmmoIndex();
-        if (idx < 0) return;
+        if (idx < 0) return false;
 
-        // 1) head 제거/회수
+        // Prepare the shot before consuming its head, so pool failure cannot lose ammo.
         GameObject head = loadedHeads[idx];
-        loadedHeads[idx] = null;
 
         Vector3 spawnWorldPos = (head != null)
             ? head.transform.position
             : transform.TransformPoint(GetLocalPosSafe(idx));
-
-        if (head != null)
-        {
-            head.transform.SetParent(null);
-
-            if (ObjectPool.Instance != null && !string.IsNullOrEmpty(bombHeadPoolTag))
-                ObjectPool.Instance.ReturnToPool(bombHeadPoolTag, head);
-            else
-                Destroy(head);
-        }
 
         // 2) Bomb 스폰
         GameObject bombObj = null;
@@ -117,15 +111,31 @@ public class BombLauncher : MonoBehaviour
         if (bombObj == null)
         {
             Debug.LogError("[BombLauncher] Bomb spawn failed. ObjectPool tag/prefab 확인 필요: " + bombPoolTag);
-            return;
+            return false;
         }
 
         Bomb bomb = bombObj.GetComponent<Bomb>();
-        if (bomb != null) bomb.SetTarget(target);
+        if (bomb == null)
+        {
+            ObjectPool.Instance.TryReturnActive(bombObj);
+            Debug.LogError("[BombLauncher] Bomb pool prefab is missing its Bomb component.");
+            return false;
+        }
+        bomb.SetTarget(target);
+        loadedHeads[idx] = null;
+        if (head != null)
+        {
+            head.transform.SetParent(null);
+            if (ObjectPool.Instance != null && !string.IsNullOrEmpty(bombHeadPoolTag))
+                ObjectPool.Instance.ReturnToPool(bombHeadPoolTag, head);
+            else
+                Destroy(head);
+        }
 
         // 3) 다 썼으면 복귀 + 재장전
         if (IsAmmoEmpty())
             StartCoroutine(CoReturnAndReload(autoReturnDelay));
+        return true;
     }
 
     // =========================
@@ -325,7 +335,7 @@ public class BombLauncher : MonoBehaviour
             Transform forcedTarget = forcedTargetPoints[targetIdx % forcedTargetPoints.Count];
             if (forcedTarget == null) break;
 
-            FireAt(forcedTarget);
+            if (!TryFireAt(forcedTarget)) break;
             targetIdx++;
         }
     }

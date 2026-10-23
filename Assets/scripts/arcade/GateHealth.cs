@@ -79,7 +79,7 @@ public class GateHealth : MonoBehaviour
         if (state == GateState.Broken) return;
 
         hitCount++;
-        CameraShakeManager.ShakeDefaultHalf();
+        CameraShakeManager.Shake(CameraShakeManager.ShakeEvent.GateHit);
         SpawnGateDamageFx();
         SpawnSmokeForCurrentHit();
 

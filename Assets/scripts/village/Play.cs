@@ -20,6 +20,8 @@ public class Play : MonoBehaviour
 
     private readonly List<Button> sceneButtons = new List<Button>();
     private readonly List<Button> playerButtons = new List<Button>();
+    private readonly List<string> displayedSceneLabels = new List<string>();
+    private readonly List<int> displayedPlayerTypes = new List<int>();
 
     private Canvas rootCanvas;
     private RectTransform panelRoot;
@@ -53,6 +55,7 @@ public class Play : MonoBehaviour
 
     private void OnEnable()
     {
+        if (panelRoot != null) Tycoon.DeliveryWindows.Register(panelRoot.gameObject, ClosePlayMenu);
         VillageManagement.InstanceReady += HandleVillageReady;
         if (VillageManagement.Instance != null)
             VillageManagement.Instance.SaveDataChanged += HandleSaveDataChanged;
@@ -68,7 +71,8 @@ public class Play : MonoBehaviour
     public void OpenPlayMenu()
     {
         BuildUiIfNeeded();
-        SetPanelVisible(true);
+        Tycoon.DeliveryWindows.Register(panelRoot.gameObject, ClosePlayMenu);
+        Tycoon.DeliveryWindows.Open(panelRoot.gameObject);
         panelRoot.SetAsLastSibling();
         RefreshSceneButtons();
         RefreshPlayerButtons();
@@ -87,6 +91,7 @@ public class Play : MonoBehaviour
         villageManagement.SaveDataChanged -= HandleSaveDataChanged;
         villageManagement.SaveDataChanged += HandleSaveDataChanged;
         LoadSavedSelection();
+        if (panelRoot == null || !panelRoot.gameObject.activeInHierarchy) return;
         RefreshSceneButtons();
         RefreshPlayerButtons();
     }
@@ -94,6 +99,7 @@ public class Play : MonoBehaviour
     private void HandleSaveDataChanged(VillageManagement.VillageSaveData saveData)
     {
         ApplySavedSelection(saveData);
+        if (panelRoot == null || !panelRoot.gameObject.activeInHierarchy) return;
         RefreshSceneButtons();
         RefreshPlayerButtons();
     }
@@ -201,24 +207,22 @@ public class Play : MonoBehaviour
         if (sceneListRoot == null)
             return;
 
-        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        for (int i = 0; i < sceneButtons.Count; i++)
-        {
-            if (sceneButtons[i] != null)
-                Destroy(sceneButtons[i].gameObject);
-        }
-        sceneButtons.Clear();
-
-        if (arcadeScenes.Count == 0)
-        {
-            if (selectedSceneText != null)
-                selectedSceneText.text = "Scene not registered";
-            return;
-        }
-
-        selectedSceneIndex = Mathf.Clamp(selectedSceneIndex, 0, arcadeScenes.Count - 1);
+        int sceneCount = arcadeScenes.Count;
+        selectedSceneIndex = sceneCount > 0 ? Mathf.Clamp(selectedSceneIndex, 0, sceneCount - 1) : 0;
         if (selectedSceneText != null)
-            selectedSceneText.text = $"Selected: {GetSceneDisplayName(selectedSceneIndex)}";
+            selectedSceneText.text = sceneCount > 0 ? $"Selected: {GetSceneDisplayName(selectedSceneIndex)}" : "Scene not registered";
+
+        bool unchanged = sceneButtons.Count == sceneCount && displayedSceneLabels.Count == sceneCount;
+        for (int i = 0; unchanged && i < sceneCount; i++)
+            unchanged = sceneButtons[i] != null && displayedSceneLabels[i] == GetSceneDisplayName(i);
+        if (unchanged) { RefreshSceneButtonColors(); return; }
+
+        for (int i = 0; i < sceneButtons.Count; i++)
+            if (sceneButtons[i] != null) Tycoon.DeliveryView.Remove(sceneButtons[i].gameObject);
+        sceneButtons.Clear();
+        displayedSceneLabels.Clear();
+        if (sceneCount == 0) return;
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
         float top = -70f;
         float buttonHeight = 54f;
@@ -243,6 +247,7 @@ public class Play : MonoBehaviour
             });
 
             sceneButtons.Add(button);
+            displayedSceneLabels.Add(GetSceneDisplayName(i));
         }
 
         RefreshSceneButtonColors();
@@ -266,14 +271,6 @@ public class Play : MonoBehaviour
     {
         if (playerListRoot == null)
             return;
-
-        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        for (int i = 0; i < playerButtons.Count; i++)
-        {
-            if (playerButtons[i] != null)
-                Destroy(playerButtons[i].gameObject);
-        }
-        playerButtons.Clear();
 
         VillageManagement villageManagement = VillageManagement.EnsureInstance();
         List<VillageManagement.ArcadePlayerEntry> availablePlayers = villageManagement != null
@@ -306,8 +303,17 @@ public class Play : MonoBehaviour
         if (playButton != null)
             playButton.interactable = hasPlayers && selectedPlayerType > 0;
 
-        if (!hasPlayers)
-            return;
+        bool unchanged = playerButtons.Count == availablePlayers.Count && displayedPlayerTypes.Count == availablePlayers.Count;
+        for (int i = 0; unchanged && i < availablePlayers.Count; i++)
+            unchanged = playerButtons[i] != null && displayedPlayerTypes[i] == availablePlayers[i].playerType;
+        if (unchanged) { RefreshPlayerButtonColors(); return; }
+
+        for (int i = 0; i < playerButtons.Count; i++)
+            if (playerButtons[i] != null) Tycoon.DeliveryView.Remove(playerButtons[i].gameObject);
+        playerButtons.Clear();
+        displayedPlayerTypes.Clear();
+        if (!hasPlayers) return;
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
         int columns = 2;
         float widthPadding = 20f;
@@ -351,6 +357,7 @@ public class Play : MonoBehaviour
                 RefreshPlayerButtons();
             });
             playerButtons.Add(button);
+            displayedPlayerTypes.Add(playerType);
         }
 
         RefreshPlayerButtonColors();
@@ -455,7 +462,10 @@ public class Play : MonoBehaviour
     private void SetPanelVisible(bool visible)
     {
         if (panelRoot != null)
+        {
+            if (visible) Tycoon.DeliveryModal.Track(panelRoot.gameObject);
             panelRoot.gameObject.SetActive(visible);
+        }
     }
 
     private static RectTransform CreateSection(string name, Transform parent, Vector2 anchorMin, Vector2 anchorMax, Color backgroundColor)

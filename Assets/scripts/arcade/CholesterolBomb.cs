@@ -517,7 +517,7 @@ public class CholesterolBomb : MonoBehaviour, IReinitializeOnEnable
         if (spawned == null)
             return;
 
-        CameraShakeManager.ShakeDefault();
+        CameraShakeManager.Shake(CameraShakeManager.ShakeEvent.CholesterolBombExplosion);
 
         SmokeMover smokeMover = spawned.GetComponent<SmokeMover>();
         if (smokeMover != null)

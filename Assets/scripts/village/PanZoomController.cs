@@ -21,6 +21,11 @@ public class PanZoomController : MonoBehaviour
 
     private void Update()
     {
+        if (Tycoon.DeliveryRuntime.BlocksWorldInput || VillagePointerCapture.HasActiveCapture)
+        {
+            dragging = false;
+            return;
+        }
         HandlePinchZoom();
         HandleMouseScrollZoom();
         HandleSingleDrag();
@@ -59,13 +64,18 @@ public class PanZoomController : MonoBehaviour
         {
             Touch touch = Input.GetTouch(0);
             if (touch.phase == TouchPhase.Began)
+            {
+                dragging = true;
                 lastSinglePointerPosition = touch.position;
-            else if (touch.phase == TouchPhase.Moved)
+            }
+            else if (touch.phase == TouchPhase.Moved && dragging)
             {
                 Vector3 delta = touch.position - (Vector2)lastSinglePointerPosition;
                 MoveContent(delta);
                 lastSinglePointerPosition = touch.position;
             }
+            else if (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)
+                dragging = false;
 
             return;
         }

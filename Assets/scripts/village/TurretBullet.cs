@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 [RequireComponent(typeof(Collider2D))]
 [RequireComponent(typeof(Rigidbody2D))]
@@ -14,6 +15,16 @@ public class TurretBullet : MonoBehaviour
     private const float FloorCollisionMinTravelDistance = 0.6f;
 
     private static readonly Dictionary<int, Queue<TurretBullet>> PoolsByPrefab = new Dictionary<int, Queue<TurretBullet>>();
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetScenePools()
+    {
+        PoolsByPrefab.Clear();
+        SceneManager.sceneUnloaded -= ClearUnloadedScene;
+        SceneManager.sceneUnloaded += ClearUnloadedScene;
+    }
+
+    private static void ClearUnloadedScene(Scene scene) => ScenePoolCleanup.RemoveUnloaded(PoolsByPrefab, scene);
 
     [Header("Purchase")]
     [SerializeField] private int oxygenPrice30 = 3;

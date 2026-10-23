@@ -139,6 +139,9 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
     public void HandleColliderPointerDown()
     {
+        if (Tycoon.DeliveryRuntime.BlocksWorldInput)
+            return;
+
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
             return;
 
@@ -158,6 +161,9 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
     public void HandleColliderPointerUpAsButton()
     {
+        if (Tycoon.DeliveryRuntime.BlocksWorldInput)
+            return;
+
         if (isDragging || Time.unscaledTime - lastDragFinishedAt < 0.1f)
             return;
 
@@ -172,6 +178,9 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
     private void TryOpenUiFromTap()
     {
+        if (Tycoon.DeliveryRuntime.BlocksWorldInput)
+            return;
+
         if (!tapPending)
             return;
 

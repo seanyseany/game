@@ -23,6 +23,9 @@ public class Blood : MonoBehaviour
     private Transform suctionTarget;
     private Collider2D ignoredSuctionCollider;
     private Action<Blood> suctionComplete;
+    private string returnPoolTag = "Blood";
+
+    public void ConfigurePooling(string tag) { returnPoolTag = tag; }
 
     private void Awake()
     {
@@ -351,8 +354,10 @@ public class Blood : MonoBehaviour
 
     private void ReturnSelf()
     {
-        if (ObjectPool.Instance != null && ObjectPool.Instance.HasPool("Blood"))
-            ObjectPool.Instance.ReturnToPool("Blood", gameObject);
+        if (ObjectPool.Instance != null && ObjectPool.Instance.TryReturnActive(gameObject))
+            return;
+        if (ObjectPool.Instance != null && ObjectPool.Instance.HasPool(returnPoolTag))
+            ObjectPool.Instance.ReturnToPool(returnPoolTag, gameObject);
         else
             Destroy(gameObject);
     }

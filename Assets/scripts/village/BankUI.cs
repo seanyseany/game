@@ -38,9 +38,13 @@ public class BankUI : MonoBehaviour
 
     public void Open(Bank bank)
     {
+        Tycoon.DeliveryWindows.CloseAll();
         boundBank = bank;
         if (panel != null)
+        {
+            Tycoon.DeliveryModal.Track(panel);
             panel.SetActive(true);
+        }
         Refresh();
     }
 

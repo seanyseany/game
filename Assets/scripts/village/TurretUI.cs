@@ -77,11 +77,13 @@ public class TurretUI : MonoBehaviour
 
     public void Open(TurretImplementation implementation, BaseTurret turret)
     {
+        Tycoon.DeliveryWindows.CloseAll();
         boundImplementation = implementation;
         boundTurret = turret;
         EnsureRuntimeUi();
         if (panel != null)
         {
+            Tycoon.DeliveryModal.Track(panel);
             panel.SetActive(true);
             panel.transform.SetAsLastSibling();
         }

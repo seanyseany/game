@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.EventSystems;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -85,18 +84,6 @@ public class Path : MonoBehaviour
             Random.Range(bounds.min.x, bounds.max.x),
             Random.Range(bounds.min.y, bounds.max.y),
             0f);
-    }
-
-    private void OnMouseUpAsButton()
-    {
-        if (constructionRoutine != null)
-            return;
-
-        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
-            return;
-
-        if (buildingInstance != null)
-            OpenBuildingUI();
     }
 
     public static Path FindFirstEmpty()
@@ -453,13 +440,6 @@ public class Path : MonoBehaviour
         allowsBuildingPlacement = allowed;
     }
 
-    private void OpenBuildingUI()
-    {
-        BuildingUI buildingUI = FindBuildingUi();
-        if (buildingUI != null)
-            buildingUI.Open(this, buildingInstance);
-    }
-
     private void BeginConstruction(Building buildingPrefab, int targetLevel, float duration, bool upgrading)
     {
         VillageManagement villageManagement = VillageManagement.EnsureInstance();
@@ -752,7 +732,7 @@ public class Path : MonoBehaviour
 
     private BuildingUI FindBuildingUi()
     {
-        return BuildingUI.EnsureInstance();
+        return FindFirstObjectByType<BuildingUI>(FindObjectsInactive.Include);
     }
 
     private string BuildPathId()

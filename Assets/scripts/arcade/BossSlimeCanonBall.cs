@@ -147,7 +147,7 @@ public class BossSlimeCanonBall : MonoBehaviour, IReinitializeOnEnable
         dead = true;
 
         if (shakeCamera)
-            CameraShakeManager.ShakeDefaultHalf();
+            CameraShakeManager.Shake(CameraShakeManager.ShakeEvent.BossSlimeCannonBallExplosion);
 
         if (rb != null)
         {

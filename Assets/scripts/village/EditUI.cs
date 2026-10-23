@@ -34,9 +34,13 @@ public class EditUI : MonoBehaviour
 
     public void Open()
     {
+        Tycoon.DeliveryWindows.CloseAll();
         LoadSettingsIntoUi();
         if (panel != null)
+        {
+            Tycoon.DeliveryModal.Track(panel);
             panel.SetActive(true);
+        }
     }
 
     public void Close()

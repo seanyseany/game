@@ -2,6 +2,7 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine.Serialization;
+using Unity.Profiling;
 
 public interface IReinitializable { void Reinit(); }
 // Activation already resets these components; pools must not reset them a second time.
@@ -16,6 +17,9 @@ public class SpecialPhaseEntry
 
 public class StageManager : MonoBehaviour
 {
+    private static readonly ProfilerMarker CreatePhaseSample = new ProfilerMarker("Arcade.CreatePhase");
+    private static readonly ProfilerMarker ActivatePhaseSample = new ProfilerMarker("Arcade.ActivatePhase");
+    private static readonly ProfilerMarker ReturnPhaseSample = new ProfilerMarker("Arcade.ReturnPhase");
     public static StageManager Instance;
 
     private const int TestPhaseStage = 0;
@@ -149,7 +153,37 @@ public class StageManager : MonoBehaviour
 
     [Header("Background")]
     [FormerlySerializedAs("background1Prefab")]
+    [Tooltip("시작 배경. 씬 오브젝트 또는 프리팹을 등록합니다.")]
     public GameObject backgroundPrefab;
+    [Tooltip("시작 배경 외에 교체할 배경들을 등록합니다. 시작 배경은 자동으로 후보에 포함되며 현재 배경은 제외합니다.")]
+    public GameObject[] backgroundPrefabs;
+    [Tooltip("스테이지 1 종료 시 배경 전환 확률. 0 = 0%, 0.5 = 50%, 1 = 100%")]
+    [Range(0f, 1f)] public float stage1BackgroundChangeChance = 0.5f;
+    public GameObject preBackgroundPrefab;
+    [FormerlySerializedAs("preBackgroundSpawnPoint")]
+    [Tooltip("Pre Background 생성 위치. 프리팹의 Mover가 생성 후 이동을 담당합니다.")]
+    public Transform preBackgroundPoint;
+    [Tooltip("생성 시 이 지점의 X좌표를 기록하고, Pre Background의 중심이 그 좌표를 통과하면 삭제합니다.")]
+    public Transform preBackgroundPoint2;
+    [Tooltip("Pre Background 생성 후 실제 배경을 교체하기까지의 시간")]
+    [Min(0f)] public float backgroundChangeDelay = 1f;
+
+    private readonly List<GameObject> backgroundSources = new List<GameObject>();
+    private readonly Dictionary<GameObject, GameObject> backgroundInstances = new Dictionary<GameObject, GameObject>();
+    private GameObject currentBackgroundSource;
+    private GameObject preBackgroundInstance;
+    private float preBackgroundPreviousX;
+    private float preBackgroundDespawnX;
+    private Coroutine backgroundChangeRoutine;
+    private int pendingBackgroundChanges;
+    private bool stage1BackgroundRollCompleted;
+    private bool stage1BackgroundChangeTriggered;
+    private int stage3NormalPhaseSpawnCount;
+    private int stage3BackgroundChangeAt;
+    private bool stage3BackgroundChangeTriggered;
+    private int stage4NormalPhaseSpawnCount;
+    private int stage4BackgroundIntervalMin = 12;
+    private int stage4BackgroundChangeAt;
 
     private Coroutine stageLoopRoutine;
 
@@ -161,6 +195,11 @@ public class StageManager : MonoBehaviour
 
     void OnDestroy()
     {
+        ClearPreBackground();
+        foreach (var entry in backgroundInstances)
+            if (entry.Value != null && entry.Value != entry.Key)
+                Destroy(entry.Value);
+
         if (Instance == this)
             Instance = null;
     }
@@ -181,6 +220,7 @@ public class StageManager : MonoBehaviour
         GameData.OnMachineGunTrigger -= HandleMachineGunTrigger;
         GameData.OnMachineGunSequenceStart -= HandleMachineGunSequenceStart;
         GameData.OnMachineGunSequenceEnd -= HandleMachineGunSequenceEnd;
+        CancelBackgroundChanges();
     }
 
     // ============================ Phase 풀 초기화 ============================
@@ -265,6 +305,7 @@ public class StageManager : MonoBehaviour
 
     private GameObject CreatePhasePoolObject(GameObject prefab)
     {
+        using var sample = CreatePhaseSample.Auto();
         var go = Instantiate(prefab, new Vector3(-999f, -999f, 0f), prefab.transform.rotation);
         go.name = prefab.name + "_Pooled";
         pooledInstanceToPrefab[go] = prefab;
@@ -286,6 +327,7 @@ public class StageManager : MonoBehaviour
 
     private GameObject GetFromPool(GameObject prefab, Vector3 spawnPos)
     {
+        using var sample = ActivatePhaseSample.Auto();
         if (prefab == null)
             return null;
 
@@ -333,6 +375,7 @@ public class StageManager : MonoBehaviour
 
     private void ReturnToPool(GameObject prefab, GameObject go)
     {
+        using var sample = ReturnPhaseSample.Auto();
         if (prefab == null || go == null)
             return;
 
@@ -386,6 +429,22 @@ public class StageManager : MonoBehaviour
         }
 
         EnsureRagePhasePresence();
+    }
+
+    void LateUpdate()
+    {
+        if (preBackgroundInstance == null)
+            return;
+
+        // Only an actual crossing deletes Cave. A missing/moving marker or a
+        // starting position already left of the marker must not delete it early.
+        float currentX = preBackgroundInstance.transform.position.x;
+        bool crossedEnd =
+            (preBackgroundPreviousX >= preBackgroundDespawnX && currentX <= preBackgroundDespawnX) ||
+            (preBackgroundPreviousX <= preBackgroundDespawnX && currentX >= preBackgroundDespawnX);
+        preBackgroundPreviousX = currentX;
+        if (crossedEnd)
+            ClearPreBackground();
     }
 
     void FixedUpdate()
@@ -559,7 +618,7 @@ public class StageManager : MonoBehaviour
 
         // ✅ 보스 상태 리셋
         ResetBossState();
-        SetBackgroundVisible(backgroundPrefab, true);
+        ResetBackgroundState();
     }
 
     private void SpawnPhase()
@@ -575,6 +634,8 @@ public class StageManager : MonoBehaviour
 
         int speedStage = GetCurrentPhaseStage();
         bool isTestPhase = speedStage == TestPhaseStage;
+        if (!isTestPhase)
+            TryRollStage1BackgroundChange();
         SpawnPhaseInternal(
             stage: speedStage,
             isRageSpawn: false,
@@ -591,6 +652,12 @@ public class StageManager : MonoBehaviour
         float startedAt = Time.time;
         RequestStagePrewarm(GetCurrentPhaseStage());
         RequestStagePrewarm(RagePhaseStage);
+        // Finish first-use creation before the run. Warming later stages while
+        // the player is already jumping can spend an entire frame cloning one phase.
+        foreach (GameObject prefab in poolDict.Keys)
+            RequestPrefabPrewarm(prefab);
+        if (prewarmRoutine == null && prewarmQueue.Count > 0)
+            prewarmRoutine = StartCoroutine(PrewarmQueuedPhases());
         while (pendingPrewarm.Count > 0)
             yield return null;
 
@@ -809,6 +876,10 @@ public class StageManager : MonoBehaviour
         pendingBossExtraNormalPhase = false;
         spawnPaused = false;
 
+        stage4NormalPhaseSpawnCount = 0;
+        stage4BackgroundIntervalMin = 12;
+        stage4BackgroundChangeAt = Random.Range(12, 16);
+        RequestBackgroundChange();
         RequestStagePrewarm(PostBossMixedStage);
         SpawnPhase();
     }
@@ -840,13 +911,205 @@ public class StageManager : MonoBehaviour
         ResetBossState();
     }
 
-    private void SetBackgroundVisible(GameObject bg, bool visible)
+    private void ResetBackgroundState()
     {
-        if (bg == null) return;
+        backgroundChangeRoutine = null; // ResetState has already stopped all coroutines.
+        pendingBackgroundChanges = 0;
+        ClearPreBackground();
+        stage1BackgroundRollCompleted = false;
+        stage1BackgroundChangeTriggered = false;
+        stage3NormalPhaseSpawnCount = 0;
+        stage3BackgroundChangeAt = 0;
+        stage3BackgroundChangeTriggered = false;
+        stage4NormalPhaseSpawnCount = 0;
+        stage4BackgroundIntervalMin = 12;
+        stage4BackgroundChangeAt = 0;
 
-        var mrs = bg.GetComponentsInChildren<MeshRenderer>(true);
-        for (int i = 0; i < mrs.Length; i++)
-            if (mrs[i] != null) mrs[i].enabled = visible;
+        foreach (var entry in backgroundInstances)
+            if (entry.Value != null)
+                entry.Value.SetActive(false);
+
+        backgroundSources.Clear();
+        if (backgroundPrefab != null)
+            backgroundSources.Add(backgroundPrefab);
+        AddUniquePrefabs(backgroundSources, backgroundPrefabs);
+
+        // Scene backgrounds must also be hidden before their first selection.
+        foreach (GameObject source in backgroundSources)
+            if (source.scene.IsValid())
+                source.SetActive(false);
+
+        currentBackgroundSource = null;
+        if (backgroundSources.Count > 0)
+            ShowBackground(backgroundSources[0]);
+    }
+
+    private void TryRollStage1BackgroundChange()
+    {
+        // Called when the next normal phase is requested, after the last stage 1 phase passes.
+        if (stage1BackgroundRollCompleted || postBossMixedPhaseUnlocked || speedUp1 <= 0 || phaseSpawnCount < speedUp1)
+            return;
+
+        stage1BackgroundRollCompleted = true;
+        float chance = Mathf.Clamp01(stage1BackgroundChangeChance);
+        stage1BackgroundChangeTriggered = chance > 0f && (chance >= 1f || Random.value < chance) && RequestBackgroundChange();
+        if (stage1BackgroundChangeTriggered)
+            stage3BackgroundChangeAt = Random.Range(5, 13);
+    }
+
+    private void HandleBackgroundPhaseSpawn(int stage, GameObject prefab)
+    {
+        if (!IsNormalBackgroundCountPhase(stage, prefab))
+            return;
+
+        if (stage == 3 && stage1BackgroundChangeTriggered && !stage3BackgroundChangeTriggered)
+        {
+            stage3NormalPhaseSpawnCount++;
+            if (stage3NormalPhaseSpawnCount >= stage3BackgroundChangeAt)
+            {
+                stage3BackgroundChangeTriggered = true;
+                RequestBackgroundChange();
+            }
+        }
+
+        if (stage == MaxPhaseStage || stage == PostBossMixedStage)
+        {
+            if (stage4BackgroundChangeAt == 0)
+                stage4BackgroundChangeAt = Random.Range(stage4BackgroundIntervalMin, stage4BackgroundIntervalMin + 4);
+
+            stage4NormalPhaseSpawnCount++;
+            if (stage4NormalPhaseSpawnCount >= stage4BackgroundChangeAt)
+            {
+                RequestBackgroundChange();
+                stage4NormalPhaseSpawnCount = 0;
+                stage4BackgroundIntervalMin += 3;
+                stage4BackgroundChangeAt = Random.Range(stage4BackgroundIntervalMin, stage4BackgroundIntervalMin + 4);
+            }
+        }
+    }
+
+    private bool IsNormalBackgroundCountPhase(int stage, GameObject prefab)
+    {
+        if (stage == TestPhaseStage || stage == RagePhaseStage || prefab == null ||
+            prefab.CompareTag(MachineGunStageTag) || prefab.CompareTag(MiniBossStageTag))
+            return false;
+
+        SpecialPhaseEntry[] specials = GetSpecialPhaseEntriesForStage(stage);
+        if (specials != null)
+            foreach (SpecialPhaseEntry entry in specials)
+                if (entry != null && entry.prefab == prefab)
+                    return false;
+
+        GameObject[] normals = GetPhasePrefabsForStage(stage);
+        if (normals != null)
+            foreach (GameObject normal in normals)
+                if (normal == prefab)
+                    return true;
+
+        return false;
+    }
+
+    private bool RequestBackgroundChange()
+    {
+        if (backgroundSources.Count < 2)
+            return false;
+
+        pendingBackgroundChanges++;
+        if (backgroundChangeRoutine == null)
+            backgroundChangeRoutine = StartCoroutine(CoChangeBackgrounds());
+        return true;
+    }
+
+    private IEnumerator CoChangeBackgrounds()
+    {
+        // Always yield once so even a zero-delay transition keeps a valid coroutine handle.
+        yield return null;
+        while (pendingBackgroundChanges > 0)
+        {
+            while (gameplayPauseByTransform)
+                yield return null;
+
+            if (GameData.Instance != null && (GameData.Instance.gameOver || GameData.Instance.IsResetting))
+                break;
+
+            pendingBackgroundChanges--;
+            var candidates = new List<GameObject>();
+            foreach (GameObject source in backgroundSources)
+                if (source != null && source != currentBackgroundSource)
+                    candidates.Add(source);
+            if (candidates.Count == 0)
+                continue;
+
+            GameObject next = candidates[Random.Range(0, candidates.Count)];
+            float delay = 0f;
+            if (preBackgroundPrefab != null)
+            {
+                if (preBackgroundPoint != null && preBackgroundPoint2 != null)
+                {
+                    preBackgroundInstance = Instantiate(preBackgroundPrefab, preBackgroundPoint.position, preBackgroundPoint.rotation);
+                    preBackgroundPreviousX = preBackgroundInstance.transform.position.x;
+                    preBackgroundDespawnX = preBackgroundPoint2.position.x;
+                    preBackgroundInstance.SetActive(true);
+                    delay = Mathf.Max(0f, backgroundChangeDelay);
+                    yield return WaitForSecondsRespectingGameplayPause(delay);
+                }
+                else
+                {
+                    Debug.LogWarning("[StageManager] Pre Background Point와 Pre Background Point 2를 모두 등록해야 Pre Background를 생성할 수 있습니다.", this);
+                }
+            }
+
+            if (GameData.Instance != null && (GameData.Instance.gameOver || GameData.Instance.IsResetting))
+                break;
+
+            ShowBackground(next);
+            // Keep the moving prefab until its origin reaches Point 2, regardless of travel time.
+            while (preBackgroundInstance != null)
+            {
+                if (GameData.Instance != null && (GameData.Instance.gameOver || GameData.Instance.IsResetting))
+                    break;
+                yield return null;
+            }
+        }
+
+        // Ending/cancelling a transition must not shorten Cave's trip to Point 2.
+        // LateUpdate owns its normal deletion; retry and scene teardown clean it explicitly.
+        pendingBackgroundChanges = 0;
+        backgroundChangeRoutine = null;
+    }
+
+    private void ShowBackground(GameObject source)
+    {
+        if (!backgroundInstances.TryGetValue(source, out GameObject instance) || instance == null)
+        {
+            instance = source.scene.IsValid() ? source : Instantiate(source, source.transform.position, source.transform.rotation);
+            backgroundInstances[source] = instance;
+        }
+
+        if (currentBackgroundSource != null &&
+            backgroundInstances.TryGetValue(currentBackgroundSource, out GameObject previous) && previous != null)
+            previous.SetActive(false);
+
+        currentBackgroundSource = source;
+        instance.SetActive(true);
+    }
+
+    private void ClearPreBackground()
+    {
+        if (preBackgroundInstance != null)
+        {
+            preBackgroundInstance.SetActive(false);
+            Destroy(preBackgroundInstance);
+        }
+        preBackgroundInstance = null;
+    }
+
+    private void CancelBackgroundChanges()
+    {
+        if (backgroundChangeRoutine != null)
+            StopCoroutine(backgroundChangeRoutine);
+        backgroundChangeRoutine = null;
+        pendingBackgroundChanges = 0;
     }
 
     private void DeactivateBossTemplateIfSceneObject()
@@ -1611,6 +1874,9 @@ public class StageManager : MonoBehaviour
             phaseSpawnCount++;
             PrewarmUpcomingStage();
         }
+
+        if (!isRageSpawn)
+            HandleBackgroundPhaseSpawn(stage, prefab);
 
         if (runPhaseRolls && GameData.Instance != null)
             GameData.Instance.CheckBossTriggerBeforeSpeedUp(this, phaseSpawnCount);

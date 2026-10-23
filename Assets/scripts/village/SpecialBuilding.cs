@@ -151,6 +151,9 @@ public class SpecialBuilding : MonoBehaviour
 
     private bool CanStartPointerInteraction()
     {
+        if (Tycoon.DeliveryRuntime.BlocksWorldInput)
+            return false;
+
         if (!isPlaced)
             return false;
 

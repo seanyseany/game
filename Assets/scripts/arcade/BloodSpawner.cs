@@ -8,9 +8,13 @@ public class BloodSpawner : MonoBehaviour
     public Vector2 spawnPos = new Vector2(10f, -2f);  // 스폰 위치
     public float minSpawnInterval = 3f;
     public float maxSpawnInterval = 7f;
+    private ObjectPool preparedPool;
+    private GameObject preparedPrefab;
+    private string poolTag = "Blood";
 
     private void Start()
     {
+        PreparePool();
         StartCoroutine(SpawnRoutine());
     }
 
@@ -24,7 +28,27 @@ public class BloodSpawner : MonoBehaviour
             if (GameData.Instance != null && GameData.Instance.gameOver)
                 continue;
 
-            Instantiate(bloodPrefab, spawnPos, Quaternion.identity);
+            SpawnOne();
         }
+    }
+
+    private void PreparePool()
+    {
+        ObjectPool pool = ObjectPool.Instance;
+        if (pool == null || bloodPrefab == null || (pool == preparedPool && bloodPrefab == preparedPrefab)) return;
+        GameObject registered = pool.GetRegisteredPrefab("Blood");
+        poolTag = registered == null || registered == bloodPrefab ? "Blood" : "Blood_" + bloodPrefab.GetInstanceID();
+        pool.EnsurePoolSize(poolTag, bloodPrefab, 4);
+        preparedPool = pool;
+        preparedPrefab = bloodPrefab;
+    }
+
+    private void SpawnOne()
+    {
+        if (bloodPrefab == null) return;
+        PreparePool();
+        GameObject spawned = preparedPool != null ? preparedPool.SpawnFromPool(poolTag, spawnPos, Quaternion.identity) : null;
+        if (spawned == null) spawned = Instantiate(bloodPrefab, spawnPos, Quaternion.identity);
+        if (spawned.TryGetComponent<Blood>(out var blood)) blood.ConfigurePooling(poolTag);
     }
 }

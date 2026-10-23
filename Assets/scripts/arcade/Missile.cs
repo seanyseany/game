@@ -101,7 +101,7 @@ public class Missile : MonoBehaviour, IRageTransformPauseHandler
 
             if (!player.IsRageModeActive())
             {
-                CameraShakeManager.ShakeDefault();
+                CameraShakeManager.Shake(CameraShakeManager.ShakeEvent.MissileHit);
                 player.TakeDamageFromSource(1, ObstacleType.Missile);
             }
 

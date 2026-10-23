@@ -180,7 +180,7 @@ public class OwnerBlood : MonoBehaviour
         }
 
         if (building != null)
-            building.AwardTradeEnergy();
+            building.AwardTradeOxygen();
 
         CancelCurrentService(true);
     }

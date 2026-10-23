@@ -793,7 +793,7 @@ public class Boss : MonoBehaviour, IReinitializeOnEnable
 
     public void OnBossDestroyShakeEvent()
     {
-        CameraShakeManager.ShakeDefault();
+        CameraShakeManager.Shake(CameraShakeManager.ShakeEvent.BossDeath);
     }
 
     private void SetBossAnimTrigger(string triggerName)
