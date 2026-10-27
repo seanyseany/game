@@ -263,6 +263,7 @@ public class ZigzagLightning : MonoBehaviour, IRageTransformPauseHandler
             if (boss == null) boss = root.GetComponent<Boss>() ?? root.GetComponentInChildren<Boss>(true);
             if (bossSlime == null) bossSlime = root.GetComponent<BossSlime>() ?? root.GetComponentInChildren<BossSlime>(true);
             MiniBoss miniBoss = root.GetComponent<MiniBoss>() ?? root.GetComponentInChildren<MiniBoss>(true);
+            if (bossTargetCache.Count >= 256) bossTargetCache.Clear();
             bossTargetCache[root.GetInstanceID()] = new BossTargetRefs { boss = boss, bossSlime = bossSlime, miniBoss = miniBoss };
         }
     }
@@ -281,6 +282,7 @@ public class ZigzagLightning : MonoBehaviour, IRageTransformPauseHandler
 
         if (root != null)
         {
+            if (bossTargetCache.Count >= 256) bossTargetCache.Clear();
             bossTargetCache[root.GetInstanceID()] = new BossTargetRefs
             {
                 boss = null,

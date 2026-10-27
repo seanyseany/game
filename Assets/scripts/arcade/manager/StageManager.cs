@@ -112,6 +112,7 @@ public partial class StageManager : MonoBehaviour
     private Coroutine prewarmRoutine;
     private GameObject[] mixedPhasePrefabs;
     private SpecialPhaseEntry[] mixedSpecialPhasePrefabs;
+    private readonly HashSet<SpecialPhaseEntry> postBossScheduledSpecials = new HashSet<SpecialPhaseEntry>();
 
     [Header("Rage Phase Settings")]
     public float ragePhaseDuration = 12f;
@@ -119,6 +120,8 @@ public partial class StageManager : MonoBehaviour
 
     private Coroutine ragePhaseRoutine;
     private readonly Dictionary<int, List<GameObject>> phaseShuffleByStage = new Dictionary<int, List<GameObject>>(MaxPhaseStage);
+    private readonly List<GameObject> phaseCycleNormals = new List<GameObject>(32);
+    private readonly List<SpecialPhaseEntry> phaseCycleSpecials = new List<SpecialPhaseEntry>(8);
     private bool testPhaseSequenceCompleted;
     private SpawnMode currentSpawnMode = SpawnMode.Normal;
     private bool pendingInitialRagePhaseSpawn;
@@ -640,6 +643,7 @@ public partial class StageManager : MonoBehaviour
         pendingPrewarm.Clear();
         mixedPhasePrefabs = null;
         mixedSpecialPhasePrefabs = null;
+        postBossScheduledSpecials.Clear();
         gameplayPauseByTransform = false;
 
         ClearAllPhases();
@@ -705,7 +709,16 @@ public partial class StageManager : MonoBehaviour
         // Finish first-use creation before the run. Warming later stages while
         // the player is already jumping can spend an entire frame cloning one phase.
         foreach (GameObject prefab in poolDict.Keys)
+        {
             RequestPrefabPrewarm(prefab);
+            if (prefab != null && prefab.TryGetComponent<speedPhases>(out var settings) && settings.speedEffectPrefab != null)
+            {
+                Player player = GameData.Instance != null ? GameData.Instance.playerRef : Player.Instance;
+                if (player != null)
+                    player.PrepareSpeedEffectPool(settings.speedEffectPrefab,
+                        "SpeedPhaseEffect_" + settings.speedEffectPrefab.GetInstanceID(), settings.speedEffectMoveSpeed);
+            }
+        }
         if (prewarmRoutine == null && prewarmQueue.Count > 0)
             prewarmRoutine = StartCoroutine(PrewarmQueuedPhases());
         while (pendingPrewarm.Count > 0)
@@ -1797,11 +1810,13 @@ public partial class StageManager : MonoBehaviour
             return;
         }
 
-        List<GameObject> availableNormals = new List<GameObject>();
+        List<GameObject> availableNormals = phaseCycleNormals;
+        availableNormals.Clear();
         AddAvailableNormalPrefabs(availableNormals, normalPrefabs, allowMachineGunStage);
         ShuffleList(availableNormals);
 
-        List<SpecialPhaseEntry> availableSpecials = new List<SpecialPhaseEntry>();
+        List<SpecialPhaseEntry> availableSpecials = phaseCycleSpecials;
+        availableSpecials.Clear();
         if (specialEntries != null)
         {
             for (int i = 0; i < specialEntries.Length; i++)
@@ -1820,14 +1835,21 @@ public partial class StageManager : MonoBehaviour
         if (stage == PostBossMixedStage)
         {
             // Endless mixed cycles include every normal prefab, independent of speed thresholds.
-            // Specials are additional chance-based entries, so they cannot replace all normal phases.
+            // Each special can be scheduled only once per run, even when the normal cycle refills.
+            foreach (SpecialPhaseEntry special in availableSpecials)
+                availableNormals.RemoveAll(prefab => prefab == special.prefab);
             target.AddRange(availableNormals);
             for (int i = 0; i < availableSpecials.Count; i++)
             {
                 SpecialPhaseEntry special = availableSpecials[i];
+                if (postBossScheduledSpecials.Contains(special))
+                    continue;
                 float chance = Mathf.Clamp01(special.spawnChance);
                 if (chance > 0f && (chance >= 1f || Random.value < chance))
+                {
+                    postBossScheduledSpecials.Add(special);
                     target.Add(special.prefab);
+                }
             }
             return;
         }
@@ -1876,7 +1898,6 @@ public partial class StageManager : MonoBehaviour
     private static SpecialPhaseEntry[] CombineSpecialPhaseEntries(params SpecialPhaseEntry[][] sources)
     {
         List<SpecialPhaseEntry> merged = new List<SpecialPhaseEntry>();
-        HashSet<GameObject> seenPrefabs = new HashSet<GameObject>();
 
         if (sources == null)
             return merged.ToArray();
@@ -1891,9 +1912,10 @@ public partial class StageManager : MonoBehaviour
             {
                 SpecialPhaseEntry entry = source[j];
                 GameObject prefab = entry != null ? entry.prefab : null;
-                if (prefab == null || !seenPrefabs.Add(prefab))
+                if (prefab == null)
                     continue;
 
+                // Keep every registration: the same prefab in both stages has two allowances.
                 merged.Add(entry);
             }
         }

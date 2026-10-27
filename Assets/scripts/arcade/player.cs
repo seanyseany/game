@@ -200,6 +200,9 @@ public class Player : MonoBehaviour
     private Collider2D lastGroundCol = null;
     private readonly Collider2D[] groundOverlapResults = new Collider2D[8];
     private readonly ContactPoint2D[] groundContactPoints = new ContactPoint2D[16];
+    private readonly JumpParticleState normalJumpParticles = new JumpParticleState();
+    private readonly JumpParticleState rageJumpParticles = new JumpParticleState();
+    private readonly JumpParticleState speedJumpParticles = new JumpParticleState();
     private Animator parameterCacheAnimator;
     private RuntimeAnimatorController parameterCacheController;
     private readonly Dictionary<int, AnimatorControllerParameterType> animatorParameters = new Dictionary<int, AnimatorControllerParameterType>(16);
@@ -578,6 +581,14 @@ public class Player : MonoBehaviour
             BeginSpeedPhaseTransition();
     }
 
+    public void NotifySpeedPhaseCompleted()
+    {
+        ObserveSpeedPhaseWindow();
+        if (currentAnim == "Jump" && IsAnimatorShowingLogicalState("Jump") &&
+            CanPresentSpeedPhaseTransition && !isAttacking && !isLanding)
+            BeginSpeedPhaseTransition();
+    }
+
     private void BeginSpeedPhaseTransition()
     {
         const string trigger = "Speed Start";
@@ -669,7 +680,7 @@ public class Player : MonoBehaviour
         speedStartWaitsForJump = false;
         ResetSpeedAnimationTrigger();
         if (speedJumpParticleObject != null)
-            SetJumpParticleState(speedJumpParticleObject, false, false);
+            speedJumpParticles.Apply(speedJumpParticleObject, false, false);
     }
 
     private string ResolveSpeedPhaseAnimationTrigger(string triggerName)
@@ -1022,33 +1033,44 @@ public class Player : MonoBehaviour
         bool emitting = !normalP3Attack && (triggerName == "Jump" || triggerName == "Flyattack");
 
         bool useSpeedParticles = IsSpeedPhaseAnimationActive && speedJumpParticleObject != null;
-        SetJumpParticleState(normalJumpParticleObject, !isRageMode && !useSpeedParticles, emitting);
-        SetJumpParticleState(rageJumpParticleObject, isRageMode, emitting);
-        SetJumpParticleState(speedJumpParticleObject, useSpeedParticles, emitting);
+        normalJumpParticles.Apply(normalJumpParticleObject, !isRageMode && !useSpeedParticles, emitting);
+        rageJumpParticles.Apply(rageJumpParticleObject, isRageMode, emitting);
+        speedJumpParticles.Apply(speedJumpParticleObject, useSpeedParticles, emitting);
     }
 
-    private static void SetJumpParticleState(GameObject particleObject, bool active, bool emitting)
+    private sealed class JumpParticleState
     {
-        if (particleObject == null)
-            return;
+        private GameObject root;
+        private ParticleSystem[] particles;
 
-        var particles = particleObject.GetComponentsInChildren<ParticleSystem>(true);
-        foreach (var particle in particles)
+        public void Apply(GameObject particleObject, bool active, bool emitting)
         {
-            var emission = particle.emission;
-            emission.enabled = active && emitting;
-
-            if (!active)
-                particle.Stop(false, ParticleSystemStopBehavior.StopEmittingAndClear);
-        }
-
-        particleObject.SetActive(active);
-
-        if (active && emitting)
-        {
-            foreach (var particle in particles)
+            if (root != particleObject)
             {
-                if (particle.gameObject.activeInHierarchy && !particle.isPlaying)
+                root = particleObject;
+                particles = root != null ? root.GetComponentsInChildren<ParticleSystem>(true) : null;
+            }
+            if (root == null)
+                return;
+
+            bool enableEmission = active && emitting;
+            foreach (ParticleSystem particle in particles)
+            {
+                if (particle == null) continue;
+                var emission = particle.emission;
+                if (emission.enabled != enableEmission)
+                    emission.enabled = enableEmission;
+                if (!active && (!particle.isStopped || particle.particleCount > 0))
+                    particle.Stop(false, ParticleSystemStopBehavior.StopEmittingAndClear);
+            }
+
+            if (root.activeSelf != active)
+                root.SetActive(active);
+
+            if (!enableEmission) return;
+            foreach (ParticleSystem particle in particles)
+            {
+                if (particle != null && particle.gameObject.activeInHierarchy && !particle.isPlaying)
                     particle.Play(false);
             }
         }
@@ -2750,6 +2772,9 @@ public class Player : MonoBehaviour
         else if (obj.CompareTag("missile"))
             type = ObstacleType.Missile;
 
+        // Transient missiles and hazards must not grow this cache for the entire run.
+        if (cachedObstacleTypes.Count >= 256)
+            cachedObstacleTypes.Clear();
         cachedObstacleTypes[key] = type;
         return type;
     }
@@ -4673,6 +4698,27 @@ public class Player : MonoBehaviour
         SpawnSpeedEffectWave(speedEffectPrefab, speedEffectPoolTag);
     }
 
+    internal void PrepareSpeedEffectPool(GameObject prefab, string poolTag, float moveSpeed)
+    {
+        if (!useEffectPool || ObjectPool.Instance == null || prefab == null || speedEffectSpawnWorldPositions == null)
+            return;
+
+        float normalMultiplier = GameData.Instance != null
+            ? GameData.Instance.GetStageSpeedMultIgnoringObstacleSlowdown() : 1f;
+        if (!(normalMultiplier > 0f) || float.IsInfinity(normalMultiplier))
+            normalMultiplier = 1f;
+        // Preparing against the unaccelerated speed also covers the longer travel after rage ends.
+        float velocity = Mathf.Max(0.01f, moveSpeed * Mathf.Min(1f, normalMultiplier));
+        float interval = Mathf.Max(0.01f, speedEffectSpawnInterval);
+        int size = 0;
+        foreach (Vector2 position in speedEffectSpawnWorldPositions)
+        {
+            float lifetime = Mathf.Max(0f, position.x - speedEffectDespawnX) / velocity;
+            size += Mathf.CeilToInt(Mathf.Min(128f, lifetime / interval)) + 2;
+        }
+        PrewarmPool(poolTag, prefab, Mathf.Clamp(size, 4, 128));
+    }
+
     // Speed-phase effects use the same positions, movement settings and pooling path as rage effects.
     public void SpawnSpeedEffectWave(GameObject effectPrefab, string effectPoolTag, List<speedEffect> spawnedEffects = null,
         float? moveSpeedOverride = null)
@@ -4955,10 +5001,7 @@ public class Player : MonoBehaviour
             PrewarmPool(rageAttackSmokePoolTagSecondary, secondaryPrefab, 8);
         }
         PrewarmPool(runningSmokePoolTag, runningSmokePrefab, 12);
-        int speedEffectPoolSize = speedEffectSpawnWorldPositions != null && speedEffectSpawnWorldPositions.Length > 0
-            ? speedEffectSpawnWorldPositions.Length * 2
-            : 4;
-        PrewarmPool(speedEffectPoolTag, speedEffectPrefab, speedEffectPoolSize);
+        PrepareSpeedEffectPool(speedEffectPrefab, speedEffectPoolTag, speedEffectMoveSpeed);
 
         effectPoolsPrewarmed = true;
     }

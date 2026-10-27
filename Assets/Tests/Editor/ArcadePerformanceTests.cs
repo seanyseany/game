@@ -18,6 +18,7 @@ public sealed class ArcadePerformanceTests
     private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
     private delegate bool GroundProbe(out Collider2D collider, out string tag, out bool both);
     private delegate bool ParameterProbe(Animator animator, string name, AnimatorControllerParameterType type);
+    private delegate void ParticleProbe(string triggerName);
 
     [UnityTearDown] public IEnumerator Cleanup()
     {
@@ -354,6 +355,94 @@ public sealed class ArcadePerformanceTests
             Assert.IsNull(Get(shovel, "cycleRoutine"), "The collection cycle must finish before the next reuse");
             Assert.AreEqual(initialScore + cycle + 1, data.GetO2Score(), "Repeated contact must not count one blood twice");
         }
+    }
+
+    [UnityTest] public IEnumerator JumpParticlePresentationDoesNotAllocateAcrossRepeatedFrames()
+    {
+        EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        yield return new EnterPlayMode();
+        MeasureJumpParticlePresentation();
+        yield return null;
+    }
+
+    private static void MeasureJumpParticlePresentation()
+    {
+        GameData data = new GameObject("Particle test data").AddComponent<GameData>();
+        data.enabled = false;
+        Player player = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Arcade/player.prefab")).GetComponent<Player>();
+        player.StopAllCoroutines();
+        player.enabled = false;
+        player.rb.simulated = false;
+        MethodInfo presentationMethod = typeof(Player).GetMethod("UpdateJumpParticleEmission", PrivateInstance);
+        Assert.IsNotNull(presentationMethod, "Particle presentation method must be present in " + typeof(Player).Assembly.FullName);
+        presentationMethod.Invoke(player, new object[] { "Jump" });
+        var presentation = (ParticleProbe)presentationMethod.CreateDelegate(typeof(ParticleProbe), player);
+        Assert.IsNotNull(presentation);
+        string result = Measure("jump particle presentation", 2000, () => presentation("Jump"), out long bytes);
+        UnityEngine.Debug.Log("[ARCADE PERFORMANCE] " + result);
+        Assert.Less(bytes, 4096, "Repeated jump synchronization must reuse particle references instead of allocating arrays every frame.");
+
+        var replacement = new GameObject("Replacement jump particles", typeof(ParticleSystem));
+        replacement.transform.SetParent(player.transform, false);
+        replacement.SetActive(false);
+        player.normalJumpParticleObject = replacement;
+        presentation("Jump");
+        Assert.IsTrue(replacement.activeSelf);
+        Assert.IsTrue(replacement.GetComponent<ParticleSystem>().emission.enabled);
+        presentation("Walk");
+        Assert.IsFalse(replacement.GetComponent<ParticleSystem>().emission.enabled);
+    }
+
+    [UnityTest] public IEnumerator OffscreenBloodReturnsForReuseWithoutAccumulatingPhysicsBodies()
+    {
+        EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        yield return new EnterPlayMode();
+        ObjectPool pool = new GameObject("Blood cleanup pool").AddComponent<ObjectPool>();
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Arcade/Blood.prefab");
+        pool.RegisterPool("Blood", prefab, 1);
+        for (int i = 0; i < 100; i++)
+        {
+            GameObject instance = pool.SpawnFromPool("Blood", Vector3.zero, Quaternion.identity);
+            Assert.IsNotNull(instance, "Every offscreen blood must return to its original pool.");
+            Blood blood = instance.GetComponent<Blood>();
+            instance.GetComponent<Rigidbody2D>().position = i % 2 == 0 ? new Vector2(-100f, 0f) : new Vector2(0f, -100f);
+            typeof(Blood).GetMethod("FixedUpdate", PrivateInstance).Invoke(blood, null);
+            Assert.IsFalse(instance.activeSelf, "Blood past the play area must stop simulating physics.");
+        }
+        Assert.AreEqual(1, ((System.Collections.IDictionary)Get(pool, "cacheByObject")).Count);
+    }
+
+    [UnityTest] public IEnumerator TransientHazardsDoNotGrowTargetCachesForTheEntireRun()
+    {
+        EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        yield return new EnterPlayMode();
+        var data = new GameObject("Target cache test data").AddComponent<GameData>();
+        data.enabled = false;
+        Player player = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Arcade/player.prefab")).GetComponent<Player>();
+        player.StopAllCoroutines();
+        player.enabled = false;
+        player.rb.simulated = false;
+        MethodInfo obstacleType = typeof(Player).GetMethod("GetCachedObstacleType", PrivateInstance);
+        const BindingFlags staticPrivate = BindingFlags.Static | BindingFlags.NonPublic;
+        MethodInfo hitboxTarget = typeof(Hitbox).GetMethod("ResolveMiniBossTarget", staticPrivate);
+        MethodInfo lightningTarget = typeof(ZigzagLightning).GetMethod("ResolveMiniBossTarget", staticPrivate);
+        Hitbox.ClearBossTargetCache();
+        ZigzagLightning.ClearBossTargetCache();
+        for (int i = 0; i < 1024; i++)
+        {
+            var hazard = new GameObject("Short lived hazard", typeof(BoxCollider2D), typeof(ObstacleInfo));
+            hazard.GetComponent<ObstacleInfo>().type = ObstacleType.Saw;
+            Assert.AreEqual(ObstacleType.Saw, obstacleType.Invoke(player, new object[] { hazard }));
+            var args = new object[] { hazard.GetComponent<Collider2D>() };
+            Assert.IsNull(hitboxTarget.Invoke(null, args));
+            Assert.IsNull(lightningTarget.Invoke(null, args));
+            Object.DestroyImmediate(hazard);
+        }
+        Assert.LessOrEqual(((System.Collections.IDictionary)Get(player, "cachedObstacleTypes")).Count, 256);
+        Assert.LessOrEqual(((System.Collections.IDictionary)typeof(Hitbox).GetField("bossTargetCache", staticPrivate).GetValue(null)).Count, 256);
+        Assert.LessOrEqual(((System.Collections.IDictionary)typeof(ZigzagLightning).GetField("bossTargetCache", staticPrivate).GetValue(null)).Count, 256);
+        Hitbox.ClearBossTargetCache();
+        ZigzagLightning.ClearBossTargetCache();
     }
 
     private static int CountRuntimeOverrides()

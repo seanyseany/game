@@ -725,7 +725,7 @@ public sealed class SpeedPhasesTests
     }
 
     [UnityTest]
-    public IEnumerator SpeedStartFinishesBeforeLocomotionAndPhaseEndImmediatelyRestoresJump()
+    public IEnumerator SpeedStartFinishesBeforeLocomotionAndPhaseEndPlaysItOnceBeforeRestoringJump()
     {
         Player hero = MakePlayer(out _);
         settings.phaseSpawnCount = 1;
@@ -759,9 +759,33 @@ public sealed class SpeedPhasesTests
         manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
         manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
         RawPlay(hero, "SyncSpeedPhaseAirAnimation");
+        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed Start"));
+        RawPlay(hero, "ChangeAnimation", "Jump");
+        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed Start"));
+        RawPlay(hero, "SyncSpeedPhaseAirAnimation");
+        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed Start"));
+        FinishSpeedTransition(hero);
         Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Jump"));
         RawPlay(hero, "ChangeAnimation", "Jump");
         Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Jump"));
+        RawPlay(hero, "SyncSpeedPhaseAirAnimation");
+        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Jump"), "The completed phase must not restart its exit animation.");
+
+        foreach (string endAnimation in new[] { "Walk", "Attack", "Land", "Hurt" })
+        {
+            manager.ResetState();
+            Begin();
+            Play(hero, "ChangeAnimation", endAnimation);
+            manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
+            manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
+            RawPlay(hero, "SyncSpeedPhaseAirAnimation");
+            Assert.IsFalse(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed Start"),
+                $"Ending during {endAnimation} must not play the exit animation.");
+            RawPlay(hero, "ChangeAnimation", "Jump");
+            Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Jump"),
+                "A later jump must not play an exit animation queued by a non-jump phase end.");
+        }
+        manager.ResetState();
         yield return null;
     }
 

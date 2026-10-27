@@ -128,6 +128,11 @@ public partial class StageManager
 
         StopSpeedPhaseEffects(despawnExisting: false);
         ResetSpeedPhaseSequenceState();
+        Player player = GameData.Instance != null ? GameData.Instance.playerRef : null;
+        if (player == null)
+            player = Object.FindFirstObjectByType<Player>();
+        if (player != null)
+            player.NotifySpeedPhaseCompleted();
         forceNormalPhaseAfterSpeedPhase = true;
         SpawnPhase();
     }
@@ -162,6 +167,8 @@ public partial class StageManager
             return;
 
         speedPhaseEffectPoolTag = "SpeedPhaseEffect_" + activeSpeedPhaseSettings.speedEffectPrefab.GetInstanceID();
+        speedPhaseEffectPlayer.PrepareSpeedEffectPool(activeSpeedPhaseSettings.speedEffectPrefab,
+            speedPhaseEffectPoolTag, activeSpeedPhaseSettings.speedEffectMoveSpeed);
         nextSpeedPhaseEffectSpawnTime = Time.time;
         TrySpawnSpeedPhaseEffects();
     }

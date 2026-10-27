@@ -12,7 +12,14 @@ public class SmokeMover : MonoBehaviour, IRageTransformPauseHandler
     private float despawnAtTime = -1f;
     private float pausedRemainingLife = -1f;
     private bool externalLifetime;
+    private bool transformSmokeName;
     public string PoolTag => poolTag;
+
+    private void Awake()
+    {
+        string objectName = gameObject.name;
+        transformSmokeName = !string.IsNullOrEmpty(objectName) && objectName.Contains("TransformSmoke");
+    }
 
     void OnEnable()
     {
@@ -65,11 +72,7 @@ public class SmokeMover : MonoBehaviour, IRageTransformPauseHandler
 
     public bool IsTransformRageSmoke()
     {
-        if (!string.IsNullOrEmpty(poolTag) && poolTag == TransformSmokePoolTag)
-            return true;
-
-        string objectName = gameObject.name;
-        return !string.IsNullOrEmpty(objectName) && objectName.Contains("TransformSmoke");
+        return poolTag == TransformSmokePoolTag || transformSmokeName;
     }
 
     private void Despawn()

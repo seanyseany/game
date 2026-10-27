@@ -11,6 +11,10 @@ public class Blood : MonoBehaviour
     public float bounceForce = 5f;
     public string floorTag = "floor";
 
+    [Header("Offscreen Cleanup")]
+    [SerializeField] private float despawnX = -30f;
+    [SerializeField] private float despawnY = -20f;
+
     [Header("Suction")]
     public float suctionSpeed = 12f;
     public float suctionArriveDistance = 0.12f;
@@ -79,6 +83,13 @@ public class Blood : MonoBehaviour
         if (isBeingSucked)
         {
             UpdateSuctionMovement();
+            return;
+        }
+
+        Vector2 position = rb.position;
+        if (position.x <= despawnX || position.y <= despawnY)
+        {
+            ReturnSelf();
             return;
         }
 
@@ -278,19 +289,18 @@ public class Blood : MonoBehaviour
         if (bodyCollider == null)
             return;
 
-        Player player = FindFirstObjectByType<Player>();
+        Player player = Player.Instance != null ? Player.Instance : FindFirstObjectByType<Player>();
         if (player == null)
             return;
 
-        Collider2D[] playerColliders = player.GetComponentsInChildren<Collider2D>(true);
-        for (int i = 0; i < playerColliders.Length; i++)
+        player.GetComponentsInChildren(true, ignoredPlayerColliders);
+        for (int i = 0; i < ignoredPlayerColliders.Count; i++)
         {
-            Collider2D playerCollider = playerColliders[i];
+            Collider2D playerCollider = ignoredPlayerColliders[i];
             if (playerCollider == null)
                 continue;
 
             Physics2D.IgnoreCollision(bodyCollider, playerCollider, true);
-            AddIgnoredPlayerCollider(playerCollider);
         }
     }
 

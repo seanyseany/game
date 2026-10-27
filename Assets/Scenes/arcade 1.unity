@@ -21194,9 +21194,7 @@ MonoBehaviour:
   - {fileID: 2659614723417223950, guid: 6678eb481175549efb6b5a8778cafbb2, type: 3}
   - {fileID: 2659614723417223950, guid: d4afd94230768400da94522327591a72, type: 3}
   - {fileID: 2659614723417223950, guid: 701c6a5c8df8541d88cf0e33f16e5734, type: 3}
-  stage1SpecialPhasePrefabs:
-  - prefab: {fileID: 100000, guid: 3a224c514af24aceacd360f094f2a7d0, type: 3}
-    spawnChance: 1
+  stage1SpecialPhasePrefabs: []
   stage1_5PhasePrefabs:
   - {fileID: 2659614723417223950, guid: bbf9197c6375348eba52ce57e19cedb2, type: 3}
   stage2PhasePrefabs:
@@ -21232,7 +21230,9 @@ MonoBehaviour:
   - {fileID: 2659614723417223950, guid: bb363078342bb4286a3850fb06873f66, type: 3}
   - {fileID: 2659614723417223950, guid: 9da3a1a14b3b3490b8b2cc5383dedca2, type: 3}
   - {fileID: 2659614723417223950, guid: 65f9d5a69aa08495a9b94783c7e2f89b, type: 3}
-  stage2SpecialPhasePrefabs: []
+  stage2SpecialPhasePrefabs:
+  - prefab: {fileID: 100000, guid: 3a224c514af24aceacd360f094f2a7d0, type: 3}
+    spawnChance: 1
   stage3PhasePrefabs:
   - {fileID: 2659614723417223950, guid: 79dfeedf66ebd4565bf36e6af6e961bb, type: 3}
   - {fileID: 2659614723417223950, guid: 0c2b8fa46b57f41fd946fae608c4b25d, type: 3}
@@ -21275,6 +21275,8 @@ MonoBehaviour:
   - prefab: {fileID: 2659614723417223950, guid: bd4db3ea86b324149b25206e765fddb9, type: 3}
     spawnChance: 1
   - prefab: {fileID: 2659614723417223950, guid: 86a9e3ef495cc4ed09cafdfc02a26ec3, type: 3}
+    spawnChance: 1
+  - prefab: {fileID: 100000, guid: 3a224c514af24aceacd360f094f2a7d0, type: 3}
     spawnChance: 1
   stage4PhasePrefabs: []
   stage4SpecialPhasePrefabs:
@@ -32535,6 +32537,14 @@ PrefabInstance:
     - target: {fileID: 5859194337017971802, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6015082372541791020, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
+      propertyPath: m_Size.x
+      value: 5.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 6015082372541791020, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
+      propertyPath: m_Size.y
+      value: 2.78
       objectReference: {fileID: 0}
     - target: {fileID: 6015082372541791020, guid: 3bc78220bf732495c8ed31bd4f2d019f, type: 3}
       propertyPath: m_Sprite

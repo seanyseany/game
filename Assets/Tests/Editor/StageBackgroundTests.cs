@@ -266,6 +266,52 @@ public sealed class StageBackgroundTests
     }
 
     [UnityTest]
+    public IEnumerator PostBossSpecialsAppearOnceAcrossRepeatedCyclesAndResetRestoresThem()
+    {
+        var stage3Special = new GameObject("Stage 3 one-shot special");
+        stage3Special.SetActive(false);
+        var stage4Special = new GameObject("Stage 4 one-shot special");
+        stage4Special.SetActive(false);
+        manager.stage3SpecialPhasePrefabs = new[] { new SpecialPhaseEntry { prefab = stage3Special, spawnChance = 1f } };
+
+        for (int configuredCount = 1; configuredCount <= 3; configuredCount++)
+        {
+            manager.stage4SpecialPhasePrefabs = configuredCount == 1 ? null :
+                configuredCount == 2 ? new[] { new SpecialPhaseEntry { prefab = stage4Special, spawnChance = 1f } } :
+                new[]
+                {
+                    new SpecialPhaseEntry { prefab = stage4Special, spawnChance = 1f },
+                    new SpecialPhaseEntry { prefab = stage3Special, spawnChance = 1f }
+                };
+            for (int run = 0; run < 2; run++)
+            {
+                manager.stage3PhasePrefabs = run == 0 ? new[] { normal } : new[] { normal, stage3Special };
+                manager.ResetState();
+                Set("postBossMixedPhaseUnlocked", true);
+                int stage3Count = 0;
+                int stage4Count = 0;
+                int normalCount = 0;
+                for (int spawn = 0; spawn < 64; spawn++)
+                {
+                    GameObject next = NextPhase(104);
+                    if (next == stage3Special) stage3Count++;
+                    else if (next == stage4Special) stage4Count++;
+                    else
+                    {
+                        Assert.AreSame(normal, next, "Normal phases must continue after the specials are exhausted.");
+                        normalCount++;
+                    }
+                }
+                Assert.AreEqual(configuredCount == 3 ? 2 : 1, stage3Count);
+                Assert.AreEqual(configuredCount >= 2 ? 1 : 0, stage4Count);
+                Assert.AreEqual(64 - configuredCount, normalCount);
+            }
+        }
+        manager.ResetState();
+        yield return null;
+    }
+
+    [UnityTest]
     public IEnumerator BossAlwaysChangesBackgroundAndMixedStageIntervalsGrowByThree()
     {
         Call("ResumeAfterBoss");
