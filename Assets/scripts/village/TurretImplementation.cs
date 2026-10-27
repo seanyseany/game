@@ -6,7 +6,7 @@ using UnityEngine.Rendering;
 public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 {
     private const float DragScaleMultiplier = 1.2f;
-    private const float HoldDurationSeconds = 0.7f;
+    private const float HoldDurationSeconds = 1.4f;
     private const int DragSortingOrderBoost = 1000;
     private const float DropSnapPadding = 1.5f;
 
@@ -43,6 +43,7 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
     private TurretImplementation dragOriginSlot;
     private Vector3 dragOriginWorldPosition;
     private float pointerDownStartedAt = -1f;
+    private VillageHoldShake holdShake;
     private bool tapPending;
     private bool pointerHeld;
     private bool isDragging;
@@ -100,6 +101,7 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
     private void OnDisable()
     {
+        holdShake.Stop();
         AllSlots.Remove(this);
         VillagePointerCapture.Release(this);
     }
@@ -119,6 +121,8 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
         if (isDragging)
             UpdateDragPosition();
+        else if (pointerHeld)
+            holdShake.Tick(Time.unscaledTime - pointerDownStartedAt);
     }
 
     private void OnMouseDown()
@@ -139,6 +143,9 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
     public void HandleColliderPointerDown()
     {
+        if (pointerHeld || isDragging)
+            return;
+
         if (Tycoon.DeliveryRuntime.BlocksWorldInput)
             return;
 
@@ -151,6 +158,8 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
         pointerDownStartedAt = Time.unscaledTime;
         dragOriginSlot = this;
         dragOriginWorldPosition = currentTurret != null ? currentTurret.transform.position : transform.position;
+        // Move the slot so Turret's own aiming animation can keep updating its local pose.
+        holdShake.Begin(currentTurret != null ? transform : null);
     }
 
     public void HandleColliderPointerUp()
@@ -283,6 +292,7 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
     public void PrepareForRestore()
     {
+        holdShake.Stop();
         if (currentTurret != null)
             Destroy(currentTurret.gameObject);
 
@@ -390,6 +400,7 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
     private void BeginDrag()
     {
+        holdShake.Stop();
         if (isDragging || currentTurret == null)
             return;
 
@@ -500,6 +511,7 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
     private void ReleasePointerHold()
     {
+        holdShake.Stop();
         if (!pointerHeld && !isDragging)
             return;
 

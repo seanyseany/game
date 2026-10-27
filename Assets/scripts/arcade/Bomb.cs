@@ -56,6 +56,10 @@ public class Bomb : MonoBehaviour
     }
 
     private Collider2D col;
+    private ParticleSystem[] flightParticles;
+    private Renderer[] bodyRenderers;
+    private bool[] initialRendererEnabled;
+    private bool waitingForParticles;
     private readonly List<Collider2D> ignoredObstacleColliders = new List<Collider2D>(32);
     private readonly HashSet<Collider2D> targetColliders = new HashSet<Collider2D>();
     private readonly List<Collider2D> targetColliderCandidates = new List<Collider2D>(4);
@@ -71,12 +75,23 @@ public class Bomb : MonoBehaviour
     private void Awake()
     {
         col = GetComponent<Collider2D>();
+        flightParticles = GetComponentsInChildren<ParticleSystem>(true);
+        var renderers = new List<Renderer>();
+        foreach (Renderer renderer in GetComponentsInChildren<Renderer>(true))
+        {
+            if (!(renderer is ParticleSystemRenderer)) renderers.Add(renderer);
+        }
+        bodyRenderers = renderers.ToArray();
+        initialRendererEnabled = new bool[bodyRenderers.Length];
+        for (int i = 0; i < bodyRenderers.Length; i++)
+            initialRendererEnabled[i] = bodyRenderers[i].enabled;
     }
 
     private void OnEnable()
     {
         ReleaseTargetReservation();
         exploded = false;
+        waitingForParticles = false;
         target = null;
         RestoreIgnoredObstacleCollisions();
         targetColliders.Clear();
@@ -84,10 +99,27 @@ public class Bomb : MonoBehaviour
         sweepHits.Clear();
 
         if (col != null) col.enabled = true;
+        for (int i = 0; i < bodyRenderers.Length; i++)
+        {
+            if (bodyRenderers[i] != null) bodyRenderers[i].enabled = initialRendererEnabled[i];
+        }
+        foreach (ParticleSystem particles in flightParticles)
+        {
+            if (particles == null) continue;
+            particles.Stop(false, ParticleSystemStopBehavior.StopEmittingAndClear);
+            if (particles.gameObject.activeInHierarchy && particles.main.playOnAwake)
+                particles.Play(false);
+        }
     }
 
     private void OnDisable()
     {
+        waitingForParticles = false;
+        foreach (ParticleSystem particles in flightParticles)
+        {
+            if (particles != null)
+                particles.Stop(false, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }
         ReleaseTargetReservation();
         RestoreIgnoredObstacleCollisions();
         targetColliders.Clear();
@@ -131,7 +163,11 @@ public class Bomb : MonoBehaviour
 
     private void Advance(float deltaSeconds)
     {
-        if (exploded) return;
+        if (exploded)
+        {
+            if (waitingForParticles && !HasLiveFlightParticles()) ReturnSelf();
+            return;
+        }
 
         if (target == null || !target.gameObject.activeInHierarchy)
         {
@@ -555,11 +591,35 @@ public class Bomb : MonoBehaviour
         if (smoke == null && smokeFallbackPrefab != null)
             Instantiate(smokeFallbackPrefab, transform.position, Quaternion.identity);
 
-        ReturnSelf();
+        // Keep the particle hierarchy alive at the impact pose until its existing
+        // smoke has faded. Returning to the pool now would disable it immediately.
+        if (col != null) col.enabled = false;
+        foreach (Renderer renderer in bodyRenderers)
+        {
+            if (renderer != null) renderer.enabled = false;
+        }
+        foreach (ParticleSystem particles in flightParticles)
+        {
+            if (particles != null)
+                particles.Stop(false, ParticleSystemStopBehavior.StopEmitting);
+        }
+        waitingForParticles = HasLiveFlightParticles();
+        if (!waitingForParticles) ReturnSelf();
+    }
+
+    private bool HasLiveFlightParticles()
+    {
+        foreach (ParticleSystem particles in flightParticles)
+        {
+            if (particles != null && particles.gameObject.activeInHierarchy && particles.IsAlive(false))
+                return true;
+        }
+        return false;
     }
 
     private void ReturnSelf()
     {
+        waitingForParticles = false;
         if (ObjectPool.Instance != null)
             ObjectPool.Instance.ReturnToPool(poolTag, gameObject);
         else

@@ -28,6 +28,11 @@ public class TurretUI : MonoBehaviour
     private UnityAction ammo100Action;
     private UnityAction upgradeAction;
     private int openedFrame = -1;
+    private bool priceLabelsValid;
+    private int displayedAmmo30Price;
+    private int displayedAmmo100Price;
+    private int displayedUpgradePrice;
+    private bool displayedCanUpgrade;
 
     public static TurretUI EnsureInstance()
     {
@@ -80,6 +85,7 @@ public class TurretUI : MonoBehaviour
         Tycoon.DeliveryWindows.CloseAll();
         boundImplementation = implementation;
         boundTurret = turret;
+        priceLabelsValid = false;
         EnsureRuntimeUi();
         if (panel != null)
         {
@@ -107,25 +113,28 @@ public class TurretUI : MonoBehaviour
         if (ammoFill != null)
             ammoFill.fillAmount = boundTurret.AmmoCapacity > 0 ? (float)boundTurret.AmmoCurrent / boundTurret.AmmoCapacity : 0f;
 
-        RefreshAmmoButton(ammo30Button, ammo30Text, 30);
-        RefreshAmmoButton(ammo100Button, ammo100Text, 100);
+        RefreshAmmoButton(ammo30Button, ammo30Text, 30, ref displayedAmmo30Price);
+        RefreshAmmoButton(ammo100Button, ammo100Text, 100, ref displayedAmmo100Price);
 
         bool canUpgrade = boundTurret.CanUpgrade();
+        BaseTurret upgradePrefab = boundTurret.GetUpgradePrefab();
+        int upgradePrice = upgradePrefab != null ? upgradePrefab.CurrentOxygenPrice : 0;
         if (upgradeButton != null)
             upgradeButton.gameObject.SetActive(canUpgrade);
 
-        if (upgradeText != null)
+        if (upgradeText != null && (!priceLabelsValid || displayedCanUpgrade != canUpgrade || displayedUpgradePrice != upgradePrice))
         {
-            BaseTurret upgradePrefab = boundTurret.GetUpgradePrefab();
-            upgradeText.text = canUpgrade && upgradePrefab != null ? $"Upgrade O2 {upgradePrefab.CurrentOxygenPrice}" : string.Empty;
+            upgradeText.text = canUpgrade && upgradePrefab != null ? $"Upgrade O2 {upgradePrice}" : string.Empty;
         }
         if (upgradeButton != null && VillageManagement.Instance != null)
         {
-            BaseTurret upgradePrefab = boundTurret.GetUpgradePrefab();
             upgradeButton.interactable = canUpgrade && upgradePrefab != null &&
-                                         VillageManagement.Instance.CurrentOxygen >= upgradePrefab.CurrentOxygenPrice;
+                                         VillageManagement.Instance.CurrentOxygen >= upgradePrice;
         }
 
+        displayedCanUpgrade = canUpgrade;
+        displayedUpgradePrice = upgradePrice;
+        priceLabelsValid = true;
         UpdatePanelPosition();
     }
 
@@ -138,18 +147,22 @@ public class TurretUI : MonoBehaviour
         Refresh();
     }
 
-    private void RefreshAmmoButton(Button button, TMP_Text label, int percent)
+    private void RefreshAmmoButton(Button button, TMP_Text label, int percent, ref int displayedPrice)
     {
         if (boundTurret == null)
             return;
 
         int price = boundTurret.GetBulletPriceForPercent(percent);
-        if (label != null)
-            label.text = $"O2 {price}";
+        if (!priceLabelsValid || displayedPrice != price)
+        {
+            if (label != null)
+                label.text = $"O2 {price}";
 
-        TMP_Text buttonText = button != null ? button.GetComponentInChildren<TMP_Text>() : null;
-        if (buttonText != null)
-            buttonText.text = $"{GetAmmoButtonLabel(percent)}  O2 {price}";
+            TMP_Text buttonText = button != null ? button.GetComponentInChildren<TMP_Text>() : null;
+            if (buttonText != null)
+                buttonText.text = $"{GetAmmoButtonLabel(percent)}  O2 {price}";
+            displayedPrice = price;
+        }
 
         if (button != null && VillageManagement.Instance != null)
             button.interactable = boundTurret.CanRefillPercent(percent) && VillageManagement.Instance.CurrentOxygen >= price;

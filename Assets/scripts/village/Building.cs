@@ -121,6 +121,7 @@ public class Building : MonoBehaviour
     private Path dragOriginPath;
     private Vector3 dragOriginWorldPosition;
     private float pointerDownStartedAt = -1f;
+    private VillageHoldShake holdShake;
     private int activeTouchId = -1;
     private Vector2 lastPointerScreenPosition;
     private bool pointerHeld;
@@ -196,6 +197,7 @@ public class Building : MonoBehaviour
 
     private void OnDisable()
     {
+        holdShake.Stop();
         DeliveryBuildings.Remove(this);
         VillagePointerCapture.Release(this);
 
@@ -261,6 +263,8 @@ public class Building : MonoBehaviour
 
         if (isDragging)
             UpdateDragPosition();
+        else if (pointerHeld)
+            holdShake.Tick(Time.unscaledTime - pointerDownStartedAt);
     }
 
     private void OnMouseDown()
@@ -285,6 +289,7 @@ public class Building : MonoBehaviour
         pointerDownStartedAt = Time.unscaledTime;
         dragOriginPath = currentPath;
         dragOriginWorldPosition = transform.position;
+        holdShake.Begin(transform);
         return true;
     }
 
@@ -653,6 +658,7 @@ public class Building : MonoBehaviour
 
     private void BeginDrag()
     {
+        holdShake.Stop();
         if (isDragging || currentPath == null)
             return;
 
@@ -848,6 +854,7 @@ public class Building : MonoBehaviour
 
     private void ReleasePointerHold()
     {
+        holdShake.Stop();
         if (!pointerHeld && !isDragging)
             return;
 

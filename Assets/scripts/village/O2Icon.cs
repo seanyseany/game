@@ -22,6 +22,8 @@ public class O2Icon : MonoBehaviour
     private Color baseSpriteColor = Color.white;
     private Color baseTextColor = Color.white;
     private Vector3 idleBaseLocalPosition;
+    private int displayedAmount = int.MinValue;
+    private TMP_Text displayedAmountText;
 
     public void Bind(Oxygen oxygen)
     {
@@ -79,7 +81,13 @@ public class O2Icon : MonoBehaviour
         if (isCollecting || amountText == null || sourceOxygen == null)
             return;
 
-        amountText.text = sourceOxygen.StoredOxygen.ToString();
+        int amount = sourceOxygen.StoredOxygen;
+        if (displayedAmount == amount && displayedAmountText == amountText)
+            return;
+
+        amountText.text = amount.ToString();
+        displayedAmount = amount;
+        displayedAmountText = amountText;
     }
 
     private void HandleTouchInput()

@@ -9,6 +9,8 @@ using UnityEngine.SceneManagement;
 public class Villan : MonoBehaviour
 {
     private static readonly Dictionary<int, Queue<Villan>> PoolsByPrefab = new Dictionary<int, Queue<Villan>>();
+    private static readonly List<Villan> activeVillans = new List<Villan>();
+    internal static IReadOnlyList<Villan> ActiveVillans => activeVillans;
     private const float ArriveDistance = 0.03f;
     private const int SortingOrderOffsetCycle = 20;
     private static int nextSortingOrderOffset;
@@ -17,12 +19,24 @@ public class Villan : MonoBehaviour
     private static void ResetScenePools()
     {
         PoolsByPrefab.Clear();
+        activeVillans.Clear();
         nextSortingOrderOffset = 0;
         SceneManager.sceneUnloaded -= ClearUnloadedScene;
         SceneManager.sceneUnloaded += ClearUnloadedScene;
     }
 
     private static void ClearUnloadedScene(Scene scene) => ScenePoolCleanup.RemoveUnloaded(PoolsByPrefab, scene);
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    private static void RebuildActiveVillans()
+    {
+        // Also restore registration when entering Play with scene reload disabled.
+        activeVillans.Clear();
+        foreach (Villan villan in FindObjectsByType<Villan>(FindObjectsSortMode.None))
+        {
+            if (villan.isActiveAndEnabled) activeVillans.Add(villan);
+        }
+    }
 
     [FormerlySerializedAs("baseMoveSpeed")]
     [SerializeField] private float moveSpeed = 2f;
@@ -48,6 +62,16 @@ public class Villan : MonoBehaviour
     private int baseSortingOrder;
 
     public Transform AimTarget => aimTarget != null ? aimTarget : transform;
+
+    private void OnEnable()
+    {
+        if (!activeVillans.Contains(this)) activeVillans.Add(this);
+    }
+
+    private void OnDisable()
+    {
+        activeVillans.Remove(this);
+    }
 
     private void Awake()
     {

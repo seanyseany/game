@@ -6,7 +6,7 @@ using UnityEngine.Rendering;
 public class Oxygen : MonoBehaviour, IColliderPointerTarget
 {
     private const float DragScaleMultiplier = 1.2f;
-    private const float HoldDurationSeconds = 0.7f;
+    private const float HoldDurationSeconds = 1.4f;
     private const int DragSortingOrderBoost = 1000;
 
     [SerializeField] private string oxygenId;
@@ -36,6 +36,7 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
     private int dragOriginSlotIndex = -1;
     private Vector3 dragOriginWorldPosition;
     private float pointerDownStartedAt = -1f;
+    private VillageHoldShake holdShake;
     private bool pointerHeld;
     private bool isDragging;
     private string originalSortingLayerName;
@@ -87,10 +88,13 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
 
         if (isDragging)
             UpdateDragPosition();
+        else if (pointerHeld)
+            holdShake.Tick(Time.unscaledTime - pointerDownStartedAt);
     }
 
     private void OnDisable()
     {
+        holdShake.Stop();
         VillagePointerCapture.Release(this);
         VillageManagement.InstanceReady -= HandleVillageManagementReady;
         UnsubscribeVillageManagement(VillageManagement.Instance);
@@ -128,7 +132,7 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
 
     public void HandleColliderPointerDown()
     {
-        if (!CanStartPointerInteraction())
+        if (pointerHeld || isDragging || !CanStartPointerInteraction())
             return;
 
         VillagePointerCapture.Acquire(this);
@@ -138,6 +142,7 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
         dragOriginWayOil = currentWayOil;
         dragOriginSlotIndex = currentSlotIndex;
         dragOriginWorldPosition = transform.position;
+        holdShake.Begin(transform);
     }
 
     public void HandleColliderPointerUp()
@@ -291,6 +296,7 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
 
     private void BeginDrag()
     {
+        holdShake.Stop();
         if (isDragging || currentWayOil == null || currentSlotIndex < 0)
             return;
 
@@ -374,6 +380,7 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
 
     private void ReleasePointerHold()
     {
+        holdShake.Stop();
         if (!pointerHeld && !isDragging)
             return;
 

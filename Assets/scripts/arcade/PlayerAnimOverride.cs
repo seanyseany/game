@@ -18,6 +18,8 @@ public class PlayerAnimOverride : MonoBehaviour
     public AnimationClip baseTransform;
     public AnimationClip baseHurt;
     public AnimationClip baseStill;
+    public AnimationClip baseSpeed;
+    public AnimationClip baseSpeedStart;
 
     [Header("Overrides per Type (index = 0..4 → Player1~5)")]
     public AnimationClip[] walkClips;
@@ -29,6 +31,9 @@ public class PlayerAnimOverride : MonoBehaviour
     public AnimationClip[] transformClips;
     public AnimationClip[] hurtClips;
     public AnimationClip[] stillClips;
+    [Tooltip("일반 상태의 스피드 페이즈에서 Jump 대신 재생할 클립입니다. 0~4 = Player1~5. 비워두면 해당 플레이어의 Jump 클립을 사용합니다.")]
+    public AnimationClip[] speedClips = new AnimationClip[5];
+    public AnimationClip[] speedStartClips = new AnimationClip[5];
 
     [Header("Rage Clips (index = 0..4 → RageP1~RageP5)")]
     public AnimationClip[] rageWalkClips;
@@ -42,7 +47,7 @@ public class PlayerAnimOverride : MonoBehaviour
     private AnimatorOverrideController aoc;
     private int cachedType = -1;
     private bool isRageMode = false;
-    private readonly List<KeyValuePair<AnimationClip, AnimationClip>> overrideMap = new List<KeyValuePair<AnimationClip, AnimationClip>>(9);
+    private readonly List<KeyValuePair<AnimationClip, AnimationClip>> overrideMap = new List<KeyValuePair<AnimationClip, AnimationClip>>(12);
 
     void Awake()
     {
@@ -105,6 +110,13 @@ public class PlayerAnimOverride : MonoBehaviour
             map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseHurt, SafeGet(hurtClips, i) ?? baseHurt));
             map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseStill, SafeGet(stillClips, i) ?? baseStill));
         }
+
+        if (baseSpeed != null)
+            map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseSpeed,
+                isRageMode ? baseSpeed : SafeGet(speedClips, i) ?? SafeGet(jumpClips, i) ?? baseSpeed));
+        if (baseSpeedStart != null)
+            map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseSpeedStart,
+                isRageMode ? baseSpeedStart : SafeGet(speedStartClips, i) ?? baseSpeedStart));
 
         aoc.ApplyOverrides(map);
         cachedType = i;

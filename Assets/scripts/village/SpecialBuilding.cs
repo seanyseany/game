@@ -6,7 +6,7 @@ using System.Collections.Generic;
 public class SpecialBuilding : MonoBehaviour
 {
     private const float DragScaleMultiplier = 1.2f;
-    private const float HoldDurationSeconds = 0.7f;
+    private const float HoldDurationSeconds = 1.4f;
     private const int DragSortingOrderBoost = 1000;
 
     [Header("Identity")]
@@ -30,6 +30,7 @@ public class SpecialBuilding : MonoBehaviour
     private Vector3 initialScale;
     private Vector3 dragPointerOffset;
     private float pointerDownStartedAt = -1f;
+    private VillageHoldShake holdShake;
     private float lastDragFinishedAt = -10f;
     private bool tapPending;
     private bool pointerHeld;
@@ -65,6 +66,7 @@ public class SpecialBuilding : MonoBehaviour
 
     private void OnDisable()
     {
+        holdShake.Stop();
         VillagePointerCapture.Release(this);
     }
 
@@ -87,11 +89,13 @@ public class SpecialBuilding : MonoBehaviour
 
         if (isDragging)
             UpdateDragPosition();
+        else if (pointerHeld)
+            holdShake.Tick(Time.unscaledTime - pointerDownStartedAt);
     }
 
     private void OnMouseDown()
     {
-        if (!CanStartPointerInteraction())
+        if (pointerHeld || isDragging || !CanStartPointerInteraction())
             return;
 
         VillagePointerCapture.Acquire(this);
@@ -100,6 +104,7 @@ public class SpecialBuilding : MonoBehaviour
         pointerDownStartedAt = Time.unscaledTime;
         dragOriginPath = currentPath;
         dragOriginWorldPosition = transform.position;
+        holdShake.Begin(transform);
     }
 
     private void OnMouseUp()
@@ -165,6 +170,7 @@ public class SpecialBuilding : MonoBehaviour
 
     private void BeginDrag()
     {
+        holdShake.Stop();
         if (isDragging || currentPath == null)
             return;
 
@@ -316,6 +322,7 @@ public class SpecialBuilding : MonoBehaviour
 
     private void ReleasePointerHold()
     {
+        holdShake.Stop();
         if (!pointerHeld && !isDragging)
             return;
 

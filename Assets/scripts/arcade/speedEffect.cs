@@ -7,10 +7,12 @@ public class speedEffect : MonoBehaviour, IReinitializeOnEnable
     [SerializeField] private float despawnX = -20f;
     [SerializeField] private bool usePool = true;
     [SerializeField] private string poolTag = "";
+    private float spawnSpeedMultiplier = 1f;
 
     private void OnEnable()
     {
         GameData.OnGameOver += HandleGameOver;
+        CaptureSpawnSpeed();
         ResetToSpawnState();
     }
 
@@ -27,11 +29,13 @@ public class speedEffect : MonoBehaviour, IReinitializeOnEnable
         usePool = enablePool;
         poolTag = tag;
 
+        CaptureSpawnSpeed();
         ResetToSpawnState();
     }
 
     public void Reinit()
     {
+        CaptureSpawnSpeed();
         ResetToSpawnState();
     }
 
@@ -59,9 +63,8 @@ public class speedEffect : MonoBehaviour, IReinitializeOnEnable
         if (RageTransformFreezeController.ShouldSkipGameplayFrame())
             return;
 
-        float mult = GameData.Instance != null ? GameData.Instance.GetStageSpeedMult() : 1f;
         Vector3 pos = transform.position;
-        pos.x -= speed * mult * Time.deltaTime;
+        pos.x -= speed * spawnSpeedMultiplier * Time.deltaTime;
         pos.y = spawnWorldPosition.y;
         transform.position = pos;
 
@@ -75,5 +78,12 @@ public class speedEffect : MonoBehaviour, IReinitializeOnEnable
         pos.x = spawnWorldPosition.x;
         pos.y = spawnWorldPosition.y;
         transform.SetPositionAndRotation(pos, Quaternion.identity);
+    }
+
+    private void CaptureSpawnSpeed()
+    {
+        // Emission follows stage speed, but existing streaks must finish even while the stage is stopped.
+        float normalSpeed = GameData.Instance != null ? GameData.Instance.GetStageSpeedMultIgnoringObstacleSlowdown() : 1f;
+        spawnSpeedMultiplier = normalSpeed > 0f && !float.IsInfinity(normalSpeed) ? normalSpeed : 1f;
     }
 }

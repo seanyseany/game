@@ -11,10 +11,12 @@ public class SmokeMover : MonoBehaviour, IRageTransformPauseHandler
     private Coroutine lifeCo;
     private float despawnAtTime = -1f;
     private float pausedRemainingLife = -1f;
+    private bool externalLifetime;
     public string PoolTag => poolTag;
 
     void OnEnable()
     {
+        if (externalLifetime) return;
         if (lifeCo != null) StopCoroutine(lifeCo);
         despawnAtTime = Time.time + Mathf.Max(0.01f, lifetime);
         pausedRemainingLife = -1f;
@@ -50,6 +52,15 @@ public class SmokeMover : MonoBehaviour, IRageTransformPauseHandler
     {
         usePool = enablePool;
         poolTag = tag;
+    }
+
+    internal void UseExternalLifetime()
+    {
+        externalLifetime = true;
+        if (lifeCo != null) StopCoroutine(lifeCo);
+        lifeCo = null;
+        despawnAtTime = -1f;
+        pausedRemainingLife = -1f;
     }
 
     public bool IsTransformRageSmoke()

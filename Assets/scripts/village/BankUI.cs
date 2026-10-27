@@ -16,6 +16,10 @@ public class BankUI : MonoBehaviour
     [SerializeField] private TMP_Text upgradeText;
 
     private Bank boundBank;
+    private bool priceLabelValid;
+    private int displayedUpgradePrice;
+    private bool displayedCanUpgrade;
+    private TMP_Text displayedUpgradeText;
 
     private void Awake()
     {
@@ -40,6 +44,7 @@ public class BankUI : MonoBehaviour
     {
         Tycoon.DeliveryWindows.CloseAll();
         boundBank = bank;
+        priceLabelValid = false;
         if (panel != null)
         {
             Tycoon.DeliveryModal.Track(panel);
@@ -89,7 +94,14 @@ public class BankUI : MonoBehaviour
             upgradeButton.gameObject.SetActive(canUpgrade);
         if (upgradeButton != null)
             upgradeButton.interactable = canUpgrade && VillageManagement.Instance.CurrentOxygen >= price;
-        if (upgradeText != null)
+        if (upgradeText != null && (!priceLabelValid || displayedUpgradePrice != price ||
+            displayedCanUpgrade != canUpgrade || displayedUpgradeText != upgradeText))
+        {
             upgradeText.text = canUpgrade ? $"Upgrade O2 {price}" : string.Empty;
+            displayedUpgradePrice = price;
+            displayedCanUpgrade = canUpgrade;
+            displayedUpgradeText = upgradeText;
+            priceLabelValid = true;
+        }
     }
 }

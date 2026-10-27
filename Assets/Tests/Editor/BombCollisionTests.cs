@@ -16,6 +16,59 @@ public sealed class BombCollisionTests
     }
 
     [UnityTest]
+    public IEnumerator PooledBombSmokeFinishesBeforeReturnAndRestartsOnReuse()
+    {
+        yield return new EnterPlayMode();
+        var pool = new GameObject("SmokeTestPool").AddComponent<ObjectPool>();
+        pool.RegisterPool("Bomb", AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Arcade/Bomb.prefab"), 1);
+        GameObject instance = pool.SpawnFromPool("Bomb", new Vector3(2f, 3f, -4f), Quaternion.identity);
+        for (int shot = 0; shot < 2; shot++)
+        {
+            Bomb bomb = instance.GetComponent<Bomb>();
+            var smoke = instance.GetComponentInChildren<ParticleSystem>();
+            Assert.IsTrue(smoke.isPlaying, "Smoke must restart on every pooled spawn");
+            Assert.IsTrue(instance.GetComponent<SpriteRenderer>().enabled);
+            Assert.IsTrue(instance.GetComponent<Collider2D>().enabled);
+            smoke.Emit(5);
+            Vector3 impactPosition = instance.transform.position;
+            Advance(bomb, 0f); // No target: explode through the real flight path.
+            Assert.IsTrue(instance.activeSelf, "Keep smoke active after the bomb disappears");
+            Assert.IsFalse(instance.GetComponent<SpriteRenderer>().enabled);
+            Assert.IsFalse(instance.GetComponent<Collider2D>().enabled);
+            Assert.IsFalse(smoke.isEmitting);
+            Assert.Greater(smoke.particleCount, 0, "Explosion must not clear existing particles");
+            Assert.IsNull(pool.SpawnFromPool("Bomb", Vector3.zero, Quaternion.identity),
+                "A bomb with live smoke must not be reused yet");
+            Advance(bomb, 1f);
+            Assert.AreEqual(impactPosition, instance.transform.position, "Smoke stays at the impact pose");
+            float deadline = Time.time + 2f;
+            while (instance.activeSelf && Time.time < deadline) yield return null;
+            Assert.IsFalse(instance.activeSelf, "Return to the pool when the smoke finishes");
+            Assert.AreEqual(0, smoke.particleCount);
+            GameObject reused = pool.SpawnFromPool("Bomb", impactPosition, Quaternion.identity);
+            Assert.AreSame(instance, reused);
+        }
+        pool.ReturnToPool("Bomb", instance);
+    }
+
+    [UnityTest]
+    public IEnumerator UnpooledBombIsDestroyedOnlyAfterItsSmokeFinishes()
+    {
+        yield return new EnterPlayMode();
+        GameObject instance = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Arcade/Bomb.prefab"));
+        var smoke = instance.GetComponentInChildren<ParticleSystem>();
+        smoke.Emit(5);
+        Advance(instance.GetComponent<Bomb>(), 0f);
+        Assert.IsFalse(instance.GetComponent<SpriteRenderer>().enabled);
+        Assert.Greater(smoke.particleCount, 0);
+        yield return null;
+        Assert.IsTrue(instance != null, "Destroy must wait for live particles");
+        float deadline = Time.time + 2f;
+        while (instance != null && Time.time < deadline) yield return null;
+        Assert.IsTrue(instance == null, "Destroy the bomb after its smoke finishes");
+    }
+
+    [UnityTest]
     public IEnumerator FastBombsHitThinTriggerTargetsWithoutAProjectileRigidbody()
     {
         yield return new EnterPlayMode();

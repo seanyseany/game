@@ -295,6 +295,67 @@ public sealed class ArcadePerformanceTests
         Assert.AreEqual(4, cache.Count);
     }
 
+    [UnityTest] public IEnumerator RepeatedBloodContactChecksAndShovelCleanupDoNotAllocate()
+    {
+        yield return new EnterPlayMode();
+        MeasureBloodContactAllocations();
+        yield return null;
+    }
+
+    private static void MeasureBloodContactAllocations()
+    {
+        var shovel = new GameObject("Shovel", typeof(BoxCollider2D)).AddComponent<GateShovel>();
+        shovel.enabled = false;
+        var blood = new GameObject("Blood", typeof(Rigidbody2D), typeof(CircleCollider2D)).AddComponent<Blood>();
+        blood.enabled = false;
+        var unrelated = new GameObject("UnrelatedCollider").AddComponent<BoxCollider2D>();
+        MethodInfo contactMethod = typeof(GateShovel).GetMethod("OnTriggerStay2D", PrivateInstance);
+        MethodInfo cleanupMethod = typeof(GateShovel).GetMethod("Update", PrivateInstance);
+        MethodInfo shovelMethod = typeof(Blood).GetMethod("GetGateShovel", PrivateInstance);
+        MethodInfo playerMethod = typeof(Blood).GetMethod("IsPlayerCollider", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.IsNotNull(contactMethod, "GateShovel contact callback must be available");
+        Assert.IsNotNull(cleanupMethod, "GateShovel cleanup must be available");
+        Assert.IsNotNull(shovelMethod, "Blood shovel lookup must be available");
+        Assert.IsNotNull(playerMethod, "Blood player lookup must be available");
+        var contact = (Action<Collider2D>)contactMethod.CreateDelegate(typeof(Action<Collider2D>), shovel);
+        var cleanup = (Action)cleanupMethod.CreateDelegate(typeof(Action), shovel);
+        var getShovel = (Func<Collider2D, GateShovel>)shovelMethod.CreateDelegate(typeof(Func<Collider2D, GateShovel>), blood);
+        var isPlayer = (Func<Collider2D, bool>)playerMethod.CreateDelegate(typeof(Func<Collider2D, bool>));
+        string result = Measure("blood contact checks and shovel cleanup", 2000,
+            () => { contact(unrelated); cleanup(); getShovel(unrelated); isPlayer(unrelated); }, out long bytes);
+        UnityEngine.Debug.Log("[ARCADE CONTACT ALLOCATIONS] " + result);
+        Assert.AreEqual(0, bytes, "Persistent contacts must not allocate missing-component messages or new cleanup delegates");
+    }
+
+    [UnityTest] public IEnumerator ShovelSuctionCountsEachBloodOnceAndReturnsItForReuse()
+    {
+        yield return new EnterPlayMode();
+        var data = new GameObject("SuctionData").AddComponent<GameData>();
+        data.enabled = false;
+        var pool = new GameObject("SuctionPool").AddComponent<ObjectPool>();
+        pool.RegisterPool("Blood", AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Arcade/Blood.prefab"), 1);
+        var shovel = new GameObject("SuctionShovel", typeof(BoxCollider2D)).AddComponent<GateShovel>();
+        shovel.baseRequiredBloodCount = 1;
+        shovel.closeDelay = 0.01f;
+        GameObject previous = null;
+        int initialScore = data.GetO2Score();
+        for (int cycle = 0; cycle < 2; cycle++)
+        {
+            GameObject instance = pool.SpawnFromPool("Blood", shovel.transform.position, Quaternion.identity);
+            if (previous != null) Assert.AreSame(previous, instance);
+            previous = instance;
+            Blood blood = instance.GetComponent<Blood>();
+            shovel.RegisterBloodInstance(blood);
+            shovel.RegisterBloodInstance(blood);
+            float deadline = Time.time + 2f;
+            while ((instance.activeSelf || Get(shovel, "cycleRoutine") != null) && Time.time < deadline)
+                yield return null;
+            Assert.IsFalse(instance.activeSelf, "Suction must return the collected blood to its pool");
+            Assert.IsNull(Get(shovel, "cycleRoutine"), "The collection cycle must finish before the next reuse");
+            Assert.AreEqual(initialScore + cycle + 1, data.GetO2Score(), "Repeated contact must not count one blood twice");
+        }
+    }
+
     private static int CountRuntimeOverrides()
     {
         int count = 0;

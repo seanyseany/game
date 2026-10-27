@@ -5,6 +5,8 @@ public class Mover : MonoBehaviour
 {
     public float baseSpeed = 1f;
     [HideInInspector] public bool applyStageSpeedMultiplier = true;
+    // Collider-only children already travel with the phase; scrolling them again separates hits from art.
+    internal bool inheritParentPhaseScroll;
 
     // 🔹 기본 속도 백업 (prefab 기준)
     [HideInInspector] public float defaultBaseSpeed;
@@ -30,15 +32,17 @@ public class Mover : MonoBehaviour
 
     void Update()
     {
+        if (inheritParentPhaseScroll) return;
         if (scrollBody != null) return;
-        float mult = applyStageSpeedMultiplier && GameData.Instance ? GameData.Instance.GetStageSpeedMult() : 1f;
+        float mult = GetSpeedMultiplier();
         transform.position += Vector3.left * baseSpeed * mult * Time.deltaTime;
     }
 
     void FixedUpdate()
     {
+        if (inheritParentPhaseScroll) return;
         if (scrollBody == null) return;
-        float mult = applyStageSpeedMultiplier && GameData.Instance ? GameData.Instance.GetStageSpeedMult() : 1f;
+        float mult = GetSpeedMultiplier();
         Vector2 delta = Vector2.left * baseSpeed * mult * Time.fixedDeltaTime;
         if (delta.sqrMagnitude <= 0f)
         {
@@ -77,5 +81,14 @@ public class Mover : MonoBehaviour
     public void ApplyPhaseMultiplier(float phaseMult)
     {
         baseSpeed = defaultBaseSpeed * phaseMult;
+    }
+
+    private float GetSpeedMultiplier()
+    {
+        if (!applyStageSpeedMultiplier)
+            return 1f;
+        if (GameData.Instance != null)
+            return GameData.Instance.GetStageSpeedMult();
+        return StageManager.Instance != null ? StageManager.Instance.SpecialPhaseSpeedMultiplier : 1f;
     }
 }

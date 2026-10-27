@@ -267,10 +267,7 @@ public class Blood : MonoBehaviour
         if (other == null)
             return null;
 
-        GateShovel gateShovel = other.GetComponent<GateShovel>();
-        if (gateShovel != null)
-            return gateShovel;
-
+        // Parent lookup also checks this collider's own GameObject.
         return other.GetComponentInParent<GateShovel>();
     }
 
@@ -326,9 +323,6 @@ public class Blood : MonoBehaviour
         if (other.CompareTag("player"))
             return true;
 
-        if (other.GetComponent<Player>() != null)
-            return true;
-
         return other.GetComponentInParent<Player>() != null;
     }
 
@@ -340,7 +334,7 @@ public class Blood : MonoBehaviour
         if (TryIgnorePlayerCollision(other))
             return;
 
-        if (other.GetComponent<Blood>() != null)
+        if (other.TryGetComponent<Blood>(out _))
             return;
 
         if (other.CompareTag(floorTag))

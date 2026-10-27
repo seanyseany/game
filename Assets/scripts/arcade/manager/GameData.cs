@@ -5,6 +5,7 @@ using UnityEngine.SceneManagement;
 public class GameData : MonoBehaviour
 {
     private const string ArcadeScenePrefix = "arcade";
+    private const float SpeedPhaseObstacleMinimumRatio = 0.5f;
     private static int pendingSelectedPlayerType = 1;
     private static int pendingSelectedPlayerLevel = 1;
     private static bool hasPendingSelectedPlayer;
@@ -319,7 +320,34 @@ public class GameData : MonoBehaviour
         NotifyMachineGunSequenceEnded();
     }
 
-    public float GetStageSpeedMult() => stageSpeedMult;
+    private float SpecialPhaseSpeedMultiplier => StageManager.Instance != null
+        ? StageManager.Instance.SpecialPhaseSpeedMultiplier : 1f;
+
+    private bool UseSpeedPhaseObstacleMinimum => !gameOver && !IsResetting &&
+        StageManager.Instance != null && StageManager.Instance.IsSpeedPhaseSpeedActive;
+
+    public float GetStageSpeedMult()
+    {
+        float effectiveMult = stageSpeedMult;
+        // Also cover a speed phase starting in the middle of an existing contact slowdown.
+        if (UseSpeedPhaseObstacleMinimum && obstacleState != ObstacleContactState.None)
+        {
+            float normalMult = rageMode ? defaultStageSpeedMult * rageSpeedFactor : defaultStageSpeedMult;
+            effectiveMult = Mathf.Max(effectiveMult, normalMult * SpeedPhaseObstacleMinimumRatio);
+        }
+        return effectiveMult * SpecialPhaseSpeedMultiplier;
+    }
+
+    public bool CanSpawnSpeedEffects()
+    {
+        if (gameOver || IsResetting)
+            return false;
+
+        float currentMult = GetStageSpeedMult();
+        float normalMult = GetStageSpeedMultIgnoringObstacleSlowdown();
+        return currentMult > 0f && normalMult > 0f && currentMult >= normalMult - 0.01f;
+    }
+
     public float GetStageSpeedMultIgnoringObstacleSlowdown()
     {
         if (obstacleState == ObstacleContactState.Decelerating ||
@@ -327,12 +355,12 @@ public class GameData : MonoBehaviour
             obstacleState == ObstacleContactState.Stopped ||
             obstacleState == ObstacleContactState.Recovering)
         {
-            return rageMode
+            return (rageMode
                 ? defaultStageSpeedMult * rageSpeedFactor
-                : defaultStageSpeedMult;
+                : defaultStageSpeedMult) * SpecialPhaseSpeedMultiplier;
         }
 
-        return stageSpeedMult;
+        return stageSpeedMult * SpecialPhaseSpeedMultiplier;
     }
 
     public void ConfigureSelectedPlayer(int playerType, int playerLevel)
@@ -424,6 +452,8 @@ public class GameData : MonoBehaviour
                 : 3;
             player.ShowEscalatorChewingStage(stage);
             float activeStrength = strength * player.ActiveChewingEffectCount / 3f;
+            if (UseSpeedPhaseObstacleMinimum)
+                activeStrength = Mathf.Min(activeStrength, 1f - SpeedPhaseObstacleMinimumRatio);
             stageSpeedMult = baseMult * (1f - activeStrength);
             obstacleState = elapsed < stageDuration
                 ? ObstacleContactState.Decelerating
@@ -477,7 +507,8 @@ public class GameData : MonoBehaviour
         if (obstacleContactCount > 0)
             return;
 
-        if (obstacleState == ObstacleContactState.Pushing)
+        // Keep the speed-phase slowdown state through recovery so effects cannot resume at half speed.
+        if (obstacleState == ObstacleContactState.Pushing && !UseSpeedPhaseObstacleMinimum)
             obstacleState = ObstacleContactState.None;
     }
 
@@ -489,12 +520,14 @@ public class GameData : MonoBehaviour
             : defaultStageSpeedMult;
 
         obstacleState = ObstacleContactState.Decelerating;
-        yield return TweenStageSpeedMultCoroutine(stageSpeedMult, 0.2f, decelerateTime);
+        bool speedPhaseContact = UseSpeedPhaseObstacleMinimum;
+        float minimumMult = baseMult * SpeedPhaseObstacleMinimumRatio;
+        yield return TweenStageSpeedMultCoroutine(stageSpeedMult, speedPhaseContact ? minimumMult : 0.2f, decelerateTime);
 
         obstacleState = ObstacleContactState.Pushing;
 
         float pushRemain = 0.5f;
-        float pushMult = pushSpeed / StageManager.Instance.phaseBaseSpeed;
+        float pushMult = speedPhaseContact ? minimumMult : pushSpeed / StageManager.Instance.phaseBaseSpeed;
 
         if (rageMode)
             pushMult *= rageSpeedFactor;
@@ -704,6 +737,7 @@ public class GameData : MonoBehaviour
                 "BombHead",
                 "Bomb",
                 "BombHitBox",
+                "BombLaunchSmoke",
                 "MachineGunBullet"
             );
         }
@@ -716,6 +750,7 @@ public class GameData : MonoBehaviour
         ReturnAllSceneObjectsOfType<BossSlimeCanonBall>();
         ReturnAllSceneObjectsOfType<Bomb>();
         ReturnAllSceneObjectsOfType<BombHitBox>();
+        ReturnAllSceneObjectsOfType<BombLaunchSmoke>();
         ReturnAllSceneObjectsOfType<MachineGunBullet>();
     }
 

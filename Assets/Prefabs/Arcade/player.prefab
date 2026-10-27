@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 195436651045616349}
   - component: {fileID: 3454089187480284048}
   m_Layer: 0
-  m_Name: particle (3)
+  m_Name: Normal Jump Particle
   m_TagString: Particle
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -4848,12 +4848,12 @@ GameObject:
   - component: {fileID: 1933963112136100932}
   - component: {fileID: 6675855497721043072}
   m_Layer: 0
-  m_Name: particle (2)
+  m_Name: Rage Jump Particle
   m_TagString: Particle
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &4613369858235860100
 Transform:
   m_ObjectHideFlags: 0
@@ -4895,7 +4895,7 @@ ParticleSystemRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: a354dac193dfa4049bf97ecfd6097e1f, type: 2}
+  - {fileID: 2100000, guid: 77f4fac06d34f445fac677f2b488c232, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -9944,10 +9944,9 @@ MonoBehaviour:
   bumpVelocityY: 4
   bumpDistance: 0.25
   bumpDuration: 0.1
-  jumpParticleObject: {fileID: 6157399209794370035}
-  jumpParticleObject2: {fileID: 6667838905485725023}
-  normalJumpParticleMaterial: {fileID: 2100000, guid: a354dac193dfa4049bf97ecfd6097e1f, type: 2}
-  rageJumpParticleMaterial: {fileID: 2100000, guid: 77f4fac06d34f445fac677f2b488c232, type: 2}
+  normalJumpParticleObject: {fileID: 6157399209794370035}
+  rageJumpParticleObject: {fileID: 6667838905485725023}
+  speedJumpParticleObject: {fileID: 0}
 --- !u!114 &7619116827110755597
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9971,6 +9970,9 @@ MonoBehaviour:
   baseTransform: {fileID: 7400000, guid: 079dcbf427f6a412897e53af95ef5ae3, type: 2}
   baseHurt: {fileID: 7400000, guid: 1155aa80ba5aa414ba823ff7edd8aee7, type: 2}
   baseStill: {fileID: 7400000, guid: c55c79574b6344c9d9ff9f4ac5f704db, type: 2}
+  baseSpeed: {fileID: 7400000, guid: 82d9fa85cd3d849a1bd8fb4b203c26e2, type: 2}
+  baseSpeedStart: {fileID: 7400000, guid: 897d5954b02da4909b5e50f77088fab0, type: 2}
+  baseSpeedEnd: {fileID: 7400000, guid: 0ba735ba55be44db3af646e0cd5f8c33, type: 2}
   walkClips:
   - {fileID: 7400000, guid: f7dd010ae2b314463aa6de3f1c71e9e5, type: 2}
   - {fileID: 7400000, guid: 85ac0c0ea18a847329b416ef38d3c637, type: 2}
@@ -10025,6 +10027,24 @@ MonoBehaviour:
   - {fileID: 7400000, guid: 29a35a1c546134621881c7589783e9d1, type: 2}
   - {fileID: 7400000, guid: daa6f0e22ff2348e6a958da7c1eee261, type: 2}
   - {fileID: 7400000, guid: 2731b58008b894139ba789369978562a, type: 2}
+  speedClips:
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  speedStartClips:
+  - {fileID: 7400000, guid: 00bff3d134f12473ba63c4dee1f10163, type: 2}
+  - {fileID: 7400000, guid: 42ddd91c7a4e5410fa79d1dcdae0d50d, type: 2}
+  - {fileID: 7400000, guid: f24ae3d64a4e748c99d212ffcb8ed7df, type: 2}
+  - {fileID: 7400000, guid: fedda872611ce4d7d82aedb8c5df947e, type: 2}
+  - {fileID: 7400000, guid: 6883ff03a80b54d5b96119ee7166dc34, type: 2}
+  speedEndClips:
+  - {fileID: 7400000, guid: c7fa40b6503d9436fafeaae914eb84e0, type: 2}
+  - {fileID: 7400000, guid: 7f3b18a36df0149209088249661eab9c, type: 2}
+  - {fileID: 7400000, guid: a9d0b7c9c85b641aea64a4ccfecd4fe1, type: 2}
+  - {fileID: 7400000, guid: 168fbcc796b384383870d350382258dd, type: 2}
+  - {fileID: 7400000, guid: 6649e3a62ee72479eb422940cadc5c39, type: 2}
   rageWalkClips:
   - {fileID: 7400000, guid: d457ee0067d5d499d9de034c52093910, type: 2}
   - {fileID: 7400000, guid: 801b1b09c8390434e8dd48870ce66552, type: 2}

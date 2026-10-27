@@ -16,6 +16,7 @@ public class PhaseCache : MonoBehaviour
     private MonoBehaviour[] behaviours;
     private IReinitializable[] reinitializables;
     private bool cached;
+    private bool[] colliderOnlyScrollMovers;
 
     void Awake()
     {
@@ -36,6 +37,14 @@ public class PhaseCache : MonoBehaviour
         behaviours = GetComponentsInChildren<MonoBehaviour>(true);
         reinitializables = GetComponentsInChildren<IReinitializable>(true);
         movers = GetComponentsInChildren<Mover>(true);
+        colliderOnlyScrollMovers = new bool[movers.Length];
+        for (int i = 0; i < movers.Length; i++)
+        {
+            Mover childMover = movers[i];
+            colliderOnlyScrollMovers[i] = childMover != null && childMover.transform != transform &&
+                childMover.GetComponent<Collider2D>() != null &&
+                childMover.GetComponentInChildren<Renderer>(true) == null;
+        }
         rbs = GetComponentsInChildren<Rigidbody2D>(true);
         renderers = GetComponentsInChildren<Renderer>(true);
         spriteRenderers = GetComponentsInChildren<SpriteRenderer>(true);
@@ -84,6 +93,7 @@ public class PhaseCache : MonoBehaviour
                     cachedMover.defaultBaseSpeed = cachedMover.baseSpeed;
 
                 cachedMover.applyStageSpeedMultiplier = true;
+                cachedMover.inheritParentPhaseScroll = colliderOnlyScrollMovers[i];
                 cachedMover.baseSpeed = cachedMover.defaultBaseSpeed;
             }
         }

@@ -56,10 +56,17 @@ MonoBehaviour:
   - {x: 0.565, y: 0.54, z: 0}
   - {x: 0.565, y: 0.021, z: 0}
   - {x: 0.565, y: -0.515, z: 0}
+  launchSmokePrefab: {fileID: 8365355570591718594, guid: 8395b3dc2278147b9bc579d691616939, type: 3}
   bombHeadPoolTag: BombHead
   bombPoolTag: Bomb
+  launchSmokePoolTag: BombLaunchSmoke
   fireFromLast: 1
   autoReturnDelay: 0.1
+  rageForcedFireDelay: 2
+  forcedTargetWorldPositions:
+  - {x: 0, y: 0}
+  - {x: 0, y: 0}
+  - {x: 0, y: 0}
 --- !u!212 &-634871297307901009
 SpriteRenderer:
   m_ObjectHideFlags: 0

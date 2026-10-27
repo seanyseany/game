@@ -87,6 +87,149 @@ public sealed class StageBackgroundTests
     }
 
     [UnityTest]
+    public IEnumerator Stage15OnlyRunsDuringEachBackgroundTransitionWithoutConsumingStageProgress()
+    {
+        var intermediate = new GameObject("Stage 1.5 transition phase");
+        intermediate.SetActive(false);
+        manager.stage1_5PhasePrefabs = new[] { intermediate };
+        manager.stage1BackgroundChangeChance = 1f;
+        manager.speedUp2 = 6;
+        CollectionAssert.Contains((List<GameObject>)Call("CollectAllPhasePrefabs"), intermediate);
+
+        // Stage 1 -> 2: the triggering spawn must immediately use the transition list.
+        Set("phaseSpawnCount", manager.speedUp1);
+        Assert.AreEqual(2, Call("GetCurrentPhaseStage"));
+        Assert.AreSame(normal, NextPhase(2));
+        Call("SpawnPhase");
+        Assert.IsTrue(Get<bool>("backgroundTransitionPhaseActive"));
+        Assert.AreEqual(15, Call("GetCurrentPhaseStage"));
+        Assert.AreEqual(manager.speedUp1, manager.GetPhaseSpawnCount());
+        Assert.AreEqual(1, Get<Dictionary<GameObject, int>>("createdCountByPrefab")[intermediate]);
+        for (int i = 0; i < 4; i++) Call("SpawnPhase");
+        Assert.AreEqual(manager.speedUp1, manager.GetPhaseSpawnCount());
+        for (int frame = 0; frame < 5 && Get<bool>("backgroundTransitionPhaseActive"); frame++)
+            yield return null;
+        Assert.IsTrue(second.activeSelf);
+        Assert.IsFalse(Get<bool>("backgroundTransitionPhaseActive"));
+        Assert.AreEqual(2, Call("GetCurrentPhaseStage"));
+        Call("SpawnPhase");
+        Assert.AreEqual(manager.speedUp1 + 1, manager.GetPhaseSpawnCount());
+
+        // The existing stage 3 normal-count trigger starts the same temporary window again.
+        Set("phaseSpawnCount", manager.speedUp2);
+        Set("stage3BackgroundChangeAt", 1);
+        Spawn(3, normal);
+        Assert.IsTrue(Get<bool>("stage3BackgroundChangeTriggered"));
+        Assert.AreEqual(15, Call("GetCurrentPhaseStage"));
+        for (int i = 0; i < 4; i++) Call("SpawnPhase");
+        Assert.AreEqual(manager.speedUp2, manager.GetPhaseSpawnCount());
+        Assert.AreEqual(1, Get<int>("stage3NormalPhaseSpawnCount"));
+        for (int frame = 0; frame < 5 && Get<bool>("backgroundTransitionPhaseActive"); frame++)
+            yield return null;
+        Assert.IsTrue(first.activeSelf);
+        Assert.AreEqual(3, Call("GetCurrentPhaseStage"));
+        Assert.AreSame(normal, NextPhase(3));
+    }
+
+    [UnityTest]
+    public IEnumerator Stage15ExcludesForeignSpecialsAndEndsWhenPreBackgroundFinishes()
+    {
+        var intermediate = new GameObject("Stage 1.5 only phase");
+        intermediate.SetActive(false);
+        var foreignSpecial = new GameObject("Stage 2 and 3 special");
+        foreignSpecial.SetActive(false);
+        manager.stage1_5PhasePrefabs = new[] { intermediate };
+        var specials = new[] { new SpecialPhaseEntry { prefab = foreignSpecial, spawnChance = 1f } };
+        manager.stage2SpecialPhasePrefabs = specials;
+        manager.stage3SpecialPhasePrefabs = specials;
+        manager.speedUp2 = 6;
+        manager.speedUp3 = 12;
+        foreach (int stage in new[] { 2, 3 })
+        {
+            var beforeTransition = new List<GameObject>();
+            for (int i = 0; i < 3; i++) beforeTransition.Add(NextPhase(stage));
+            CollectionAssert.Contains(beforeTransition, foreignSpecial);
+        }
+
+        var pre = new GameObject("Pre background template");
+        pre.SetActive(false);
+        manager.preBackgroundPrefab = pre;
+        manager.preBackgroundPoint = new GameObject("Transition start").transform;
+        manager.preBackgroundPoint.position = Vector3.right * 10f;
+        manager.preBackgroundPoint2 = new GameObject("Transition end").transform;
+        manager.preBackgroundPoint2.position = Vector3.left * 10f;
+        manager.backgroundChangeDelay = 0.05f;
+        Set("phaseSpawnCount", manager.speedUp1);
+        Call("RequestBackgroundChange");
+        Assert.AreEqual(15, Call("GetCurrentPhaseStage"));
+        for (int i = 0; i < 40; i++)
+            Assert.AreSame(intermediate, NextPhase((int)Call("GetCurrentPhaseStage")));
+        yield return WaitGameSeconds(0.2f);
+        Assert.IsTrue(second.activeSelf);
+        Assert.AreEqual(15, Call("GetCurrentPhaseStage"), "The moving pre-background is still part of the transition.");
+        GameObject effect = Get<GameObject>("preBackgroundInstance");
+        Assert.IsNotNull(effect);
+        effect.transform.position = Vector3.left * 11f;
+        for (int frame = 0; frame < 5 && Get<bool>("backgroundTransitionPhaseActive"); frame++)
+            yield return null;
+        Assert.IsNull(Get<GameObject>("preBackgroundInstance"));
+        Assert.IsFalse(Get<bool>("backgroundTransitionPhaseActive"));
+        Assert.AreEqual(2, Call("GetCurrentPhaseStage"));
+        foreach (int stage in new[] { 2, 3 })
+        {
+            var afterTransition = new List<GameObject>();
+            for (int i = 0; i < 4; i++) afterTransition.Add(NextPhase(stage));
+            CollectionAssert.Contains(afterTransition, foreignSpecial);
+            CollectionAssert.DoesNotContain(afterTransition, intermediate);
+        }
+    }
+
+    [UnityTest]
+    public IEnumerator FailedMissingCancelledResetAndPostBossTransitionsDoNotLeaveStage15Active()
+    {
+        var intermediate = new GameObject("Stage 1.5 transition phase");
+        intermediate.SetActive(false);
+        manager.stage1_5PhasePrefabs = new[] { intermediate };
+        manager.stage1BackgroundChangeChance = 0f;
+        Set("phaseSpawnCount", manager.speedUp1);
+        Call("TryRollStage1BackgroundChange");
+        Assert.IsFalse(Get<bool>("backgroundTransitionPhaseActive"));
+        Assert.AreEqual(2, Call("GetCurrentPhaseStage"));
+
+        Call("RequestBackgroundChange");
+        Assert.AreEqual(15, Call("GetCurrentPhaseStage"));
+        manager.stage1_5PhasePrefabs = new GameObject[] { null };
+        Assert.AreEqual(2, Call("GetCurrentPhaseStage"), "An empty transition list falls back to the current stage.");
+        manager.stage1_5PhasePrefabs = new[] { intermediate };
+        manager.enabled = false;
+        Assert.IsFalse(Get<bool>("backgroundTransitionPhaseActive"));
+        Assert.AreEqual(2, Call("GetCurrentPhaseStage"));
+        manager.enabled = true;
+
+        Call("RequestBackgroundChange");
+        Assert.AreEqual(15, Call("GetCurrentPhaseStage"));
+        manager.ResetState();
+        Assert.IsFalse(Get<bool>("backgroundTransitionPhaseActive"));
+        Assert.AreEqual(1, Call("GetCurrentPhaseStage"));
+        Set("phaseSpawnCount", manager.speedUp1);
+        manager.backgroundPrefabs = new[] { first };
+        manager.ResetState();
+        Set("phaseSpawnCount", manager.speedUp1);
+        Assert.IsFalse((bool)Call("RequestBackgroundChange"));
+        Assert.AreEqual(2, Call("GetCurrentPhaseStage"));
+
+        manager.backgroundPrefabs = new[] { second };
+        manager.ResetState();
+        Call("ResumeAfterBoss");
+        Assert.IsFalse(Get<bool>("backgroundTransitionPhaseActive"));
+        Assert.AreEqual(104, Call("GetCurrentPhaseStage"));
+        Assert.AreSame(normal, NextPhase(104));
+        Assert.AreEqual(1, Get<int>("pendingBackgroundChanges"));
+        manager.ResetState();
+        yield return null;
+    }
+
+    [UnityTest]
     public IEnumerator SpecialRageTestMachineGunAndMiniBossSpawnsDoNotAdvanceNormalCount()
     {
         var special = new GameObject("Special phase");
@@ -360,6 +503,10 @@ public sealed class StageBackgroundTests
         while (Time.time < until)
             yield return null;
     }
+
+    private GameObject NextPhase(int stage) => (GameObject)typeof(StageManager)
+        .GetMethod("GetNextPhasePrefabForStage", Private, null, new[] { typeof(int) }, null)
+        .Invoke(manager, new object[] { stage });
 
     private object Call(string name) => typeof(StageManager).GetMethod(name, Private).Invoke(manager, null);
     private T Get<T>(string name) => (T)typeof(StageManager).GetField(name, Private).GetValue(manager);

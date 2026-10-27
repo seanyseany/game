@@ -15,6 +15,8 @@ public class GateShovel : MonoBehaviour
     private readonly HashSet<Blood> bloodsInRange = new HashSet<Blood>();
     private readonly HashSet<Blood> suckingBloods = new HashSet<Blood>();
     private readonly HashSet<Blood> countedBloods = new HashSet<Blood>();
+    private readonly List<Blood> waitingBloods = new List<Blood>();
+    private static readonly System.Predicate<Blood> invalidBloodReference = IsInvalidBloodReference;
 
     private Coroutine cycleRoutine;
     private bool cycleStarting;
@@ -67,8 +69,7 @@ public class GateShovel : MonoBehaviour
 
     private void RegisterBlood(Collider2D other)
     {
-        Blood blood = other != null ? other.GetComponent<Blood>() : null;
-        if (blood == null)
+        if (other == null || !other.TryGetComponent<Blood>(out var blood))
             return;
 
         RegisterBloodInstance(blood);
@@ -148,7 +149,7 @@ public class GateShovel : MonoBehaviour
 
     private void AssignWaitingBloods()
     {
-        List<Blood> waitingBloods = new List<Blood>();
+        waitingBloods.Clear();
 
         foreach (Blood blood in bloodsInRange)
         {
@@ -164,6 +165,7 @@ public class GateShovel : MonoBehaviour
             suckingBloods.Add(blood);
             blood.BeginShovelSuction(GetNextSuctionTarget(), shovelCollider, HandleBloodSucked);
         }
+        waitingBloods.Clear();
     }
 
     private void HandleBloodSucked(Blood blood)
@@ -224,15 +226,16 @@ public class GateShovel : MonoBehaviour
 
     private void UnregisterBlood(Collider2D other)
     {
-        Blood blood = other != null ? other.GetComponent<Blood>() : null;
+        if (other == null || !other.TryGetComponent<Blood>(out var blood))
+            return;
         UnregisterBloodInstance(blood);
     }
 
     private void CleanupBloodSets()
     {
-        bloodsInRange.RemoveWhere(IsInvalidBloodReference);
-        suckingBloods.RemoveWhere(IsInvalidBloodReference);
-        countedBloods.RemoveWhere(IsInvalidBloodReference);
+        bloodsInRange.RemoveWhere(invalidBloodReference);
+        suckingBloods.RemoveWhere(invalidBloodReference);
+        countedBloods.RemoveWhere(invalidBloodReference);
     }
 
     private static bool IsInvalidBloodReference(Blood blood)

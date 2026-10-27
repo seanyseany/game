@@ -166,12 +166,14 @@ public sealed class BombDetectionStagesTests
         yield return null;
     }
 
-    [UnityTest] public IEnumerator ForcedFireKeepsCoordinateShotsSeparateFromDetectedSawTargets()
+    [UnityTest] public IEnumerator RageForcedFireKeepsCoordinateShotsSeparateFromDetectedSawTargets()
     {
         yield return new EnterPlayMode();
         PreparePipeline(out var launcher, out _, out var active);
-        launcher.forcedFireDelay = 0.05f;
+        launcher.rageForcedFireDelay = 0.05f;
         launcher.ActivateLauncher();
+        yield return WaitForReady(launcher);
+        GameData.OnRageStart?.Invoke();
         float deadline = Time.time + 2f;
         while (active.Count == 0 && Time.time < deadline) yield return null;
         Assert.AreEqual(6, active.Count);
@@ -180,6 +182,69 @@ public sealed class BombDetectionStagesTests
             Transform target = (Transform)typeof(Bomb).GetField("target", Private).GetValue(shot.GetComponent<Bomb>());
             StringAssert.StartsWith("BombLauncherForcedTarget_", target.name);
         }
+    }
+
+    [UnityTest] public IEnumerator LoadedLauncherWaitsForRageThenFiresTwoSecondsAfterTheTrigger()
+    {
+        yield return new EnterPlayMode();
+        PreparePipeline(out var launcher, out _, out var active);
+        launcher.rageForcedFireDelay = 0.05f;
+        launcher.ActivateLauncher(); yield return WaitForReady(launcher);
+        yield return WaitGameSeconds(0.15f);
+        Assert.AreEqual(0, active.Count, "Launcher activation must not start the forced-fire timer");
+        Assert.IsTrue(launcher.CanFire());
+        launcher.rageForcedFireDelay = 2f;
+        var data = new GameObject("RageTimingData").AddComponent<GameData>(); data.enabled = false;
+        float triggered = Time.time;
+        data.ActivateRageMode(15f);
+        yield return WaitGameSeconds(1.85f);
+        Assert.AreEqual(0, active.Count, "Rage must not fire before two seconds");
+        float deadline = triggered + 2.5f;
+        while (active.Count == 0 && Time.time < deadline) yield return null;
+        Assert.AreEqual(6, active.Count);
+        Assert.That(Time.time - triggered, Is.InRange(1.99f, 2.35f));
+    }
+
+    [UnityTest] public IEnumerator RageDuringLauncherEntryKeepsTheTriggerDeadline()
+    {
+        yield return new EnterPlayMode();
+        PreparePipeline(out var launcher, out _, out var active);
+        launcher.moveDuration = 0.35f; launcher.rageForcedFireDelay = 0.1f;
+        float triggered = Time.time;
+        launcher.ActivateLauncher();
+        GameData.OnRageStart?.Invoke();
+        float deadline = triggered + 1f;
+        while (active.Count == 0 && Time.time < deadline) yield return null;
+        Assert.AreEqual(6, active.Count);
+        Assert.That(Time.time - triggered, Is.InRange(0.34f, 0.44f), "An elapsed rage timer must fire when entry completes, rather than restarting");
+    }
+
+    [UnityTest] public IEnumerator ResetCancelsPendingRageFireAndDisableUnsubscribesTheEvent()
+    {
+        yield return new EnterPlayMode();
+        PreparePipeline(out var launcher, out _, out var active);
+        launcher.rageForcedFireDelay = 0.1f;
+        for (int cycle = 0; cycle < 3; cycle++)
+        {
+            launcher.ActivateLauncher(); yield return WaitForReady(launcher);
+            GameData.OnRageStart?.Invoke();
+            launcher.ResetLauncherState();
+            yield return WaitGameSeconds(0.15f);
+            Assert.AreEqual(0, active.Count, "Reset must cancel the pending rage volley");
+            launcher.gameObject.SetActive(false);
+            Assert.AreEqual(0, CountRageSubscriptions(launcher));
+            GameData.OnRageStart?.Invoke();
+            launcher.gameObject.SetActive(true);
+            Assert.AreEqual(1, CountRageSubscriptions(launcher), "Reactivation must not accumulate event handlers");
+        }
+    }
+
+    private static int CountRageSubscriptions(BombLauncher launcher)
+    {
+        int count = 0;
+        if (GameData.OnRageStart != null)
+            foreach (var handler in GameData.OnRageStart.GetInvocationList()) if (ReferenceEquals(handler.Target, launcher)) count++;
+        return count;
     }
 
     [UnityTest] public IEnumerator FailedForcedSpawnKeepsAmmoAndExitsItsLoop()
@@ -249,7 +314,7 @@ public sealed class BombDetectionStagesTests
         pool.RegisterPool("BombHitBox", AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Arcade/BombHitBox.prefab"), 12);
         pool.RegisterPool("BombHead", launcherPrefab.GetComponent<BombLauncher>().bombHeadPrefab, 18);
         launcher = Object.Instantiate(launcherPrefab).GetComponent<BombLauncher>();
-        launcher.forcedFireDelay = 100f; launcher.moveDuration = 0.01f;
+        launcher.rageForcedFireDelay = 100f; launcher.moveDuration = 0.01f;
         detector = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Arcade/SawDetector.prefab")).GetComponent<SawDetector>();
         detector.launcher = launcher; detector.detectCooldown = 0.05f;
         Physics2D.SyncTransforms();

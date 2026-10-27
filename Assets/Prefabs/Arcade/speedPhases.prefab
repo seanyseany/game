@@ -1,0 +1,89 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &100000
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 400000}
+  - component: {fileID: 11400000}
+  m_Layer: 0
+  m_Name: speedPhases
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &400000
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 100000}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 100000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6f7a871455a147fa99af4060c5d7e1c4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  startPhasePrefab: {fileID: 2659614723417223950, guid: f54ac985296364499ae5e566e881704f, type: 3}
+  endPhasePrefab: {fileID: 2659614723417223950, guid: f54ac985296364499ae5e566e881704f, type: 3}
+  phasePrefabs:
+  - {fileID: 2659614723417223950, guid: 911b34a85e88c46caa2b1cca7ef1d1d1, type: 3}
+  - {fileID: 2659614723417223950, guid: d08f6fb72c7764075afed67b9e518af3, type: 3}
+  - {fileID: 2659614723417223950, guid: fe21ddcd49ab740c6b02e0bb942e5357, type: 3}
+  - {fileID: 2659614723417223950, guid: 638bc800ce3b94e8d9ebe5ee74290a95, type: 3}
+  - {fileID: 2659614723417223950, guid: 465457a675c5d4f898784c7dad164cdf, type: 3}
+  - {fileID: 2659614723417223950, guid: f52f59194bf6d42e3a660297bec37c82, type: 3}
+  - {fileID: 2659614723417223950, guid: 9d8e2645f6c004750b414a8b81632d67, type: 3}
+  - {fileID: 2659614723417223950, guid: 6bda2bad4bc764550a33713dc6f3be8c, type: 3}
+  - {fileID: 2659614723417223950, guid: 258a0a0ae9ca940d59e906ae4fef544f, type: 3}
+  - {fileID: 2659614723417223950, guid: 917acc1da4da74c4b89b162cd54d4ed0, type: 3}
+  - {fileID: 2659614723417223950, guid: e590388ef2c0446aba9395e66d643245, type: 3}
+  - {fileID: 2659614723417223950, guid: e31d7594190c84c6c916e4e5c368849c, type: 3}
+  - {fileID: 2659614723417223950, guid: a1170bfee06144ec09d923e5da8f8748, type: 3}
+  - {fileID: 2659614723417223950, guid: 0df2e6b255fb04a9b87b67f2274b2921, type: 3}
+  - {fileID: 2659614723417223950, guid: 420cb094a2324437aa5ea14fb18f08ad, type: 3}
+  - {fileID: 2659614723417223950, guid: f9293a99b6df44c5586af311d609031d, type: 3}
+  - {fileID: 2659614723417223950, guid: ffb806bce991c42679a471ec9134345a, type: 3}
+  - {fileID: 2659614723417223950, guid: b043920c5c3da40cb8c69b64dee0bb43, type: 3}
+  - {fileID: 2659614723417223950, guid: c40195aaafe644e66bb92a2b6526a715, type: 3}
+  - {fileID: 2659614723417223950, guid: e8cffc44ca07945398e7feeef6d3fb7b, type: 3}
+  - {fileID: 2659614723417223950, guid: 84544bea27d0343bd9bfc3112ba861fc, type: 3}
+  - {fileID: 2659614723417223950, guid: 89689c5c36b414d179111e3aaa1bfdfb, type: 3}
+  - {fileID: 2659614723417223950, guid: 1777aca8f8d214cb99d41f06dffadd7d, type: 3}
+  - {fileID: 2659614723417223950, guid: ad73a52ffeb0547a3933dffcefd67193, type: 3}
+  - {fileID: 2659614723417223950, guid: 9b59993a87b0e4a7f891b0cd4361c998, type: 3}
+  - {fileID: 2659614723417223950, guid: 7952e823bf8bf46e18700e50dc11b46c, type: 3}
+  - {fileID: 2659614723417223950, guid: 62da166aaf0034eb2a5b72180d1302df, type: 3}
+  - {fileID: 2659614723417223950, guid: 49fb77af4b09342018ae9f5def39055e, type: 3}
+  - {fileID: 2659614723417223950, guid: 1ea9b0b84171e4b18b07eda7a18a63ba, type: 3}
+  - {fileID: 2659614723417223950, guid: e1a360f72193443a9b9c79dcc072a16e, type: 3}
+  - {fileID: 2659614723417223950, guid: 026db3d93cfc446bfb48447d10dae28e, type: 3}
+  - {fileID: 2659614723417223950, guid: f1cf593072acb45f6825c8239670f55a, type: 3}
+  - {fileID: 2659614723417223950, guid: a0b29af5fba2441419e76e75b99f210c, type: 3}
+  - {fileID: 2659614723417223950, guid: 56d039823eb6a477bb0bcbbc76231abb, type: 3}
+  - {fileID: 2659614723417223950, guid: e2a2682eacd9b40dc8595f84223ab37d, type: 3}
+  - {fileID: 2659614723417223950, guid: b9798a3d388f24417873d1f62513e3f8, type: 3}
+  phaseSpawnCount: 6
+  speedMultiplier: 1.5
+  speedEffectPrefab: {fileID: 8730433929646113536, guid: ce10425395c6b46709c9216c07ed749c, type: 3}
+  speedEffectMoveSpeed: 18

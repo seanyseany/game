@@ -40,6 +40,7 @@ public class Turret : BaseTurret
 
     private readonly List<Animator> reloadAnimators = new List<Animator>();
     private readonly List<GameObject> reloadInstances = new List<GameObject>();
+    private readonly List<int> activeLauncherIndices = new List<int>();
     private Vector3 originalLocalPosition;
     private Quaternion originalLocalRotation;
     private Transform rangeReference;
@@ -257,7 +258,7 @@ public class Turret : BaseTurret
 
     private bool IsInstalled()
     {
-        return transform.parent != null && transform.parent.GetComponent<TurretImplementation>() != null;
+        return transform.parent != null && transform.parent.TryGetComponent<TurretImplementation>(out _);
     }
 
     private void StopFiringImmediately()
@@ -287,8 +288,8 @@ public class Turret : BaseTurret
 
     private Villan FindClosestTargetInRange()
     {
-        Villan[] candidates = FindObjectsByType<Villan>(FindObjectsSortMode.None);
-        if (candidates == null || candidates.Length == 0)
+        IReadOnlyList<Villan> candidates = Villan.ActiveVillans;
+        if (candidates.Count == 0)
             return null;
 
         Transform reference = GetRangeReference();
@@ -296,7 +297,7 @@ public class Turret : BaseTurret
         Villan nearest = null;
         float nearestDistance = float.MaxValue;
 
-        for (int i = 0; i < candidates.Length; i++)
+        for (int i = 0; i < candidates.Count; i++)
         {
             Villan candidate = candidates[i];
             if (candidate == null || !candidate.isActiveAndEnabled || !IsInTargetRange(candidate.AimTarget.position))
@@ -396,12 +397,16 @@ public class Turret : BaseTurret
 
     private bool HasSpawnPoint()
     {
-        return GetActiveLauncherIndices().Count > 0;
+        for (int i = 0; i < launchers.Count; i++)
+        {
+            if (launchers[i] != null && launchers[i].bulletSpawnPoint != null) return true;
+        }
+        return false;
     }
 
     private List<int> GetActiveLauncherIndices()
     {
-        List<int> activeLauncherIndices = new List<int>();
+        activeLauncherIndices.Clear();
         for (int i = 0; i < launchers.Count; i++)
         {
             LauncherEntry entry = launchers[i];

@@ -98,7 +98,7 @@ public class tangling : MonoBehaviour, IReinitializeOnEnable
         if (other == null)
             return null;
 
-        return other.GetComponent<Player>() ?? other.GetComponentInParent<Player>();
+        return other.GetComponentInParent<Player>();
     }
 
     private void PlayStretch()
