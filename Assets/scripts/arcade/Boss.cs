@@ -787,8 +787,20 @@ public class Boss : MonoBehaviour, IReinitializeOnEnable
 
     private void HideDestroyVisualParts()
     {
+        HideRightCap();
         SetDestroyPartObjectsActive(false);
         ClearThresholdAnimObjects();
+    }
+
+    private void HideRightCap()
+    {
+        if (rightCapObj != null)
+        {
+            rightCapObj.SetActive(false);
+            SafeReturnOrDestroy(rightCapObj, bossCapRightPoolTag);
+        }
+        rightCapObj = null;
+        rightCapSR = null;
     }
 
     public void OnBossDestroyShakeEvent()
@@ -1004,6 +1016,7 @@ public class Boss : MonoBehaviour, IReinitializeOnEnable
         if (state == State.Dead) return;
 
         state = State.Dead;
+        HideRightCap();
         SetBossUIVisible(false);
         StartCoroutine(CoDieByPlayerDelayed());
     }

@@ -20,6 +20,7 @@ public class ShopPlaceholderUI : ShopSectionUI
         public string displayName;
         public Oxygen level1Prefab;
         public Oxygen level2Prefab;
+        public int requiredVillageLevel;
     }
 
     [Serializable]
@@ -27,6 +28,8 @@ public class ShopPlaceholderUI : ShopSectionUI
     {
         public Oxygen level1Prefab;
         public Oxygen level2Prefab;
+        [Range(0, 9), Tooltip("0: 등록 순서대로 1, 2, 4, 6레벨에 해금")]
+        public int requiredVillageLevel;
     }
 
     [Serializable]
@@ -329,6 +332,7 @@ public class ShopPlaceholderUI : ShopSectionUI
                 id = BuildOilPurchaseEntryId(i),
                 familyId = familyId,
                 displayName = displayName,
+                requiredVillageLevel = group.requiredVillageLevel > 0 ? group.requiredVillageLevel : VillageManagement.GetOilUnlockLevel(i),
                 level1Prefab = level1Prefab,
                 level2Prefab = level2Prefab
             });
@@ -392,7 +396,7 @@ public class ShopPlaceholderUI : ShopSectionUI
             if (slot == null)
                 slot = sceneSlotRoot.AddComponent<TurretImplementation>();
 
-            slot.ConfigureRuntimeSlot(BuildTurretShopSlotId(i), Vector2.zero);
+            slot.ConfigureRuntimeSlot(BuildTurretShopSlotId(i), Vector2.zero, i + 1);
             activeTurretSlots[i] = slot;
         }
     }
@@ -432,6 +436,8 @@ public class ShopPlaceholderUI : ShopSectionUI
             RefreshOilButtons();
         else if (IsTurretSection())
             RefreshTurretButtons();
+        else if (IsPlayerSection())
+            RefreshPlayerButtons();
 
         refreshQueued = false;
         VillageManagement villageManagement = VillageManagement.Instance;
@@ -450,11 +456,14 @@ public class ShopPlaceholderUI : ShopSectionUI
             bool completed = purchasedLevel >= GetMaxOilLevel(entry);
             bool canAfford = nextPrefab != null && villageManagement != null && villageManagement.CurrentOxygen >= nextPrefab.CurrentOxygenPrice;
             bool canPlace = CanUseOilEntry(entry, purchasedLevel);
-            buttons[i].interactable = !completed && nextPrefab != null && canAfford && canPlace;
+            bool unlocked = villageManagement != null && villageManagement.IsVillageLevelUnlocked(entry.requiredVillageLevel);
+            buttons[i].interactable = unlocked && !completed && nextPrefab != null && canAfford && canPlace;
 
             Text text = buttons[i].GetComponentInChildren<Text>();
             if (text != null)
                 text.text = BuildOilLabel(entry, purchasedLevel, nextPrefab, canPlace);
+            if (text != null && !unlocked)
+                text.text = $"{entry.displayName}\n마을 {entry.requiredVillageLevel}레벨에 해금";
         }
 
         SetStatus(oilEntries.Count == 0 ? "등록된 오일 프리팹이 없습니다." : "오일은 1렙 구매 후 2렙 구매로 완료됩니다.");
@@ -472,11 +481,14 @@ public class ShopPlaceholderUI : ShopSectionUI
             bool completed = purchasedLevel >= 3;
             bool canAfford = nextPrefab != null && villageManagement != null && villageManagement.CurrentOxygen >= nextPrefab.CurrentOxygenPrice;
             bool canPlace = CanUseTurretSlot(i, purchasedLevel);
-            buttons[i].interactable = !completed && nextPrefab != null && canAfford && canPlace;
+            bool unlocked = villageManagement != null && villageManagement.IsVillageLevelUnlocked(i + 1);
+            buttons[i].interactable = unlocked && !completed && nextPrefab != null && canAfford && canPlace;
 
             Text text = buttons[i].GetComponentInChildren<Text>();
             if (text != null)
                 text.text = BuildTurretLabel(entry, purchasedLevel, nextPrefab, canPlace);
+            if (text != null && !unlocked)
+                text.text = $"{entry.displayName}\n마을 {i + 1}레벨에 해금";
         }
 
         SetStatus(turretEntries.Count == 0 ? "등록된 터렛 프리팹이 없습니다." : "터렛은 등록된 터렛 슬롯에 1렙 설치 후 2렙, 3렙으로 업그레이드됩니다.");
@@ -488,6 +500,13 @@ public class ShopPlaceholderUI : ShopSectionUI
             HandleOilPurchase(index);
         else if (IsTurretSection())
             HandleTurretPurchase(index);
+        else if (IsPlayerSection())
+        {
+            VillageManagement manager = VillageManagement.EnsureInstance();
+            if (manager.TryPurchasePlayer(index + 1))
+                SetStatus($"플레이어 {index + 1} 구매 완료");
+            QueueRefresh(true);
+        }
     }
 
     private void HandleOilPurchase(int index)
@@ -500,6 +519,11 @@ public class ShopPlaceholderUI : ShopSectionUI
             return;
 
         OilCatalogEntry entry = oilEntries[index];
+        if (!villageManagement.IsVillageLevelUnlocked(entry.requiredVillageLevel))
+        {
+            SetStatus($"마을 {entry.requiredVillageLevel}레벨에 해금됩니다.");
+            return;
+        }
         int purchasedLevel = GetOilTypeLevel(entry);
         int nextLevel = purchasedLevel + 1;
         Oxygen nextPrefab = GetOilPrefabForLevel(entry, nextLevel);
@@ -544,6 +568,11 @@ public class ShopPlaceholderUI : ShopSectionUI
             return;
 
         TurretCatalogEntry entry = turretEntries[index];
+        if (!villageManagement.IsVillageLevelUnlocked(index + 1))
+        {
+            SetStatus($"마을 {index + 1}레벨에 해금됩니다.");
+            return;
+        }
         int purchasedLevel = GetTurretSlotLevel(index);
         int nextLevel = purchasedLevel + 1;
         BaseTurret nextPrefab = GetTurretPrefabForLevel(entry, nextLevel);
@@ -601,6 +630,8 @@ public class ShopPlaceholderUI : ShopSectionUI
 
         villageManagement.ResourceChanged -= HandleResourceChanged;
         villageManagement.ResourceChanged += HandleResourceChanged;
+        villageManagement.SaveDataChanged -= HandleSaveDataChanged;
+        villageManagement.SaveDataChanged += HandleSaveDataChanged;
         lastKnownOxygen = villageManagement.CurrentOxygen;
     }
 
@@ -610,6 +641,7 @@ public class ShopPlaceholderUI : ShopSectionUI
             return;
 
         villageManagement.ResourceChanged -= HandleResourceChanged;
+        villageManagement.SaveDataChanged -= HandleSaveDataChanged;
     }
 
     private void QueueRefresh(bool immediate = false)
@@ -618,6 +650,30 @@ public class ShopPlaceholderUI : ShopSectionUI
 
         if (immediate && rootObject != null && rootObject.activeSelf && IsInteractiveSection())
             RefreshButtons();
+    }
+
+    private void HandleSaveDataChanged(VillageManagement.VillageSaveData _) => QueueRefresh(true);
+
+    private void RefreshPlayerButtons()
+    {
+        VillageManagement manager = VillageManagement.Instance;
+        for (int i = 0; i < buttons.Count; i++)
+        {
+            int playerType = i + 1;
+            VillageManagement.ArcadePlayerEntry entry = null;
+            if (manager != null) manager.TryGetArcadePlayer(playerType, out entry);
+            bool unlocked = manager != null && manager.IsVillageLevelUnlocked(playerType);
+            bool owned = manager != null && manager.HasPurchasedPlayer(playerType);
+            int price = entry != null ? Mathf.Max(0, entry.purchaseOxygenCost) : 0;
+            buttons[i].interactable = unlocked && !owned && entry != null && entry.available && manager.CurrentOxygen >= price;
+            Text label = buttons[i].GetComponentInChildren<Text>();
+            if (label != null)
+                label.text = !unlocked ? $"Player {playerType}\n마을 {playerType}레벨에 해금"
+                    : owned ? $"Player {playerType}\n구매 완료"
+                    : entry == null || !entry.available ? $"Player {playerType}\n등록 필요"
+                    : $"Player {playerType}\n구매 O2 {price}";
+        }
+        SetStatus("플레이어는 해당 마을 레벨에 해금되며, 구매 후 Play에서 선택할 수 있습니다.");
     }
 
     private bool TryInstallOilLevel1(OilCatalogEntry entry, Oxygen prefab)
@@ -700,13 +756,17 @@ public class ShopPlaceholderUI : ShopSectionUI
             return oilEntries.Count;
         if (IsTurretSection())
             return turretEntries.Count;
+        if (IsPlayerSection())
+            return 5;
         return 0;
     }
 
     private bool IsInteractiveSection()
     {
-        return IsOilSection() || IsTurretSection();
+        return IsOilSection() || IsTurretSection() || IsPlayerSection();
     }
+
+    private bool IsPlayerSection() => string.Equals(sectionTitle, "Player", StringComparison.OrdinalIgnoreCase);
 
     private bool IsOilSection()
     {
@@ -960,7 +1020,7 @@ public class ShopPlaceholderUI : ShopSectionUI
         if (slot == null)
             slot = targetObject.AddComponent<TurretImplementation>();
 
-        slot.ConfigureRuntimeSlot(BuildTurretShopSlotId(entryIndex), Vector2.zero);
+        slot.ConfigureRuntimeSlot(BuildTurretShopSlotId(entryIndex), Vector2.zero, entryIndex + 1);
 
         if (slot == null)
             return false;

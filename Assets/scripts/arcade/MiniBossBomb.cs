@@ -83,6 +83,11 @@ public class MiniBossBomb : MonoBehaviour
         targetPlayer = playerTarget;
     }
 
+    public void TriggerDestroyFromExternalHit()
+    {
+        TriggerDestroy();
+    }
+
     private void OnTriggerEnter2D(Collider2D other)
     {
         if (destroyTriggered || other == null)

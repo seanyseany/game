@@ -66,6 +66,13 @@ public class BombHitBox : MonoBehaviour
         if (other == null)
             return;
 
+        MiniBossBomb miniBossBomb = other.GetComponentInParent<MiniBossBomb>();
+        if (miniBossBomb != null)
+        {
+            miniBossBomb.TriggerDestroyFromExternalHit();
+            return;
+        }
+
         CholesterolBomb cholesterolBomb = other.GetComponent<CholesterolBomb>() ?? other.GetComponentInParent<CholesterolBomb>();
         if (cholesterolBomb != null)
         {

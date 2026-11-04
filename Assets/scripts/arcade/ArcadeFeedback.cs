@@ -24,6 +24,7 @@ public class ArcadeFeedback : MonoBehaviour
 
     [Header("Rage and mini boss feedback")]
     [SerializeField] private ArcadePopup rageModePrefab;
+    [SerializeField] private ArcadePopup speedModePrefab;
     [SerializeField] private ArcadePopup[] miniBossPositiveEmojiPrefabs;
     [SerializeField] private ArcadePopup miniBossNegativeEmojiPrefab;
     [SerializeField] private ArcadePopup miniBossDeathEmojiPrefab;
@@ -33,6 +34,7 @@ public class ArcadeFeedback : MonoBehaviour
 
     private Transform popupRoot;
     private ArcadePopup activePlayerEmoji;
+    private bool activePlayerEmojiIsDamage;
     private readonly Dictionary<int, ArcadePopup> activeMiniBossEmojis = new Dictionary<int, ArcadePopup>();
     private readonly List<Vector3> pendingKillPositions = new List<Vector3>(8);
     private KillPopupType nextKillPopup = KillPopupType.Good;
@@ -177,6 +179,13 @@ public class ArcadeFeedback : MonoBehaviour
         Spawn(rageModePrefab, new Vector3(2.4f, 0.5f, 0f));
     }
 
+    public static void ShowSpeedMode()
+    {
+        ArcadeFeedback feedback = Current;
+        if (feedback != null && feedback.isActiveAndEnabled)
+            feedback.Spawn(feedback.speedModePrefab, new Vector3(2.4f, 0.5f, 0f));
+    }
+
     private void QueueNegativeEmojiForActiveMiniBosses()
     {
         if (miniBossNegativeEmojiPrefab == null) return;
@@ -206,9 +215,9 @@ public class ArcadeFeedback : MonoBehaviour
         bool isPlayerFollowingEmoji = prefab.IsEmoji && followTarget == transform;
         if (isPlayerFollowingEmoji && activePlayerEmoji != null)
         {
-            // Expression zones can overlap or finish close together. Keep the
-            // current ordinary emoji; only life-loss feedback may replace it.
-            if (!isDamageEmoji)
+            // The latest Expression must show its own emoji, even while an
+            // earlier zone's emoji is visible. Life-loss feedback has priority.
+            if (!isDamageEmoji && activePlayerEmojiIsDamage)
                 return false;
 
             RemovePlayerEmoji();
@@ -230,7 +239,10 @@ public class ArcadeFeedback : MonoBehaviour
         ArcadePopup popup = Instantiate(prefab, position, Quaternion.identity, popupRoot);
         popup.Play(position, followTarget, sizeMultiplier);
         if (isPlayerFollowingEmoji)
+        {
             activePlayerEmoji = popup;
+            activePlayerEmojiIsDamage = isDamageEmoji;
+        }
         if (miniBossId != 0)
             activeMiniBossEmojis[miniBossId] = popup;
         return true;
@@ -246,6 +258,7 @@ public class ArcadeFeedback : MonoBehaviour
     {
         RemovePopup(activePlayerEmoji);
         activePlayerEmoji = null;
+        activePlayerEmojiIsDamage = false;
     }
 
     private static void RemovePopup(ArcadePopup popup)
@@ -262,6 +275,7 @@ public class ArcadeFeedback : MonoBehaviour
         nextKillPopup = KillPopupType.Good;
         nextKillPopupDeadline = double.NegativeInfinity;
         activePlayerEmoji = null;
+        activePlayerEmojiIsDamage = false;
         activeMiniBossEmojis.Clear();
         if (popupRoot != null)
         {

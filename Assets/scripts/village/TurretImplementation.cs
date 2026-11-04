@@ -28,6 +28,7 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
     }
 
     [SerializeField] private string slotId;
+    [SerializeField, Range(1, 9)] private int requiredVillageLevel = 1;
     [SerializeField] private BoundsRect placementArea = new BoundsRect();
     [SerializeField] private Vector2 placeLocalPosition;
     [SerializeField] private BaseTurret turretLevel1Prefab;
@@ -54,6 +55,7 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
     private Vector3 draggedTurretOriginalScale = Vector3.one;
 
     public string SlotId => GetResolvedSlotId();
+    public int RequiredVillageLevel => requiredVillageLevel;
     public BaseTurret CurrentTurret
     {
         get
@@ -71,10 +73,11 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
             return currentTurret != null ? Mathf.Max(0, currentTurret.Level) : 0;
         }
     }
-    public void ConfigureRuntimeSlot(string nextSlotId, Vector2 nextPlaceLocalPosition)
+    public void ConfigureRuntimeSlot(string nextSlotId, Vector2 nextPlaceLocalPosition, int unlockLevel = 1)
     {
         slotId = nextSlotId;
         placeLocalPosition = nextPlaceLocalPosition;
+        requiredVillageLevel = Mathf.Clamp(unlockLevel, 1, 9);
     }
 
     private void Awake()
@@ -108,7 +111,25 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
     private void Update()
     {
-        if ((pointerHeld || isDragging) && !IsPointerStillPressed())
+        if (pointerHeld || isDragging)
+            UpdatePointerHold(GetPointerWorldPosition(), IsPointerStillPressed());
+
+        if (isDragging)
+            UpdateDragPosition();
+        else if (pointerHeld)
+            holdShake.Tick(Time.unscaledTime - pointerDownStartedAt, HoldDurationSeconds);
+    }
+
+    private void UpdatePointerHold(Vector3 worldPoint, bool pressed)
+    {
+        if (pointerHeld && !isDragging &&
+            !VillagePointerCapture.ContainsPoint(transform, worldPoint + holdShake.WorldOffset))
+        {
+            ReleasePointerHold();
+            return;
+        }
+
+        if ((pointerHeld || isDragging) && !pressed)
         {
             if (tapPending && !isDragging)
                 TryOpenUiFromTap();
@@ -118,11 +139,6 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
         if (pointerHeld && !isDragging && Time.unscaledTime - pointerDownStartedAt >= HoldDurationSeconds)
             BeginDrag();
-
-        if (isDragging)
-            UpdateDragPosition();
-        else if (pointerHeld)
-            holdShake.Tick(Time.unscaledTime - pointerDownStartedAt);
     }
 
     private void OnMouseDown()
@@ -132,7 +148,6 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
     private void OnMouseUp()
     {
-        TryOpenUiFromTap();
         HandleColliderPointerUp();
     }
 
@@ -164,25 +179,14 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
     public void HandleColliderPointerUp()
     {
+        TryOpenUiFromTap();
         VillagePointerCapture.Release(this);
         ReleasePointerHold();
     }
 
     public void HandleColliderPointerUpAsButton()
     {
-        if (Tycoon.DeliveryRuntime.BlocksWorldInput)
-            return;
-
-        if (isDragging || Time.unscaledTime - lastDragFinishedAt < 0.1f)
-            return;
-
-        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
-            return;
-
-        if (currentTurret == null)
-            OpenList();
-        else
-            OpenTurretUI();
+        TryOpenUiFromTap();
     }
 
     private void TryOpenUiFromTap()
@@ -191,6 +195,10 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
             return;
 
         if (!tapPending)
+            return;
+
+        tapPending = false;
+        if (!VillagePointerCapture.ContainsPoint(transform, GetPointerWorldPosition() + holdShake.WorldOffset))
             return;
 
         if (isDragging || Time.unscaledTime - lastDragFinishedAt < 0.1f)
@@ -219,6 +227,9 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
         if (villageManagement == null)
             return;
 
+        if (!villageManagement.IsVillageLevelUnlocked(requiredVillageLevel))
+            return;
+
         if (!ownedAlready)
         {
             if (!villageManagement.TrySpendOxygen(turretPrefab.CurrentOxygenPrice))
@@ -233,6 +244,8 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
     public bool TryInstallFromShop(BaseTurret turretPrefab)
     {
+        if (!VillageManagement.EnsureInstance().IsVillageLevelUnlocked(requiredVillageLevel))
+            return false;
         EnsureCurrentTurretReference();
         if (currentTurret != null || turretPrefab == null)
             return false;
@@ -515,6 +528,7 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
         if (!pointerHeld && !isDragging)
             return;
 
+        VillagePointerCapture.Release(this);
         bool wasDragging = isDragging;
         pointerHeld = false;
         pointerDownStartedAt = -1f;

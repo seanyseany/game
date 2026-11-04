@@ -45,6 +45,8 @@ public sealed class SpeedPhasesTests
         settings.phasePrefabs = new[] { MakePhase("Speed phase A"), MakePhase("Speed phase B") };
         settings.phaseSpawnCount = 3;
         settings.speedMultiplier = 2.5f;
+        settings.entryHoldDuration = 0f;
+        settings.entryReturnDuration = 0f;
         manager.stage1SpecialPhasePrefabs = new[] { new SpecialPhaseEntry { prefab = wrapper, spawnChance = 1f } };
         Call("InitPools");
         manager.ResetState();
@@ -53,9 +55,54 @@ public sealed class SpeedPhasesTests
     [UnityTearDown]
     public IEnumerator TearDown()
     {
+        RageTransformFreezeController.EndActivePause();
         Random.state = randomState;
         if (data != null) Object.Destroy(data.gameObject);
         if (Application.isPlaying) yield return new ExitPlayMode();
+    }
+
+    [UnityTest]
+    public IEnumerator SpeedEntryShowsSpeedModeOnceAndRunScoreAccumulatesAtOneAndAHalfRate()
+    {
+        Player hero = MakePlayer(out _);
+        ArcadeFeedback feedback = hero.GetComponent<ArcadeFeedback>();
+        Assert.IsNotNull(typeof(ArcadeFeedback).GetField("speedModePrefab", Private).GetValue(feedback));
+        data.defaultStageSpeedMult = data.stageSpeedMult = 0.8f;
+        Begin(false);
+        AdvanceScore(4);
+        Assert.AreEqual(2, data.GetRunScore(), "Waiting for the start detector uses the ordinary score rate.");
+        var intro = LastObject.GetComponentInChildren<PhaseEndTrigger>();
+        manager.OnPhasePassed(intro);
+        Transform root = (Transform)typeof(ArcadeFeedback).GetField("popupRoot", Private).GetValue(feedback);
+        Assert.IsNotNull(root);
+        ArcadePopup[] popups = root.GetComponentsInChildren<ArcadePopup>();
+        Assert.AreEqual(1, popups.Length);
+        var configured = (ArcadePopup)typeof(ArcadeFeedback).GetField("speedModePrefab", Private).GetValue(feedback);
+        Assert.AreEqual(configured.name + "(Clone)", popups[0].name);
+        Assert.AreSame(configured.GetComponentInChildren<SpriteRenderer>().sprite,
+            popups[0].GetComponentInChildren<SpriteRenderer>().sprite);
+        Assert.IsTrue(popups[0].GetComponentInChildren<SpriteRenderer>().enabled);
+        manager.OnPhasePassed(intro);
+        Assert.AreEqual(1, root.GetComponentsInChildren<ArcadePopup>().Length);
+        RageTransformFreezeController.EndActivePause();
+        typeof(GameData).GetField("runScore", Private).SetValue(data, 0);
+        typeof(GameData).GetField("runScoreElapsed", Private).SetValue(data, 0f);
+        AdvanceScore(4);
+        Assert.AreEqual(3, data.GetRunScore(), "The accelerated window scores 1.5 times the ordinary rate.");
+        for (int i = 0; i < settings.phaseSpawnCount + 1; i++) PassLastPhase();
+        typeof(GameData).GetField("runScore", Private).SetValue(data, 0);
+        typeof(GameData).GetField("runScoreElapsed", Private).SetValue(data, 0f);
+        AdvanceScore(4);
+        Assert.AreEqual(2, data.GetRunScore(), "The normal rate returns after the outro detector.");
+        feedback.ResetFeedback();
+        manager.ResetState();
+        yield break;
+    }
+
+    private void AdvanceScore(int ticks)
+    {
+        for (int i = 0; i < ticks; i++)
+            typeof(GameData).GetMethod("UpdateRunScore", Private).Invoke(data, new object[] { 0.2f });
     }
 
     [UnityTest]
@@ -132,9 +179,93 @@ public sealed class SpeedPhasesTests
     }
 
     [UnityTest]
+    public IEnumerator TrainMovesBackDuringSpeedPhaseAndReturnsOnSlowdownAndPhaseEnd()
+    {
+        Train train = MakeTrain();
+        float initialX = train.transform.localPosition.x;
+        data.defaultStageSpeedMult = 0.8f;
+        settings.phaseSpawnCount = 1;
+        Begin(false);
+        yield return null;
+        Assert.AreEqual(initialX, train.transform.localPosition.x, "The intro must not push the train back before acceleration starts.");
+        manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
+        yield return AssertTrainReachesX(train, initialX - train.ragePushBackDistance * 0.5f);
+
+        var obstacleState = typeof(GameData).GetField("obstacleState", Private);
+        obstacleState.SetValue(data, GameData.ObstacleContactState.Stopped);
+        data.stageSpeedMult = 0f;
+        yield return AssertTrainReachesX(train, initialX);
+        obstacleState.SetValue(data, GameData.ObstacleContactState.Recovering);
+        data.stageSpeedMult = 0.79f;
+        yield return null;
+        Assert.AreEqual(initialX, train.transform.localPosition.x, 0.0001f, "Leaving the obstacle must not push back before speed recovers.");
+        data.stageSpeedMult = 0.8f;
+        yield return AssertTrainReachesX(train, initialX - train.ragePushBackDistance * 0.5f);
+
+        manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
+        yield return null;
+        Assert.AreEqual(initialX - train.ragePushBackDistance * 0.5f, train.transform.localPosition.x, 0.0001f,
+            "The train stays back through the accelerated outro.");
+        manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
+        yield return AssertTrainReachesX(train, initialX);
+        Assert.AreEqual(2f, train.transform.localPosition.y);
+        Assert.AreEqual(3f, train.transform.localPosition.z);
+        manager.ResetState();
+    }
+
+    [UnityTest]
+    public IEnumerator TrainSharesOnePushBackMovementAcrossRageAndSpeedPhases()
+    {
+        Train train = MakeTrain();
+        float initialX = train.transform.localPosition.x;
+        GameData.OnRageStart?.Invoke();
+        yield return AssertTrainReachesX(train, initialX - train.ragePushBackDistance);
+        var movementField = typeof(Train).GetField("rageMovementRoutine", Private);
+        object movement = movementField.GetValue(train);
+        Begin();
+        yield return null;
+        Assert.AreSame(movement, movementField.GetValue(train), "Starting a speed phase during rage must reuse the existing movement.");
+        GameData.OnRageEnd?.Invoke();
+        yield return AssertTrainReachesX(train, initialX - train.ragePushBackDistance * 0.5f);
+        manager.ResetState();
+        yield return AssertTrainReachesX(train, initialX);
+
+        Begin();
+        yield return AssertTrainReachesX(train, initialX - train.ragePushBackDistance * 0.5f);
+        float speedPhaseX = train.transform.localPosition.x;
+        GameData.OnRageStart?.Invoke();
+        Assert.AreEqual(speedPhaseX, train.transform.localPosition.x, "Changing distance must start from the visible position.");
+        yield return AssertTrainReachesX(train, initialX - train.ragePushBackDistance);
+        manager.ResetState();
+        yield return null;
+        Assert.AreEqual(initialX - train.ragePushBackDistance, train.transform.localPosition.x, 0.0001f,
+            "Ending a speed phase must preserve an ongoing rage movement.");
+        GameData.OnRageEnd?.Invoke();
+        yield return AssertTrainReachesX(train, initialX);
+    }
+
+    [UnityTest]
+    public IEnumerator TrainSpeedPhaseMovementResetsOnReinitAndDisableWithoutAccumulatingOffsets()
+    {
+        Train train = MakeTrain();
+        float initialX = train.transform.localPosition.x;
+        Begin();
+        yield return AssertTrainReachesX(train, initialX - train.ragePushBackDistance * 0.5f);
+        train.Reinit();
+        Assert.AreEqual(initialX, train.transform.localPosition.x);
+        yield return AssertTrainReachesX(train, initialX - train.ragePushBackDistance * 0.5f);
+        train.enabled = false;
+        Assert.AreEqual(initialX, train.transform.localPosition.x);
+        train.enabled = true;
+        yield return AssertTrainReachesX(train, initialX - train.ragePushBackDistance * 0.5f);
+        manager.ResetState();
+        yield return AssertTrainReachesX(train, initialX);
+    }
+
+    [UnityTest]
     public IEnumerator ColliderOnlyMoversCannotScrollAheadOfTheirPhaseAtHigherSpeed()
     {
-        var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Arcade/stage/stage 21.prefab");
+        var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Arcade/speed Stage/stage 21.prefab");
         Assert.IsNotNull(prefab);
         settings.phasePrefabs = new[] { prefab };
         Begin();
@@ -250,7 +381,7 @@ public sealed class SpeedPhasesTests
     }
 
     [UnityTest]
-    public IEnumerator PauseAndMachineGunHoldTheSequenceWhileRageCancelsItSafely()
+    public IEnumerator PauseAndMachineGunHoldTheSequenceWhileRageInterruptsItSafely()
     {
         Begin();
         var trigger = LastObject.GetComponentInChildren<PhaseEndTrigger>();
@@ -276,15 +407,268 @@ public sealed class SpeedPhasesTests
     }
 
     [UnityTest]
+    public IEnumerator RageAtEverySpeedSequenceStepReplaysFromIntroAfterExactlyTwoNormalPasses()
+    {
+        manager.rageStagePrefabs = new[] { MakePhase("Rage phase") };
+        manager.ragePhaseDuration = 0f;
+        // Cover the waiting intro, every random phase, and the spawned outro.
+        for (int step = 0; step <= settings.phaseSpawnCount + 1; step++)
+        {
+            manager.ResetState();
+            Begin(false);
+            for (int i = 0; i < step; i++) PassLastPhase();
+            var interruptedTrigger = LastObject.GetComponentInChildren<PhaseEndTrigger>();
+            StartTestRage();
+            Assert.IsFalse(manager.IsSpeedPhaseSequenceActive);
+            Assert.AreEqual(1f, manager.SpecialPhaseSpeedMultiplier);
+            Assert.AreEqual(1, manager.GetPhaseSpawnCount());
+            int count = Active.Count;
+            manager.OnPhasePassed(interruptedTrigger);
+            Assert.AreEqual(count, Active.Count, "Interrupted speed triggers cannot spawn rage or recovery phases.");
+
+            // Ending rage alone cannot skip the final rage phase's detector.
+            var rageTrigger = LastObject.GetComponentInChildren<PhaseEndTrigger>();
+            data.rageMode = false;
+            yield return null;
+            yield return null;
+            Assert.AreEqual(count, Active.Count);
+            yield return FinishTestRage();
+            Assert.AreEqual(2, manager.GetPhaseSpawnCount());
+            var firstNormal = LastObject.GetComponentInChildren<PhaseEndTrigger>();
+            manager.OnPhasePassed();
+            manager.OnPhasePassed(normal.GetComponentInChildren<PhaseEndTrigger>(true));
+            manager.OnPhasePassed(rageTrigger);
+            Assert.AreEqual(2, manager.GetPhaseSpawnCount(), "Only the current recovery normal may advance the replay.");
+            PassLastPhase();
+            Assert.AreSame(normal, Prefabs[LastObject]);
+            Assert.AreEqual(3, manager.GetPhaseSpawnCount());
+            count = Active.Count;
+            manager.OnPhasePassed(firstNormal);
+            Assert.AreEqual(count, Active.Count, "Duplicate recovery passes cannot skip the second normal.");
+            PassLastPhase();
+            Assert.AreSame(settings.startPhasePrefab, Prefabs[LastObject]);
+            Assert.IsTrue(manager.IsSpeedPhaseSequenceActive);
+            Assert.AreEqual(1f, manager.SpecialPhaseSpeedMultiplier);
+            Assert.AreEqual(3, manager.GetPhaseSpawnCount(), "Replaying the selected special must not consume another stage slot.");
+            PassLastPhase();
+            Assert.AreEqual(settings.speedMultiplier, manager.SpecialPhaseSpeedMultiplier);
+            for (int i = 0; i < settings.phaseSpawnCount; i++)
+            {
+                CollectionAssert.Contains(settings.phasePrefabs, Prefabs[LastObject]);
+                PassLastPhase();
+            }
+            Assert.AreSame(settings.endPhasePrefab, Prefabs[LastObject]);
+            Assert.IsTrue(manager.IsSpeedPhaseSequenceActive);
+            PassLastPhase();
+            Assert.IsFalse(manager.IsSpeedPhaseSequenceActive);
+            Assert.AreSame(normal, Prefabs[LastObject]);
+            Assert.AreEqual(4, manager.GetPhaseSpawnCount());
+        }
+    }
+
+    [UnityTest]
+    public IEnumerator BossThresholdOnOriginalSpecialOrEitherRecoveryNormalWaitsForReplayedOutro()
+    {
+        manager.speedUp1 = manager.speedUp2 = 0;
+        manager.rageStagePrefabs = new[] { MakePhase("Boss recovery rage phase") };
+        manager.ragePhaseDuration = 0f;
+        manager.bossResumeDelay = 0.01f;
+        var stage4 = MakePhase("Post-boss stage 4 phase");
+        manager.stage4PhasePrefabs = new[] { stage4 };
+        for (int threshold = 1; threshold <= 3; threshold++)
+        {
+            manager.ResetState();
+            typeof(GameData).GetField("bossStage3Triggered", Private).SetValue(data, false);
+            manager.speedUp3 = threshold;
+            Cycles[3] = new List<GameObject> { settings.gameObject };
+            Call("SpawnPhase");
+            StartTestRage();
+            yield return FinishTestRage();
+            PassLastPhase();
+            Assert.AreSame(normal, Prefabs[LastObject]);
+            Assert.AreEqual(3, manager.GetPhaseSpawnCount());
+            Assert.AreEqual(3, Call("GetCurrentPhaseStage"), "Recovery must not switch to stage 4 before the boss.");
+            PassLastPhase();
+            Assert.AreSame(settings.startPhasePrefab, Prefabs[LastObject]);
+            AssertBossNotStarted();
+            Assert.IsFalse(manager.IsStageLoopStopped(), "A deferred boss cannot pause the replay.");
+            for (int i = 0; i <= settings.phaseSpawnCount; i++)
+            {
+                PassLastPhase();
+                AssertBossNotStarted();
+            }
+            Assert.AreSame(settings.endPhasePrefab, Prefabs[LastObject]);
+            Assert.AreEqual(3, manager.GetPhaseSpawnCount());
+            int count = Active.Count;
+            var outro = LastObject.GetComponentInChildren<PhaseEndTrigger>();
+            PassLastPhase();
+            Assert.IsTrue((bool)typeof(StageManager).GetField("bossRunning", Private).GetValue(manager));
+            manager.OnPhasePassed(outro);
+            Assert.AreEqual(count, Active.Count, "The boss starts after the outro without spawning an extra normal.");
+            float deadline = Time.time + 2f;
+            while (!(bool)typeof(StageManager).GetField("postBossMixedPhaseUnlocked", Private).GetValue(manager) && Time.time < deadline)
+                yield return null;
+            Assert.AreEqual(104, Call("GetCurrentPhaseStage"));
+            CollectionAssert.Contains(new[] { normal, stage4 }, Prefabs[LastObject]);
+        }
+    }
+
+    [UnityTest]
+    public IEnumerator RepeatedRageDuringEitherNormalOrReplayedSpeedRestartsTheTwoNormalGap()
+    {
+        manager.rageStagePrefabs = new[] { MakePhase("Repeated rage phase") };
+        manager.ragePhaseDuration = 0f;
+        for (int repeatAt = 0; repeatAt < 3; repeatAt++)
+        {
+            manager.ResetState();
+            Begin();
+            StartTestRage();
+            yield return FinishTestRage();
+            if (repeatAt >= 1) PassLastPhase();
+            if (repeatAt == 2)
+            {
+                PassLastPhase();
+                PassLastPhase();
+            }
+            int count = manager.GetPhaseSpawnCount();
+            StartTestRage();
+            yield return FinishTestRage();
+            Assert.AreEqual(count + 1, manager.GetPhaseSpawnCount());
+            PassLastPhase();
+            Assert.AreSame(normal, Prefabs[LastObject]);
+            Assert.AreEqual(count + 2, manager.GetPhaseSpawnCount());
+            PassLastPhase();
+            Assert.AreSame(settings.startPhasePrefab, Prefabs[LastObject]);
+            Assert.AreEqual(count + 2, manager.GetPhaseSpawnCount());
+            for (int i = 0; i < settings.phaseSpawnCount + 2; i++) PassLastPhase();
+            Assert.IsFalse(manager.IsSpeedPhaseSequenceActive);
+            Assert.AreSame(normal, Prefabs[LastObject]);
+        }
+    }
+
+    [UnityTest]
+    public IEnumerator BossRequestsDuringRageAndReplayedIntroOrOutroCannotInterruptRecovery()
+    {
+        manager.rageStagePrefabs = new[] { MakePhase("Deferred boss rage phase") };
+        manager.ragePhaseDuration = 0f;
+        for (int requestAt = 0; requestAt < 3; requestAt++)
+        {
+            manager.ResetState();
+            Begin();
+            StartTestRage();
+            if (requestAt == 0) manager.TriggerBossEncounter(3);
+            yield return FinishTestRage();
+            PassLastPhase();
+            PassLastPhase();
+            if (requestAt == 1) manager.QueueBossEncounterAfterMachineGun(3);
+            AssertBossNotStarted();
+            for (int i = 0; i <= settings.phaseSpawnCount; i++) PassLastPhase();
+            Assert.AreSame(settings.endPhasePrefab, Prefabs[LastObject]);
+            if (requestAt == 2) manager.TriggerBossEncounter(3);
+            AssertBossNotStarted();
+            PassLastPhase();
+            Assert.IsTrue((bool)typeof(StageManager).GetField("bossRunning", Private).GetValue(manager));
+        }
+    }
+
+    [UnityTest]
+    public IEnumerator RecoveryRespectsGameplayAndMachineGunPausesAndCancellationClearsReplayAndBoss()
+    {
+        manager.rageStagePrefabs = new[] { MakePhase("Paused recovery rage phase") };
+        manager.ragePhaseDuration = 0f;
+        Begin();
+        StartTestRage();
+        yield return FinishTestRage();
+        manager.SetGameplayPause(true);
+        PassLastPhase();
+        Assert.AreEqual(2, manager.GetPhaseSpawnCount());
+        manager.SetGameplayPause(false);
+        Call("HandleMachineGunSequenceStart");
+        PassLastPhase();
+        Assert.AreEqual(2, manager.GetPhaseSpawnCount());
+        Call("HandleMachineGunSequenceEnd");
+        Assert.AreEqual(3, manager.GetPhaseSpawnCount());
+        PassLastPhase();
+        Assert.AreSame(settings.startPhasePrefab, Prefabs[LastObject]);
+
+        for (int cancellation = 0; cancellation < 4; cancellation++)
+        {
+            manager.ResetState();
+            data.gameOver = false;
+            Begin();
+            StartTestRage();
+            manager.TriggerBossEncounter(3);
+            yield return FinishTestRage();
+            var stale = LastObject.GetComponentInChildren<PhaseEndTrigger>();
+            if (cancellation == 0) manager.ResetState();
+            else if (cancellation == 1) manager.StopStageLoop();
+            else if (cancellation == 2) manager.enabled = false;
+            else
+            {
+                data.gameOver = true;
+                GameData.OnGameOver?.Invoke();
+            }
+            Assert.IsNull(typeof(StageManager).GetField("interruptedSpeedPhaseSettings", Private).GetValue(manager));
+            Assert.AreEqual(0, typeof(StageManager).GetField("deferredSpeedPhaseBossStage", Private).GetValue(manager));
+            Assert.IsFalse(manager.IsSpeedPhaseSequenceActive);
+            manager.OnPhasePassed(stale);
+            Assert.IsFalse(manager.IsSpeedPhaseSequenceActive);
+            AssertBossNotStarted();
+            manager.enabled = true;
+        }
+        data.gameOver = false;
+        manager.ResetState();
+    }
+
+    private void StartTestRage()
+    {
+        data.rageMode = true;
+        GameData.OnRageStart?.Invoke();
+    }
+
+    private IEnumerator FinishTestRage()
+    {
+        data.rageMode = false;
+        float deadline = Time.time + 2f;
+        while (typeof(StageManager).GetField("currentSpawnMode", Private).GetValue(manager).ToString() != "Cooldown" && Time.time < deadline)
+            yield return null;
+        Assert.AreEqual("Cooldown", typeof(StageManager).GetField("currentSpawnMode", Private).GetValue(manager).ToString());
+        Assert.Greater(Active.Count, 0, "The last rage phase must still be waiting for its detector.");
+        PassLastPhase();
+        deadline = Time.time + 2f;
+        while (Active.Count > 0 && Prefabs[LastObject] != normal && Time.time < deadline)
+            yield return null;
+        Assert.Greater(Active.Count, 0, "Recovery must retain its current phase.");
+        Assert.AreSame(normal, Prefabs[LastObject], "Rage completion must resume with the first recovery normal.");
+        AssertBossNotStarted();
+    }
+
+    private void PassLastPhase() => manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
+
+    private void AssertBossNotStarted()
+    {
+        Assert.IsFalse((bool)typeof(StageManager).GetField("bossRunning", Private).GetValue(manager));
+        Assert.IsFalse((bool)typeof(StageManager).GetField("bossTriggered", Private).GetValue(manager));
+    }
+
+    [UnityTest]
     public IEnumerator SpeedOverridesResolveEachPlayerAndLeaveRageWalkOverridesUnchanged()
     {
         Player hero = MakePlayer(out var overrides);
         Assert.IsNotNull(overrides.baseSpeed, "The player prefab must reference base_speed.");
         Assert.AreEqual(5, overrides.speedClips.Length);
+        Assert.IsNotNull(overrides.baseSpeedUp);
+        Assert.IsNotNull(overrides.baseSpeedDown);
+        Assert.AreEqual(5, overrides.speedUpClips.Length);
+        Assert.AreEqual(5, overrides.speedDownClips.Length);
         var controller = (AnimatorOverrideController)hero.anim.runtimeAnimatorController;
         for (int i = 0; i < 5; i++)
         {
             data.selectedPlayerType = i + 1;
+            overrides.ApplyOverrides(true);
+            Assert.AreEqual($"player{i + 1}_speed", controller[overrides.baseSpeed].name);
+            Assert.AreEqual($"player{i + 1}_speed_up", controller[overrides.baseSpeedUp].name);
+            Assert.AreEqual($"player{i + 1}_speed_down", controller[overrides.baseSpeedDown].name);
             overrides.speedClips[i] = overrides.jumpClips[i];
             overrides.ApplyOverrides(true);
             Assert.AreSame(overrides.jumpClips[i], controller[overrides.baseSpeed]);
@@ -292,12 +676,124 @@ public sealed class SpeedPhasesTests
             overrides.SetRageMode(true);
             Assert.AreSame(overrides.rageWalkClips[i], controller[overrides.baseWalk]);
             Assert.AreSame(overrides.baseSpeed, controller[overrides.baseSpeed], "There is no rage speed override.");
+            Assert.AreSame(overrides.baseSpeedUp, controller[overrides.baseSpeedUp]);
+            Assert.AreSame(overrides.baseSpeedDown, controller[overrides.baseSpeedDown]);
             overrides.SetRageMode(false);
             overrides.speedClips[i] = null;
             overrides.ApplyOverrides(true);
             Assert.AreSame(overrides.jumpClips[i], controller[overrides.baseSpeed], "An empty speed slot keeps the correct player's jump art.");
         }
         yield return null;
+    }
+
+    [UnityTest]
+    public IEnumerator SpeedAirVelocityThresholdsKeepAllThreePosesInJumpGameplayState()
+    {
+        Player hero = MakePlayer(out _);
+        typeof(Player).GetField("isGrounded", Private).SetValue(hero, false);
+        Begin();
+        Play(hero, "ChangeAnimation", "Jump");
+        float[] velocities = { 0f, 0.499f, 0.5f, 3f, 0.1f, -0.499f, -0.5f, -3f, 0f };
+        string[] poses = { "Speed", "Speed", "Speed Up", "Speed Up", "Speed", "Speed", "Speed Down", "Speed Down", "Speed" };
+        for (int i = 0; i < velocities.Length; i++)
+        {
+            hero.rb.linearVelocity = new Vector2(0f, velocities[i]);
+            RawPlay(hero, "SyncSpeedPhaseAirAnimation");
+            Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base " + poses[i]), $"Y velocity {velocities[i]}");
+            Assert.AreEqual("Jump", typeof(Player).GetField("currentAnim", Private).GetValue(hero));
+            Assert.IsTrue((bool)typeof(Player).GetMethod("IsAnimatorShowingLogicalState", Private).Invoke(hero, new object[] { "Jump" }));
+            Assert.IsFalse((bool)typeof(Player).GetMethod("IsFlyattackStateActive", Private).Invoke(hero, null));
+        }
+        yield break;
+    }
+
+    [UnityTest]
+    public IEnumerator SpeedAirReversalsHoldLevelForPointThreeSecondsInBothDirections()
+    {
+        Player hero = MakePlayer(out _);
+        typeof(Player).GetField("isGrounded", Private).SetValue(hero, false);
+        Begin();
+        Play(hero, "ChangeAnimation", "Jump");
+        foreach (float velocity in new[] { 2f, -2f })
+        {
+            hero.anim.Play(velocity > 0 ? "Base Speed Down" : "Base Speed Up", 0, 0.4f);
+            hero.anim.Update(0f);
+            hero.rb.linearVelocity = new Vector2(0f, velocity);
+            float started = Time.time;
+            RawPlay(hero, "SyncSpeedPhaseAirAnimation");
+            Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed"));
+            while (Time.time < started + 0.3f)
+            {
+                RawPlay(hero, "SyncSpeedPhaseAirAnimation");
+                Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed"), "The neutral bridge must last the full 0.3 seconds.");
+                yield return null;
+            }
+            RawPlay(hero, "SyncSpeedPhaseAirAnimation");
+            Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName(velocity > 0 ? "Base Speed Up" : "Base Speed Down"));
+        }
+    }
+
+    [UnityTest]
+    public IEnumerator SpeedAirSwitchesPreserveFramePositionForEveryCharacter()
+    {
+        Player hero = MakePlayer(out var overrides);
+        typeof(Player).GetField("isGrounded", Private).SetValue(hero, false);
+        Begin();
+        Play(hero, "ChangeAnimation", "Jump");
+        var controller = (AnimatorOverrideController)hero.anim.runtimeAnimatorController;
+        for (int i = 0; i < 5; i++)
+        {
+            data.selectedPlayerType = i + 1;
+            overrides.ApplyOverrides(true);
+            // Use populated, equal-length timelines even when the authored directional clips are still empty.
+            controller[overrides.baseSpeedUp] = overrides.speedClips[i];
+            controller[overrides.baseSpeedDown] = overrides.speedClips[i];
+            foreach (float phase in new[] { 0.17f, 0.53f, 0.91f, 2.53f })
+            {
+                hero.anim.Play("Base Speed", 0, phase);
+                hero.anim.Update(0f);
+                Sprite frame = hero.GetComponent<SpriteRenderer>().sprite;
+                foreach (float velocity in new[] { 2f, 0f, -2f, 0f })
+                {
+                    hero.rb.linearVelocity = new Vector2(0f, velocity);
+                    typeof(Player).GetMethod("SyncSpeedPhaseAirAnimation", Private).Invoke(hero, null);
+                    hero.anim.Update(0f);
+                    Assert.AreEqual(Mathf.Repeat(phase, 1f), Mathf.Repeat(hero.anim.GetCurrentAnimatorStateInfo(0).normalizedTime, 1f), 0.0001f);
+                    Assert.AreSame(frame, hero.GetComponent<SpriteRenderer>().sprite, "A pose switch must keep the matching sprite frame.");
+                }
+            }
+        }
+        yield break;
+    }
+
+    [UnityTest]
+    public IEnumerator SpeedAirBridgeCancelsWhenVelocityChangesOrAnotherActionStarts()
+    {
+        Player hero = MakePlayer(out _);
+        typeof(Player).GetField("isGrounded", Private).SetValue(hero, false);
+        Begin();
+        Play(hero, "ChangeAnimation", "Jump");
+        hero.anim.Play("Base Speed Up", 0, 0.4f);
+        hero.anim.Update(0f);
+        hero.rb.linearVelocity = new Vector2(0f, -2f);
+        RawPlay(hero, "SyncSpeedPhaseAirAnimation");
+        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed"));
+        hero.rb.linearVelocity = new Vector2(0f, 2f);
+        RawPlay(hero, "SyncSpeedPhaseAirAnimation");
+        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed Up"));
+        hero.rb.linearVelocity = new Vector2(0f, -2f);
+        RawPlay(hero, "SyncSpeedPhaseAirAnimation");
+        hero.anim.SetTrigger("Speed Up");
+        hero.anim.SetTrigger("Speed Down");
+        RawPlay(hero, "ChangeAnimation", "Flyattack");
+        yield return new WaitForSeconds(0.35f);
+        RawPlay(hero, "SyncSpeedPhaseAirAnimation");
+        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Flyattack"));
+        Assert.IsFalse((bool)typeof(Player).GetField("speedAirBridgeActive", Private).GetValue(hero));
+        Play(hero, "ChangeAnimation", "Jump");
+        manager.ResetState();
+        RawPlay(hero, "SyncSpeedPhaseAirAnimation");
+        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Jump"));
     }
 
     [UnityTest]
@@ -416,7 +912,9 @@ public sealed class SpeedPhasesTests
             Assert.AreEqual(Quaternion.identity, Effects[i].transform.rotation);
         }
         float nextSpawn = (float)typeof(StageManager).GetField("nextSpeedPhaseEffectSpawnTime", Private).GetValue(manager);
-        Assert.AreEqual(Time.time + hero.speedEffectSpawnInterval, nextSpawn, 0.0001f);
+        Assert.Greater(nextSpawn, Time.time);
+        Assert.LessOrEqual(nextSpawn, Time.time + hero.speedEffectSpawnInterval + 0.0001f,
+            "The configured interval is shortened when needed to keep neighboring strips connected.");
         Call("TrySpawnSpeedPhaseEffects");
         Assert.AreEqual(2, Effects.Count, "The player's configured spawn interval must be respected.");
 
@@ -465,12 +963,13 @@ public sealed class SpeedPhasesTests
     }
 
     [UnityTest]
-    public IEnumerator SpeedEffectsStopDuringObstacleSlowdownAndResumeAtTheCurrentNormalSpeed()
+    public IEnumerator SpeedEffectsKeepSpawningAndFadeDuringObstacleSlowdownThenBecomeVisibleAtNormalSpeed()
     {
         new GameObject("Effect pool").AddComponent<ObjectPool>();
         Player hero = MakePlayer(out _);
         hero.speedEffectSpawnWorldPositions = new[] { new Vector2(1000f, -3.2f), new Vector2(1000f, 4f) };
         settings.speedEffectPrefab = hero.speedEffectPrefab;
+        settings.speedEffectFadeDuration = 0f;
         data.defaultStageSpeedMult = 0.8f;
         Begin();
         Assert.AreEqual(2, Effects.Count);
@@ -489,11 +988,14 @@ public sealed class SpeedPhasesTests
                 data.stageSpeedMult = speed;
                 nextSpawnField.SetValue(manager, Time.time);
                 Assert.IsFalse(data.CanSpawnSpeedEffects(), "Compare with the multiplied normal speed, not a hardcoded speed of 1.");
+                int previousCount = Effects.Count;
                 Call("TrySpawnSpeedPhaseEffects");
-                Assert.AreEqual(2, Effects.Count, "Slowdown must stop new waves, including during recovery.");
+                Assert.AreEqual(previousCount + 2, Effects.Count, "Slowdown keeps spawning waves, including during recovery.");
                 foreach (speedEffect effect in Effects)
                 {
                     Assert.IsTrue(effect.gameObject.activeSelf);
+                    Assert.AreEqual(0f, effect.GetComponent<SpriteRenderer>().color.a,
+                        "Both existing and newly spawned effects must inherit the fade without flashing.");
                     float x = effect.transform.position.x;
                     typeof(speedEffect).GetMethod("Update", Private).Invoke(effect, null);
                     Assert.AreEqual(x - settings.speedEffectMoveSpeed * 2f * Time.deltaTime,
@@ -503,8 +1005,12 @@ public sealed class SpeedPhasesTests
         }
         data.stageSpeedMult = 0.8f;
         Assert.IsTrue(data.CanSpawnSpeedEffects());
+        int fadedCount = Effects.Count;
+        nextSpawnField.SetValue(manager, Time.time);
         Call("TrySpawnSpeedPhaseEffects");
-        Assert.AreEqual(4, Effects.Count, "The due wave resumes immediately at normal speed.");
+        Assert.AreEqual(fadedCount + 2, Effects.Count);
+        foreach (speedEffect effect in Effects)
+            Assert.AreEqual(1f, effect.GetComponent<SpriteRenderer>().color.a, "Normal speed restores visibility.");
         manager.ResetState();
 
         // The same gate applies to Player's rage speed effects, with rage's own normal-speed baseline.
@@ -522,6 +1028,69 @@ public sealed class SpeedPhasesTests
         data.gameOver = true;
         Assert.IsFalse(data.CanSpawnSpeedEffects());
         GameData.OnGameOver?.Invoke();
+        yield return null;
+    }
+
+    [UnityTest]
+    public IEnumerator SpeedEffectFadeIsGradualReversibleAndInheritedByNewWaves()
+    {
+        new GameObject("Effect pool").AddComponent<ObjectPool>();
+        Player hero = MakePlayer(out _);
+        hero.speedEffectSpawnWorldPositions = new[] { new Vector2(1000f, 4f) };
+        settings.speedEffectPrefab = hero.speedEffectPrefab;
+        Assert.AreEqual(1f, settings.speedEffectFadeDuration, "The inspector default is one second.");
+        settings.speedEffectFadeDuration = Time.deltaTime * 4f;
+        data.defaultStageSpeedMult = 0.8f;
+        Begin();
+        var first = Effects[0].GetComponent<SpriteRenderer>();
+        typeof(GameData).GetField("obstacleState", Private).SetValue(data, GameData.ObstacleContactState.Stopped);
+        data.stageSpeedMult = 0f;
+        typeof(StageManager).GetField("nextSpeedPhaseEffectSpawnTime", Private).SetValue(manager, Time.time);
+        Call("TrySpawnSpeedPhaseEffects");
+        Assert.AreEqual(0.75f, first.color.a, 0.0001f);
+        Assert.AreEqual(first.color.a, Effects[1].GetComponent<SpriteRenderer>().color.a, 0.0001f);
+        Call("TrySpawnSpeedPhaseEffects");
+        Assert.AreEqual(0.5f, first.color.a, 0.0001f, "Fade progresses even between spawn intervals.");
+        data.stageSpeedMult = 0.8f;
+        Call("TrySpawnSpeedPhaseEffects");
+        Assert.AreEqual(0.75f, first.color.a, 0.0001f, "Recovery reverses a fade already in progress.");
+        Call("TrySpawnSpeedPhaseEffects");
+        Assert.AreEqual(1f, first.color.a, 0.0001f);
+        manager.ResetState();
+        yield return null;
+    }
+
+    [UnityTest]
+    public IEnumerator SpeedPhaseEndFadesMovingEffectsAndPoolReuseRestoresTheirOriginalAlpha()
+    {
+        new GameObject("Effect pool").AddComponent<ObjectPool>();
+        Player hero = MakePlayer(out _);
+        hero.speedEffectSpawnWorldPositions = new[] { new Vector2(1000f, 4f) };
+        settings.speedEffectPrefab = hero.speedEffectPrefab;
+        settings.speedEffectFadeDuration = Time.deltaTime * 4f;
+        settings.phaseSpawnCount = 1;
+        Begin();
+        speedEffect effect = Effects[0];
+        var sprite = effect.GetComponent<SpriteRenderer>();
+        manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
+        manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
+        float x = effect.transform.position.x;
+        typeof(speedEffect).GetMethod("Update", Private).Invoke(effect, null);
+        Assert.Less(effect.transform.position.x, x, "Ending the phase must not stop movement.");
+        Assert.AreEqual(0.75f, sprite.color.a, 0.0001f);
+        Call("TrySpawnSpeedPhaseEffects");
+        Assert.AreEqual(1, Effects.Count, "The completed phase must stop emission.");
+
+        Begin();
+        Assert.AreEqual(0.75f, sprite.color.a, 0.0001f, "A new phase cannot restore the previous phase's fading effects.");
+        for (int i = 0; i < 3; i++)
+            typeof(speedEffect).GetMethod("Update", Private).Invoke(effect, null);
+        Assert.AreEqual(0f, sprite.color.a, 0.0001f);
+        manager.ResetState();
+        Begin();
+        foreach (speedEffect reused in Effects)
+            Assert.AreEqual(1f, reused.GetComponent<SpriteRenderer>().color.a, "Pool reuse resets opacity and pending fades.");
+        manager.ResetState();
         yield return null;
     }
 
@@ -616,6 +1185,7 @@ public sealed class SpeedPhasesTests
         Player hero = MakePlayer(out _);
         hero.speedEffectSpawnWorldPositions = new[] { new Vector2(1f, -3.2f), new Vector2(1f, 4f) };
         hero.speedEffectDespawnX = 0f;
+        hero.speedEffectSpawnInterval = 10f;
         settings.speedEffectPrefab = hero.speedEffectPrefab;
         settings.speedEffectMoveSpeed = 20f;
         data.defaultStageSpeedMult = 0.8f;
@@ -626,7 +1196,7 @@ public sealed class SpeedPhasesTests
         data.stageSpeedMult = 0f;
         typeof(StageManager).GetField("nextSpeedPhaseEffectSpawnTime", Private).SetValue(manager, Time.time);
         Call("TrySpawnSpeedPhaseEffects");
-        Assert.AreEqual(2, Effects.Count);
+        Assert.AreEqual(4, Effects.Count, "Slowdown continues emission while existing effects keep moving.");
         float deadline = Time.time + 0.5f;
         while (Effects.Count > 0 && Time.time < deadline) yield return null;
         Assert.AreEqual(0, Effects.Count, "Stage slowdown must not strand existing effects on screen.");
@@ -634,8 +1204,9 @@ public sealed class SpeedPhasesTests
         Assert.AreEqual(1f, data.GetStageSpeedMult(), 0.0001f, "During speed phases, an obstacle's zero-speed request is clamped to half of the normal speed of 2.");
 
         data.stageSpeedMult = 0.8f;
+        typeof(StageManager).GetField("nextSpeedPhaseEffectSpawnTime", Private).SetValue(manager, Time.time);
         Call("TrySpawnSpeedPhaseEffects");
-        Assert.AreEqual(2, Effects.Count, "Emission resumes only once normal stage speed returns.");
+        Assert.AreEqual(2, Effects.Count);
         manager.ResetState();
         settings.speedMultiplier = 1.25f;
         Begin();
@@ -675,6 +1246,92 @@ public sealed class SpeedPhasesTests
         manager.ResetState();
         Assert.AreEqual(0, Effects.Count);
         foreach (speedEffect effect in effects) Assert.IsFalse(effect.gameObject.activeSelf);
+    }
+
+    [UnityTest]
+    public IEnumerator RageSpeedEffectsFadeOnRageEndAndNewRageWavesStartVisible()
+    {
+        new GameObject("Effect pool").AddComponent<ObjectPool>();
+        Player hero = MakePlayer(out _);
+        hero.speedEffectSpawnWorldPositions = new[] { new Vector2(1000f, 4f) };
+        Assert.AreEqual(1f, hero.speedEffectFadeDuration);
+        hero.speedEffectFadeDuration = Time.deltaTime * 4f;
+        var rageEffects = (List<speedEffect>)typeof(Player).GetField("activeRageSpeedEffects", Private).GetValue(hero);
+        settings.speedEffectPrefab = hero.speedEffectPrefab;
+        Begin();
+        var phaseSprite = Effects[0].GetComponent<SpriteRenderer>();
+
+        foreach (bool pooled in new[] { true, false })
+        {
+            hero.useEffectPool = pooled;
+            hero.OnRageModeChanged(true);
+            Play(hero, "TrySpawnRageSpeedEffect");
+            Assert.AreEqual(1, rageEffects.Count);
+            speedEffect effect = rageEffects[0];
+            var sprite = effect.GetComponent<SpriteRenderer>();
+            hero.OnRageModeChanged(false);
+            Assert.IsTrue(effect.gameObject.activeSelf, "Rage end must fade existing effects instead of immediately returning them.");
+            Play(hero, "TrySpawnRageSpeedEffect");
+            Assert.AreEqual(1, rageEffects.Count, "Rage end stops emission.");
+            float x = effect.transform.position.x;
+            typeof(speedEffect).GetMethod("Update", Private).Invoke(effect, null);
+            Assert.Less(effect.transform.position.x, x);
+            Assert.AreEqual(0.75f, sprite.color.a, 0.0001f);
+            Assert.AreEqual(1f, phaseSprite.color.a, "Ending rage must not fade speed-phase effects.");
+
+            hero.OnRageModeChanged(true);
+            Play(hero, "TrySpawnRageSpeedEffect");
+            Assert.AreEqual(2, rageEffects.Count);
+            Assert.AreEqual(1f, rageEffects[1].GetComponent<SpriteRenderer>().color.a);
+            Assert.AreEqual(0.75f, sprite.color.a, 0.0001f, "Starting rage again must not restore older fading effects.");
+            for (int i = 0; i < 3; i++)
+                typeof(speedEffect).GetMethod("Update", Private).Invoke(effect, null);
+            Assert.AreEqual(0f, sprite.color.a, 0.0001f);
+            Play(hero, "StopRageSpeedEffect", true);
+            Assert.AreEqual(0, rageEffects.Count);
+        }
+        manager.ResetState();
+        yield return null;
+    }
+
+    [UnityTest]
+    public IEnumerator RageSpeedEffectsAreClearedOnResetDisableAndGameOver()
+    {
+        new GameObject("Effect pool").AddComponent<ObjectPool>();
+        Player hero = MakePlayer(out _);
+        hero.speedEffectSpawnWorldPositions = new[] { new Vector2(1000f, 4f) };
+        var rageEffects = (List<speedEffect>)typeof(Player).GetField("activeRageSpeedEffects", Private).GetValue(hero);
+        foreach (bool pooled in new[] { true, false })
+        {
+            hero.useEffectPool = pooled;
+            for (int cancellation = 0; cancellation < 3; cancellation++)
+            {
+                hero.OnRageModeChanged(true);
+                Play(hero, "TrySpawnRageSpeedEffect");
+                speedEffect effect = rageEffects[rageEffects.Count - 1];
+                hero.OnRageModeChanged(false);
+                if (cancellation == 0)
+                {
+                    hero.ResetPlayer();
+                    hero.StopAllCoroutines();
+                    hero.rb.simulated = false;
+                }
+                else if (cancellation == 1)
+                {
+                    hero.enabled = true;
+                    hero.enabled = false;
+                }
+                else
+                {
+                    data.gameOver = true;
+                    GameData.OnGameOver?.Invoke();
+                    yield return null; // Unpooled effects use Unity's deferred destruction.
+                }
+                Assert.IsTrue(effect == null || !effect.gameObject.activeSelf);
+                data.gameOver = false;
+            }
+        }
+        yield return null;
     }
 
     [UnityTest]
@@ -862,6 +1519,97 @@ public sealed class SpeedPhasesTests
     }
 
     [UnityTest]
+    public IEnumerator SonicBoomRequiresSpeedPoseAndNormalSpeedAndReusesItsInstanceAfterRecovery()
+    {
+        Player hero = MakePlayer(out _);
+        hero.sonicBoomPrefabs[0] = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Arcade/sonicBoom1.prefab");
+        hero.sonicBoomLocalOffset = new Vector3(0.5f, 0.2f, -0.1f);
+        data.defaultStageSpeedMult = 0.8f;
+        var effectField = typeof(Player).GetField("activeSonicBoom", Private);
+        Play(hero, "ChangeAnimation", "Jump");
+        RawPlay(hero, "SyncSonicBoom");
+        Assert.IsNull(effectField.GetValue(hero), "Ordinary jumps must not create a sonic boom.");
+
+        Begin();
+        RawPlay(hero, "SyncSpeedPhaseAirAnimation");
+        RawPlay(hero, "SyncSonicBoom");
+        Assert.IsNull(effectField.GetValue(hero), "The speed intro must finish before the boom appears.");
+        FinishSpeedTransition(hero);
+        RawPlay(hero, "SyncSonicBoom");
+        var effect = (GameObject)effectField.GetValue(hero);
+        Assert.IsNotNull(effect);
+        Assert.IsTrue(effect.activeSelf);
+        Assert.AreSame(hero.transform, effect.transform.parent);
+        Assert.AreEqual(hero.sonicBoomLocalOffset, effect.transform.localPosition);
+        hero.transform.position += Vector3.up;
+        Assert.That(Vector3.Distance(hero.transform.TransformPoint(hero.sonicBoomLocalOffset), effect.transform.position), Is.LessThan(0.0001f));
+
+        var obstacleState = typeof(GameData).GetField("obstacleState", Private);
+        foreach (var state in new[]
+        {
+            GameData.ObstacleContactState.Decelerating, GameData.ObstacleContactState.Pushing,
+            GameData.ObstacleContactState.Stopped, GameData.ObstacleContactState.Recovering
+        })
+        {
+            obstacleState.SetValue(data, state);
+            data.stageSpeedMult = 0.4f;
+            RawPlay(hero, "SyncSonicBoom");
+            Assert.IsFalse(effect.activeSelf, "Hide the existing boom throughout slowdown and recovery.");
+        }
+        data.stageSpeedMult = 0.8f;
+        RawPlay(hero, "SyncSonicBoom");
+        Assert.IsTrue(effect.activeSelf);
+        Assert.AreSame(effect, effectField.GetValue(hero));
+
+        RawPlay(hero, "ChangeAnimation", "Hurt");
+        RawPlay(hero, "SyncSonicBoom");
+        Assert.IsFalse(effect.activeSelf);
+        Play(hero, "ChangeAnimation", "Jump");
+        RawPlay(hero, "SyncSonicBoom");
+        Assert.IsTrue(effect.activeSelf);
+        hero.enabled = true;
+        hero.enabled = false;
+        Assert.IsFalse(effect.activeSelf, "Disabling the player must immediately hide its boom.");
+        manager.ResetState();
+        yield return null;
+    }
+
+    [UnityTest]
+    public IEnumerator SonicBoomSelectsEachCharacterPrefabAndClearsOnMissingPrefabAndPhaseEnd()
+    {
+        Player hero = MakePlayer(out var overrides);
+        var first = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Arcade/sonicBoom1.prefab");
+        var second = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Arcade/sonicBoom2.prefab");
+        Assert.IsNotNull(first);
+        Assert.IsNotNull(second);
+        hero.sonicBoomPrefabs = new[] { first, second, first, second, first };
+        var effectField = typeof(Player).GetField("activeSonicBoom", Private);
+        Begin();
+        for (int type = 1; type <= 5; type++)
+        {
+            data.selectedPlayerType = type;
+            overrides.ApplyOverrides(true);
+            Play(hero, "ChangeAnimation", "Jump");
+            RawPlay(hero, "SyncSonicBoom");
+            var effect = (GameObject)effectField.GetValue(hero);
+            Assert.IsNotNull(effect);
+            Assert.IsTrue(effect.activeSelf);
+            Assert.AreEqual(hero.sonicBoomPrefabs[type - 1].name + "(Clone)", effect.name);
+        }
+        var lastEffect = (GameObject)effectField.GetValue(hero);
+        hero.sonicBoomPrefabs[4] = null;
+        RawPlay(hero, "SyncSonicBoom");
+        Assert.IsFalse(lastEffect.activeSelf);
+        hero.sonicBoomPrefabs[4] = first;
+        RawPlay(hero, "SyncSonicBoom");
+        Assert.IsTrue(lastEffect.activeSelf);
+        manager.ResetState();
+        RawPlay(hero, "SyncSonicBoom");
+        Assert.IsFalse(lastEffect.activeSelf);
+        yield return null;
+    }
+
+    [UnityTest]
     public IEnumerator OnePhaseAndRepeatedPoolActivationResetTheirCountersAndSpeed()
     {
         settings.phaseSpawnCount = 1;
@@ -882,6 +1630,312 @@ public sealed class SpeedPhasesTests
         }
         yield return null;
     }
+
+    [UnityTest]
+    public IEnumerator Stage2SpeedSequenceAndBackgroundTransitionCannotSkipStage3BeforeBoss()
+    {
+        manager.speedUp1 = 3;
+        manager.speedUp2 = 14;
+        manager.speedUp3 = 31;
+        settings.phaseSpawnCount = 6;
+        var stage3 = MakePhase("Stage 3 normal phase");
+        manager.stage3PhasePrefabs = new[] { stage3 };
+        manager.stage2SpecialPhasePrefabs = new[]
+        {
+            new SpecialPhaseEntry { prefab = settings.gameObject, spawnChance = 1f }
+        };
+        manager.backgroundPrefab = new GameObject("First background");
+        var second = new GameObject("Second background");
+        manager.backgroundPrefabs = new[] { second };
+        manager.preBackgroundPrefab = new GameObject("Background transition template");
+        manager.preBackgroundPrefab.SetActive(false);
+        manager.preBackgroundPoint = new GameObject("Transition spawn").transform;
+        manager.preBackgroundPoint.position = Vector3.right * 10f;
+        manager.preBackgroundPoint2 = new GameObject("Transition destination").transform;
+        manager.preBackgroundPoint2.position = Vector3.left * 10f;
+        manager.ResetState();
+        typeof(StageManager).GetField("phaseSpawnCount", Private).SetValue(manager, 13);
+        typeof(StageManager).GetField("stage1BackgroundRollCompleted", Private).SetValue(manager, true);
+        typeof(StageManager).GetField("stage1BackgroundChangeTriggered", Private).SetValue(manager, true);
+        typeof(StageManager).GetField("stage3BackgroundChangeAt", Private).SetValue(manager, 1);
+        Cycles[2] = new List<GameObject> { settings.gameObject };
+
+        Call("SpawnPhase");
+        Assert.IsTrue(manager.IsSpeedPhaseSequenceActive);
+        Assert.AreEqual(14, manager.GetPhaseSpawnCount(), "The complete speed sequence occupies one stage slot.");
+        for (int i = 0; i < 8; i++)
+            manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
+        Assert.IsFalse(manager.IsSpeedPhaseSequenceActive);
+        Assert.AreSame(stage3, Prefabs[LastObject]);
+        Assert.AreEqual(15, manager.GetPhaseSpawnCount());
+        Assert.AreEqual(3, Call("GetCurrentPhaseStage"));
+
+        for (int i = 0; i < 4; i++)
+        {
+            manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
+            Assert.AreSame(stage3, Prefabs[LastObject]);
+            Assert.AreEqual(16 + i, manager.GetPhaseSpawnCount());
+            Assert.AreEqual(3, Call("GetCurrentPhaseStage"));
+            Assert.IsFalse((bool)typeof(StageManager).GetField("bossTriggered", Private).GetValue(manager));
+        }
+        for (int frame = 0; frame < 5 && !second.activeSelf; frame++)
+            yield return null;
+        GameObject effect = (GameObject)typeof(StageManager).GetField("preBackgroundInstance", Private).GetValue(manager);
+        Assert.IsNotNull(effect);
+        Assert.AreEqual(3, Call("GetCurrentPhaseStage"));
+        effect.transform.position = Vector3.left * 11f;
+        for (int frame = 0; frame < 5 && effect != null; frame++)
+            yield return null;
+        Assert.IsTrue(effect == null);
+        Assert.AreEqual(3, Call("GetCurrentPhaseStage"));
+
+        while (manager.GetPhaseSpawnCount() < manager.speedUp3)
+        {
+            Assert.IsFalse((bool)typeof(StageManager).GetField("bossTriggered", Private).GetValue(manager));
+            manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
+            Assert.AreSame(stage3, Prefabs[LastObject]);
+        }
+        Assert.IsTrue((bool)typeof(StageManager).GetField("bossTriggered", Private).GetValue(manager));
+        Assert.IsFalse((bool)typeof(StageManager).GetField("bossRunning", Private).GetValue(manager),
+            "The last stage 3 phase must pass before the boss begins.");
+    }
+
+    [UnityTest]
+    public IEnumerator SpeedTriggerImmediatelyAcceleratesWithoutPausingPhysicsOrShakingCamera()
+    {
+        Player hero = MakePlayer(out _);
+        hero.transform.position = new Vector3(3f, 8f, -5f);
+        hero.rb.position = hero.transform.position;
+        hero.rb.simulated = true;
+        hero.rb.linearVelocity = Vector2.down * 4f;
+        float gravity = hero.rb.gravityScale;
+        RigidbodyConstraints2D constraints = hero.rb.constraints;
+        var cameraObject = new GameObject("Speed trigger camera", typeof(Camera));
+        cameraObject.tag = "MainCamera";
+        var shake = cameraObject.AddComponent<CameraShakeManager>();
+        var scrolling = new GameObject("Scrolling world", typeof(Mover));
+        Begin(false);
+        hero.enabled = true;
+        manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
+
+        Assert.IsTrue(manager.IsSpeedPhaseSpeedActive);
+        Assert.AreEqual(settings.speedMultiplier, manager.SpecialPhaseSpeedMultiplier);
+        Assert.IsFalse(RageTransformFreezeController.IsGameplayPauseActive);
+        Assert.IsFalse(manager.IsGameplayTransformPaused);
+        Assert.IsTrue(hero.rb.simulated);
+        Assert.AreEqual(gravity, hero.rb.gravityScale);
+        Assert.AreEqual(constraints, hero.rb.constraints);
+        Assert.IsTrue(scrolling.GetComponent<Mover>().enabled);
+        Assert.AreEqual(0, ((IList)typeof(CameraShakeManager).GetField("activeShakes", Private).GetValue(shake)).Count);
+        RawPlay(hero, "SyncSpeedPhaseAirAnimation");
+        Assert.Greater(hero.anim.speed, 0f);
+        Assert.IsFalse(RageTransformFreezeController.IsGameplayPauseActive,
+            "Speed Start presentation must not pause gameplay or wait for animation completion.");
+        hero.enabled = false;
+        float initialY = hero.rb.position.y;
+        float initialWorldX = scrolling.transform.position.x;
+        float until = Time.time + 0.08f;
+        while (Time.time < until)
+            yield return null;
+        Assert.Less(hero.rb.position.y, initialY, "Player physics continue immediately after the speed trigger.");
+        Assert.Less(scrolling.transform.position.x, initialWorldX);
+        manager.ResetState();
+    }
+
+    [UnityTest]
+    public IEnumerator EntrySpeedAppliesImmediatelyHoldsThenReturnsToTheNormalSpeedPhaseMultiplier()
+    {
+        settings.speedMultiplier = 1.6f;
+        settings.entrySpeedMultiplier = 1.7f;
+        settings.entryHoldDuration = settings.entryReturnDuration = 0.5f;
+        Begin(false);
+        Assert.AreEqual(1f, manager.SpecialPhaseSpeedMultiplier);
+        float startedAt = Time.time;
+        PassLastPhase();
+        Assert.AreEqual(1.7f, manager.SpecialPhaseSpeedMultiplier);
+        Assert.AreEqual(0.8f * 1.7f, data.GetStageSpeedMult(), 0.00001f);
+        Assert.IsFalse(RageTransformFreezeController.IsGameplayPauseActive);
+        bool sawReturn = false;
+        while (Time.time < startedAt + 1.1f)
+        {
+            float elapsed = Time.time - startedAt;
+            float multiplier = manager.SpecialPhaseSpeedMultiplier;
+            if (elapsed < 0.4f)
+                Assert.AreEqual(1.7f, multiplier, 0.00001f, "The entry speed must hold without ramping up.");
+            if (multiplier < 1.7f && multiplier > 1.6f)
+                sawReturn = true;
+            yield return null;
+        }
+        Assert.IsTrue(sawReturn, "Return to the sustained speed must be gradual.");
+        Assert.AreEqual(1.6f, manager.SpecialPhaseSpeedMultiplier, 0.00001f);
+        Assert.AreEqual(0.8f * 1.6f, data.GetStageSpeedMult(), 0.00001f);
+        manager.ResetState();
+    }
+
+    [UnityTest]
+    public IEnumerator EntrySpeedUsesIndependentInspectorValuesAndPausePreservesItsProgress()
+    {
+        var inspector = new SerializedObject(settings);
+        inspector.FindProperty("speedMultiplier").floatValue = 1.4f;
+        inspector.FindProperty("entrySpeedMultiplier").floatValue = 2.2f;
+        inspector.FindProperty("entryHoldDuration").floatValue = 0.2f;
+        inspector.FindProperty("entryReturnDuration").floatValue = 0.4f;
+        inspector.ApplyModifiedPropertiesWithoutUndo();
+        Begin();
+        Assert.AreEqual(2.2f, manager.SpecialPhaseSpeedMultiplier);
+        AdvanceEntrySpeed(0.2f);
+        Assert.AreEqual(2.2f, manager.SpecialPhaseSpeedMultiplier);
+        manager.SetGameplayPause(true);
+        AdvanceEntrySpeed(10f);
+        Assert.AreEqual(2.2f, manager.SpecialPhaseSpeedMultiplier);
+        manager.SetGameplayPause(false);
+        AdvanceEntrySpeed(0.2f);
+        Assert.AreEqual(1.8f, manager.SpecialPhaseSpeedMultiplier, 0.00001f);
+        PassLastPhase();
+        Assert.AreEqual(1.8f, manager.SpecialPhaseSpeedMultiplier, 0.00001f,
+            "Spawning the next speed phase must not restart the entry burst.");
+        AdvanceEntrySpeed(0.2f);
+        Assert.AreEqual(1.4f, manager.SpecialPhaseSpeedMultiplier, 0.00001f);
+        manager.ResetState();
+        yield break;
+    }
+
+    [UnityTest]
+    public IEnumerator EntrySpeedRestartsAtTheDetectorAfterResetOrDisable()
+    {
+        settings.speedMultiplier = 1.6f;
+        settings.entrySpeedMultiplier = 1.7f;
+        settings.entryHoldDuration = settings.entryReturnDuration = 0.5f;
+        for (int run = 0; run < 2; run++)
+        {
+            Begin(false);
+            AdvanceEntrySpeed(10f);
+            Assert.AreEqual(1f, manager.SpecialPhaseSpeedMultiplier);
+            PassLastPhase();
+            Assert.AreEqual(1.7f, manager.SpecialPhaseSpeedMultiplier);
+            AdvanceEntrySpeed(0.75f);
+            Assert.AreEqual(1.65f, manager.SpecialPhaseSpeedMultiplier, 0.00001f);
+            if (run == 0)
+                manager.ResetState();
+            else
+            {
+                manager.enabled = false;
+                manager.enabled = true;
+            }
+            Assert.AreEqual(1f, manager.SpecialPhaseSpeedMultiplier);
+            manager.ResetState();
+        }
+        yield break;
+    }
+
+    [UnityTest]
+    public IEnumerator ZeroEntryDurationsSkipTheHoldOrReturnAsConfigured()
+    {
+        settings.speedMultiplier = 1.6f;
+        settings.entrySpeedMultiplier = 1.7f;
+        for (int mode = 0; mode < 3; mode++)
+        {
+            settings.entryHoldDuration = mode == 0 ? 0.5f : 0f;
+            settings.entryReturnDuration = mode == 1 ? 0.5f : 0f;
+            Begin();
+            Assert.AreEqual(mode == 2 ? 1.6f : 1.7f, manager.SpecialPhaseSpeedMultiplier);
+            AdvanceEntrySpeed(0.5f);
+            Assert.AreEqual(1.6f, manager.SpecialPhaseSpeedMultiplier, 0.00001f);
+            manager.ResetState();
+        }
+        yield break;
+    }
+
+    [UnityTest]
+    public IEnumerator SpeedEffectsStayVisibleAboveSustainedSpeedAndFadeOnlyBelowItDuringEntry()
+    {
+        new GameObject("Entry effect pool").AddComponent<ObjectPool>();
+        Player hero = MakePlayer(out _);
+        hero.speedEffectSpawnWorldPositions = new[] { new Vector2(1000f, 4f) };
+        settings.speedEffectPrefab = hero.speedEffectPrefab;
+        settings.speedEffectFadeDuration = 0f;
+        settings.speedMultiplier = 1.6f;
+        settings.entrySpeedMultiplier = 3f;
+        settings.entryHoldDuration = 10f;
+        settings.entryReturnDuration = 1f;
+        data.defaultStageSpeedMult = data.stageSpeedMult = 0.8f;
+        Begin();
+        Assert.IsTrue(data.CanSpawnSpeedEffects());
+        Assert.AreEqual(0.8f * 3f, data.GetStageSpeedMult(), 0.00001f);
+        Assert.AreEqual(1, Effects.Count);
+        typeof(GameData).GetField("obstacleState", Private).SetValue(data, GameData.ObstacleContactState.Recovering);
+        foreach (float baseSpeed in new[] { 0.8f, 0.5f, 0.8f * 1.6f / 3f })
+        {
+            data.stageSpeedMult = baseSpeed;
+            Assert.IsTrue(data.CanSpawnSpeedEffects(), "At or above the sustained speed, effects remain visible.");
+            Call("TrySpawnSpeedPhaseEffects");
+            foreach (speedEffect effect in Effects)
+                Assert.AreEqual(1f, effect.GetComponent<SpriteRenderer>().color.a);
+        }
+        data.stageSpeedMult = 0.4f;
+        Assert.IsFalse(data.CanSpawnSpeedEffects());
+        Call("TrySpawnSpeedPhaseEffects");
+        foreach (speedEffect effect in Effects)
+            Assert.AreEqual(0f, effect.GetComponent<SpriteRenderer>().color.a);
+        data.stageSpeedMult = 0.8f;
+        Assert.IsTrue(data.CanSpawnSpeedEffects());
+        Call("TrySpawnSpeedPhaseEffects");
+        foreach (speedEffect effect in Effects)
+            Assert.AreEqual(1f, effect.GetComponent<SpriteRenderer>().color.a, "Faster speed also reverses a prior fade.");
+        AdvanceEntrySpeed(11f);
+        Assert.AreEqual(1.6f, manager.SpecialPhaseSpeedMultiplier);
+        Assert.IsTrue(data.CanSpawnSpeedEffects());
+        manager.ResetState();
+        yield break;
+    }
+
+    [UnityTest]
+    public IEnumerator SpeedEffectWavesStayConnectedThroughTheEntryBurstAndReturn()
+    {
+        new GameObject("Continuous effect pool").AddComponent<ObjectPool>();
+        Player hero = MakePlayer(out _);
+        hero.speedEffectSpawnWorldPositions = new[] { new Vector2(27f, 4f) };
+        hero.speedEffectDespawnX = -200f;
+        hero.speedEffectSpawnInterval = 0.6f;
+        settings.speedEffectPrefab = hero.speedEffectPrefab;
+        settings.speedEffectMoveSpeed = 18f;
+        settings.speedMultiplier = 1.6f;
+        settings.entrySpeedMultiplier = 5f;
+        settings.entryHoldDuration = 0.35f;
+        settings.entryReturnDuration = 0.5f;
+        Begin();
+        float nextSpawn = (float)typeof(StageManager).GetField("nextSpeedPhaseEffectSpawnTime", Private).GetValue(manager);
+        Assert.Less(nextSpawn - Time.time, hero.speedEffectSpawnInterval,
+            "The burst must emit the next wave sooner instead of letting the first one escape.");
+        bool sawMultipleWaves = false;
+        float deadline = Time.time + 1.3f;
+        while (Time.time < deadline)
+        {
+            yield return null;
+            for (int i = 1; i < Effects.Count; i++)
+            {
+                sawMultipleWaves = true;
+                SpriteRenderer previous = Effects[i - 1].GetComponent<SpriteRenderer>();
+                SpriteRenderer next = Effects[i].GetComponent<SpriteRenderer>();
+                Assert.LessOrEqual(next.bounds.min.x, previous.bounds.max.x + 0.001f,
+                    "The new strip must overlap the previous strip's tail throughout the speed transition.");
+            }
+        }
+        Assert.IsTrue(sawMultipleWaves);
+        Assert.GreaterOrEqual(Effects.Count, 3);
+        speedEffect oldest = Effects[0];
+        speedEffect newest = Effects[Effects.Count - 1];
+        float oldX = oldest.transform.position.x;
+        float newX = newest.transform.position.x;
+        typeof(speedEffect).GetMethod("Update", Private).Invoke(oldest, null);
+        typeof(speedEffect).GetMethod("Update", Private).Invoke(newest, null);
+        Assert.AreEqual(oldX - oldest.transform.position.x, newX - newest.transform.position.x, 0.0001f,
+            "Old and new strips must travel at the same current speed after the entry burst.");
+        manager.ResetState();
+    }
+
+    private void AdvanceEntrySpeed(float seconds) => typeof(StageManager)
+        .GetMethod("UpdateSpeedPhaseEntrySpeed", Private).Invoke(manager, new object[] { seconds });
 
     private Player MakePlayer(out PlayerAnimOverride overrides)
     {
@@ -923,6 +1977,25 @@ public sealed class SpeedPhasesTests
             hero.anim.Update(Mathf.Max(0.02f, state.length) + 0.02f);
             RawPlay(hero, "UpdateSpeedPhasePresentation");
         }
+    }
+
+    private static Train MakeTrain()
+    {
+        var go = new GameObject("Speed phase train");
+        go.transform.localPosition = new Vector3(6f, 2f, 3f);
+        Train train = go.AddComponent<Train>();
+        train.ragePushBackDuration = train.rageReturnDuration = 0.05f;
+        train.rageRandomMinOffset = train.rageRandomMaxOffset = 0f;
+        train.normalRandomMinOffset = train.normalRandomMaxOffset = 0f;
+        return train;
+    }
+
+    private static IEnumerator AssertTrainReachesX(Train train, float targetX)
+    {
+        float deadline = Time.time + 1f;
+        while (Mathf.Abs(train.transform.localPosition.x - targetX) > 0.0001f && Time.time < deadline)
+            yield return null;
+        Assert.AreEqual(targetX, train.transform.localPosition.x, 0.0001f);
     }
 
     private void Begin(bool activateSpeed = true)

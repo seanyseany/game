@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Serialization;
 
@@ -20,7 +21,8 @@ public class Train : MonoBehaviour, IReinitializeOnEnable
     public float normalRandomMaxOffset = 0.5f;
     [Min(0.01f)] public float normalRandomMoveDuration = 1f;
 
-    [Header("Rage Movement")]
+    [Header("Rage / Speed Phase Movement")]
+    [Tooltip("분노 시 후퇴 거리입니다. 정상 속도의 스피드 구간에서는 이 거리와 랜덤 이동 오프셋의 절반을 사용하며, 이동 시간은 동일합니다.")]
     [Min(0f)] public float ragePushBackDistance = 4f;
     [Min(0f)] public float ragePushBackDuration = 0.5f;
     [Tooltip("뒤로 밀린 위치를 기준으로 랜덤 이동할 X 오프셋 범위입니다.")]
@@ -30,6 +32,12 @@ public class Train : MonoBehaviour, IReinitializeOnEnable
     [FormerlySerializedAs("rageRecoveryDuration")]
     [Min(0.01f)] public float rageRandomMoveDuration = 1f;
     [Min(0f)] public float rageReturnDuration = 1f;
+
+    [Header("O2 Obstacle Hit Flash")]
+    [Tooltip("산소를 깎는 장애물 충돌 시 빨간색 강도. 0 = 원래 색, 1 = 완전한 빨간색. 원래 투명도는 유지합니다.")]
+    [Range(0f, 1f)] public float oxygenHitRedIntensity = 1f;
+    [Tooltip("산소를 깎는 장애물 충돌 시 빨간색을 유지하는 시간(초)입니다.")]
+    [Min(0f)] public float oxygenHitFlashDuration = 0.2f;
 
     [Header("Player Gate Transfer")]
     [Tooltip("머신건 탑승 시 플레이어가 빨려 들어갈 게이트 위치. 비어 있으면 GateHealth 게이트 위치를 사용합니다.")]
@@ -46,6 +54,9 @@ public class Train : MonoBehaviour, IReinitializeOnEnable
     private GameObject machineGunExtraBodyInstance;
     private Coroutine routine;
     private Coroutine rageMovementRoutine;
+    private bool rageMovementRequested;
+    private bool pushBackMovementActive;
+    private float pushBackMovementScale;
     private float machineGunBodyOffsetX;
     private float rageBodyOffsetX;
     private float normalBodyOffsetX;
@@ -57,6 +68,8 @@ public class Train : MonoBehaviour, IReinitializeOnEnable
     private bool initialTrainLocalPositionCaptured;
     private MechaLeg[] mechaLegs = System.Array.Empty<MechaLeg>();
     private bool machineGunSequenceNotified;
+    private readonly Dictionary<SpriteRenderer, Color> oxygenHitColors = new Dictionary<SpriteRenderer, Color>();
+    private float oxygenHitFlashUntil = -1f;
 
     private void Awake()
     {
@@ -77,6 +90,7 @@ public class Train : MonoBehaviour, IReinitializeOnEnable
 
     private void OnDisable()
     {
+        RestoreOxygenHitColors();
         GameData.OnMachineGunTrigger -= HandleMachineGunTrigger;
         GameData.OnRageStart -= HandleRageStart;
         GameData.OnRageEnd -= HandleRageEnd;
@@ -110,6 +124,7 @@ public class Train : MonoBehaviour, IReinitializeOnEnable
 
     public void Reinit()
     {
+        RestoreOxygenHitColors();
         ResetRageMovement();
 
         if (routine != null)
@@ -140,8 +155,55 @@ public class Train : MonoBehaviour, IReinitializeOnEnable
             machineGunExtraBodyInstance.transform.localPosition = ToExtraBodyLocalVector3(startLocalPos);
     }
 
+    public void FlashOxygenLoss()
+    {
+        if (oxygenHitFlashDuration <= 0f || oxygenHitRedIntensity <= 0f)
+        {
+            RestoreOxygenHitColors();
+            return;
+        }
+        foreach (SpriteRenderer sprite in GetComponentsInChildren<SpriteRenderer>(true))
+        {
+            if (sprite.GetComponentInParent<Player>() != null)
+                continue;
+            if (!oxygenHitColors.ContainsKey(sprite))
+                oxygenHitColors.Add(sprite, sprite.color);
+            Color original = oxygenHitColors[sprite];
+            sprite.color = GetOxygenHitColor(original);
+        }
+        oxygenHitFlashUntil = Time.unscaledTime + oxygenHitFlashDuration;
+    }
+
+    private Color GetOxygenHitColor(Color original) => Color.Lerp(
+        original, new Color(1f, 0f, 0f, original.a), Mathf.Clamp01(oxygenHitRedIntensity));
+
+    private void LateUpdate()
+    {
+        if (oxygenHitFlashUntil < 0f)
+            return;
+        if (Time.unscaledTime >= oxygenHitFlashUntil)
+        {
+            RestoreOxygenHitColors();
+            return;
+        }
+        foreach (var entry in oxygenHitColors)
+            if (entry.Key != null)
+                entry.Key.color = GetOxygenHitColor(entry.Value);
+    }
+
+    private void RestoreOxygenHitColors()
+    {
+        foreach (var entry in oxygenHitColors)
+            if (entry.Key != null)
+                entry.Key.color = entry.Value;
+        oxygenHitColors.Clear();
+        oxygenHitFlashUntil = -1f;
+    }
+
     private void Update()
     {
+        SyncPushBackMovement();
+
         GameData gameData = GameData.Instance;
         Player player = Player.Instance;
         if (gameData == null || gameData.IsResetting || gameData.gameOver || IsGateBroken() || gameData.rageMode ||
@@ -172,29 +234,51 @@ public class Train : MonoBehaviour, IReinitializeOnEnable
 
     private void HandleRageStart()
     {
-        if (!isActiveAndEnabled || IsGateBroken())
-            return;
-
-        StopRageMovement();
-        // Transfer the normal offset so the rage push starts at the visible position.
-        rageBodyOffsetX += normalBodyOffsetX;
-        normalBodyOffsetX = 0f;
-        normalMoveActive = false;
-        rageMovementRoutine = StartCoroutine(CoRagePushBack());
+        rageMovementRequested = true;
+        SyncPushBackMovement();
     }
 
     private void HandleRageEnd()
     {
+        rageMovementRequested = false;
+        SyncPushBackMovement();
+    }
+
+    private void SyncPushBackMovement()
+    {
         if (!isActiveAndEnabled || IsGateBroken())
             return;
 
+        GameData gameData = GameData.Instance;
+        bool speedPhaseMovementRequested = StageManager.Instance != null &&
+            StageManager.Instance.IsSpeedPhaseSpeedActive && gameData != null && gameData.CanSpawnSpeedEffects();
+        float requestedScale = rageMovementRequested ? 1f : speedPhaseMovementRequested ? 0.5f : 0f;
+        bool shouldPushBack = requestedScale > 0f;
+        if (pushBackMovementActive == shouldPushBack && Mathf.Approximately(pushBackMovementScale, requestedScale))
+            return;
+
+        pushBackMovementActive = shouldPushBack;
+        pushBackMovementScale = requestedScale;
         StopRageMovement();
-        rageMovementRoutine = StartCoroutine(CoRageReturn());
+        if (shouldPushBack)
+        {
+            // Start at the visible position, including any unfinished normal movement.
+            rageBodyOffsetX += normalBodyOffsetX;
+            normalBodyOffsetX = 0f;
+            normalMoveActive = false;
+            rageMovementRoutine = StartCoroutine(CoRagePushBack());
+        }
+        else
+        {
+            rageMovementRoutine = StartCoroutine(CoRageReturn());
+        }
     }
 
     private void HandleGateBroken()
     {
         normalMoveActive = false;
+        pushBackMovementActive = false;
+        pushBackMovementScale = 0f;
         StopRageMovement();
     }
 
@@ -213,15 +297,15 @@ public class Train : MonoBehaviour, IReinitializeOnEnable
     {
         // Let all rage-start handlers finish starting the transform freeze first.
         yield return null;
-        yield return MoveRageBodyX(-ragePushBackDistance, ragePushBackDuration);
+        yield return MoveRageBodyX(-ragePushBackDistance * pushBackMovementScale, ragePushBackDuration);
 
         // Targets stay relative to the pushed-back position, so movement never accumulates.
-        // HandleRageEnd stops this loop and returns from the current position.
+        // Return from the current position once neither rage nor the speed phase needs it.
         while (true)
         {
             float minOffset = Mathf.Max(0f, Mathf.Min(rageRandomMinOffset, rageRandomMaxOffset));
             float maxOffset = Mathf.Max(minOffset, Mathf.Max(rageRandomMinOffset, rageRandomMaxOffset));
-            float targetOffset = -ragePushBackDistance + Random.Range(minOffset, maxOffset);
+            float targetOffset = (-ragePushBackDistance + Random.Range(minOffset, maxOffset)) * pushBackMovementScale;
             yield return MoveRageBodyX(targetOffset, Mathf.Max(0.01f, rageRandomMoveDuration));
         }
     }
@@ -259,6 +343,9 @@ public class Train : MonoBehaviour, IReinitializeOnEnable
     private void ResetRageMovement()
     {
         StopRageMovement();
+        rageMovementRequested = false;
+        pushBackMovementActive = false;
+        pushBackMovementScale = 0f;
         rageBodyOffsetX = 0f;
         machineGunBodyOffsetX = 0f;
         normalBodyOffsetX = 0f;

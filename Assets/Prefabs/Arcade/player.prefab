@@ -9915,6 +9915,7 @@ MonoBehaviour:
   speedEffectMoveSpeed: 26
   speedEffectSpawnInterval: 0.6
   speedEffectDespawnX: -20
+  speedEffectFadeDuration: 1
   transformLockDuration: 0.9
   lightningPrefab: {fileID: 3427914068613845217, guid: f957cddb54d1642b5a4a12690ae87050, type: 3}
   dummySmokeBallPrefab: {fileID: 7064872001727682976, guid: 33cc8516f9a8c4eb8a7154ad1bab5cdd, type: 3}
@@ -9971,6 +9972,8 @@ MonoBehaviour:
   baseHurt: {fileID: 7400000, guid: 1155aa80ba5aa414ba823ff7edd8aee7, type: 2}
   baseStill: {fileID: 7400000, guid: c55c79574b6344c9d9ff9f4ac5f704db, type: 2}
   baseSpeed: {fileID: 7400000, guid: 82d9fa85cd3d849a1bd8fb4b203c26e2, type: 2}
+  baseSpeedUp: {fileID: 7400000, guid: 862a9a635d40400faf3ace3b531c42ff, type: 2}
+  baseSpeedDown: {fileID: 7400000, guid: 97b41a41a9874662bbb3b1eae722ea6b, type: 2}
   baseSpeedStart: {fileID: 7400000, guid: 897d5954b02da4909b5e50f77088fab0, type: 2}
   baseSpeedEnd: {fileID: 7400000, guid: 0ba735ba55be44db3af646e0cd5f8c33, type: 2}
   walkClips:
@@ -10028,11 +10031,23 @@ MonoBehaviour:
   - {fileID: 7400000, guid: daa6f0e22ff2348e6a958da7c1eee261, type: 2}
   - {fileID: 7400000, guid: 2731b58008b894139ba789369978562a, type: 2}
   speedClips:
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
+  - {fileID: 7400000, guid: bfd8194208a18401c84f49d084e6a649, type: 2}
+  - {fileID: 7400000, guid: 655d16030176d4ca4b9986322dbd800d, type: 2}
+  - {fileID: 7400000, guid: 8c8a0ae2d427249eea09cdccc3be48f7, type: 2}
+  - {fileID: 7400000, guid: c37c592b66d6e4e32abe56cb93c93a3b, type: 2}
+  - {fileID: 7400000, guid: e700975792a924e9090d33db9331c29a, type: 2}
+  speedUpClips:
+  - {fileID: 7400000, guid: 5efc5fb3652604cd1b4191060a696fb5, type: 2}
+  - {fileID: 7400000, guid: ea4b2d7fb86d84437ab8bb0b2b599565, type: 2}
+  - {fileID: 7400000, guid: 974934118c65e48688e0384864b04159, type: 2}
+  - {fileID: 7400000, guid: a92eb301aadb6491ba5b9551f77f951f, type: 2}
+  - {fileID: 7400000, guid: 3a75b8b29be574a7a900510cf2a1baf8, type: 2}
+  speedDownClips:
+  - {fileID: 7400000, guid: 9cba22a15f54544c69c93fbd17d3664d, type: 2}
+  - {fileID: 7400000, guid: 50ac09a4146c14a98bf5340257709a74, type: 2}
+  - {fileID: 7400000, guid: 81d5e4ae405eb4cfa9724867a6b88206, type: 2}
+  - {fileID: 7400000, guid: b33c8708ec0b84da8b1205cfa7d65c44, type: 2}
+  - {fileID: 7400000, guid: 3096f2a8b834841779b02e9d8b4ff122, type: 2}
   speedStartClips:
   - {fileID: 7400000, guid: 00bff3d134f12473ba63c4dee1f10163, type: 2}
   - {fileID: 7400000, guid: 42ddd91c7a4e5410fa79d1dcdae0d50d, type: 2}
@@ -10139,6 +10154,7 @@ MonoBehaviour:
   - {fileID: 2783033508503310222, guid: e7c86de40af9f47268f35c6c935153cc, type: 3}
   - {fileID: 2783033508503310222, guid: 6c3fc5b3ea1954266b2acc5277140f2b, type: 3}
   rageModePrefab: {fileID: 8912081597299453873, guid: a60d65853bb1c4467bf56af575e118bc, type: 3}
+  speedModePrefab: {fileID: 8912081597299453873, guid: 14b03f7541b774fb589611988074507c, type: 3}
   miniBossPositiveEmojiPrefabs:
   - {fileID: 6508384635921497416, guid: 246cd8082c8154e6fac6469852b99f20, type: 3}
   - {fileID: 6508384635921497416, guid: 3ccd6bd037f634a878757b6ffde83435, type: 3}

@@ -31,6 +31,8 @@ public class Building : MonoBehaviour
 
     [Header("Identity")]
     [SerializeField] private string slotId;
+    [SerializeField, Range(0, 9), Tooltip("0: 건물 종류별 기본 해금 레벨. 1~9: 직접 지정.")]
+    private int requiredVillageLevel;
 
     [Header("State")]
     [SerializeField] private int level = 1;
@@ -53,11 +55,12 @@ public class Building : MonoBehaviour
     [SerializeField] private GameObject itemPrefab;
     [SerializeField] private GameObject bossCustomerPointPrefab;
     [SerializeField] private GameObject customerPointPrefab;
-    [Header("산소 생성")]
-    [Tooltip("고객 거래를 한 번 완료할 때 마을에 지급하는 산소량입니다.")]
+    [Header("마을 점수")]
+    [Tooltip("고객 거래를 한 번 완료할 때 지급하는 마을 점수입니다.")]
     [FormerlySerializedAs("energyValue")]
     [FormerlySerializedAs("oxygenValue")]
-    [SerializeField] private int oxygenProducedPerTrade = 1;
+    [FormerlySerializedAs("oxygenProducedPerTrade")]
+    [SerializeField] private int villageScorePerTrade = 1;
     [Header("상자 재고 소모")]
     [SerializeField, Tooltip("배치된 건물의 재고를 1씩 소모하는 주기입니다. 0이면 시간에 따른 소모를 중지합니다.")]
     [FormerlySerializedAs("level1WorkTickSeconds")]
@@ -146,7 +149,8 @@ public class Building : MonoBehaviour
     public int Level => level;
     public bool IsPlaced => isPlaced;
     public bool IsWorking => isPlaced && isWorking;
-    public int OxygenValue => oxygenProducedPerTrade;
+    public int VillageScorePerTrade => villageScorePerTrade;
+    public int RequiredVillageLevel => requiredVillageLevel > 0 ? requiredVillageLevel : VillageManagement.GetBuildingUnlockLevel(BuildingId);
     public float CurrentSalary => currentBoxStock;
     public int MaxSalary => GetDefinitionForLevel(level).boxStockCapacity;
     public GameObject ItemPrefab => itemPrefab;
@@ -220,7 +224,7 @@ public class Building : MonoBehaviour
         currentBoxStock = Mathf.Max(0, currentBoxStock);
         level1.boxStockCapacity = Mathf.Max(0, level1.boxStockCapacity);
         level2.boxStockCapacity = Mathf.Max(0, level2.boxStockCapacity);
-        oxygenProducedPerTrade = Mathf.Max(0, oxygenProducedPerTrade);
+        villageScorePerTrade = Mathf.Max(0, villageScorePerTrade);
         level1StockConsumptionIntervalSeconds = Mathf.Max(0f, level1StockConsumptionIntervalSeconds);
         level2StockConsumptionIntervalSeconds = Mathf.Max(0f, level2StockConsumptionIntervalSeconds);
         stockConsumedPerCustomer = Mathf.Max(0, stockConsumedPerCustomer);
@@ -250,7 +254,25 @@ public class Building : MonoBehaviour
         RefreshStatusBarAnchor();
         TryBeginTouchHold();
 
-        if ((pointerHeld || isDragging) && !IsPointerStillPressed())
+        if (pointerHeld || isDragging)
+            UpdatePointerHold(GetPointerWorldPosition(), IsPointerStillPressed());
+
+        if (isDragging)
+            UpdateDragPosition();
+        else if (pointerHeld)
+            holdShake.Tick(Time.unscaledTime - pointerDownStartedAt, HoldDurationSeconds);
+    }
+
+    private void UpdatePointerHold(Vector3 worldPoint, bool pressed)
+    {
+        if (pointerHeld && !isDragging &&
+            !VillagePointerCapture.ContainsPoint(transform, worldPoint + holdShake.WorldOffset))
+        {
+            ReleasePointerHold();
+            return;
+        }
+
+        if ((pointerHeld || isDragging) && !pressed)
         {
             ReleasePointerHold();
         }
@@ -260,11 +282,6 @@ public class Building : MonoBehaviour
 
         if (pointerHeld && !isDragging && Time.unscaledTime - pointerDownStartedAt >= HoldDurationSeconds)
             BeginDrag();
-
-        if (isDragging)
-            UpdateDragPosition();
-        else if (pointerHeld)
-            holdShake.Tick(Time.unscaledTime - pointerDownStartedAt);
     }
 
     private void OnMouseDown()
@@ -448,11 +465,11 @@ public class Building : MonoBehaviour
         PromoteQueue();
     }
 
-    public void AwardTradeOxygen()
+    public void AwardTradeVillageScore()
     {
         VillageManagement villageManagement = VillageManagement.EnsureInstance();
-        if (villageManagement != null && oxygenProducedPerTrade > 0)
-            villageManagement.AddOxygen(oxygenProducedPerTrade);
+        if (villageManagement != null && villageScorePerTrade > 0)
+            villageManagement.AddVillageScore(villageScorePerTrade);
 
         ShowTradeExclamation();
     }

@@ -9,6 +9,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6340716225815163468}
+  - component: {fileID: -1895449220134110526}
   m_Layer: 0
   m_Name: stage 9
   m_TagString: Untagged
@@ -52,6 +53,21 @@ Transform:
   - {fileID: 3934241170478956500}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &-1895449220134110526
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2659614723417223950}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 88dfcaede4c9340e8a74567b94c88fdd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Mover
+  baseSpeed: 6
+  applyStageSpeedMultiplier: 1
+  defaultBaseSpeed: 0
 --- !u!1001 &43897424592962837
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1146,11 +1162,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2740205449094913287, guid: e21f8d7c4025d43439f97f3c20be667e, type: 3}
       propertyPath: m_ConnectedAnchor.y
-      value: 7.55
+      value: 10.633329
       objectReference: {fileID: 0}
     - target: {fileID: 4594546122700967440, guid: e21f8d7c4025d43439f97f3c20be667e, type: 3}
       propertyPath: initialTorque
-      value: 500
+      value: 50
+      objectReference: {fileID: 0}
+    - target: {fileID: 4594546122700967440, guid: e21f8d7c4025d43439f97f3c20be667e, type: 3}
+      propertyPath: fallbackAngularVelocity
+      value: 7
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

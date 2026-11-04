@@ -80,16 +80,29 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
 
     private void Update()
     {
-        if ((pointerHeld || isDragging) && !IsPointerStillPressed())
-            ReleasePointerHold();
-
-        if (pointerHeld && !isDragging && Time.unscaledTime - pointerDownStartedAt >= HoldDurationSeconds)
-            BeginDrag();
+        if (pointerHeld || isDragging)
+            UpdatePointerHold(GetPointerWorldPosition(), IsPointerStillPressed());
 
         if (isDragging)
             UpdateDragPosition();
         else if (pointerHeld)
-            holdShake.Tick(Time.unscaledTime - pointerDownStartedAt);
+            holdShake.Tick(Time.unscaledTime - pointerDownStartedAt, HoldDurationSeconds);
+    }
+
+    private void UpdatePointerHold(Vector3 worldPoint, bool pressed)
+    {
+        if (pointerHeld && !isDragging &&
+            !VillagePointerCapture.ContainsPoint(transform, worldPoint + holdShake.WorldOffset))
+        {
+            ReleasePointerHold();
+            return;
+        }
+
+        if ((pointerHeld || isDragging) && !pressed)
+            ReleasePointerHold();
+
+        if (pointerHeld && !isDragging && Time.unscaledTime - pointerDownStartedAt >= HoldDurationSeconds)
+            BeginDrag();
     }
 
     private void OnDisable()
@@ -384,6 +397,7 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
         if (!pointerHeld && !isDragging)
             return;
 
+        VillagePointerCapture.Release(this);
         bool wasDragging = isDragging;
         pointerHeld = false;
         pointerDownStartedAt = -1f;

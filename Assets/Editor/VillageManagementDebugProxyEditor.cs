@@ -12,6 +12,8 @@ public class VillageManagementDebugProxyEditor : Editor
         if (proxy == null)
             return;
 
+        VillageScoreInspector.Draw(proxy.Target);
+
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("Runtime Actions", EditorStyles.boldLabel);
 

@@ -345,6 +345,12 @@ public class GameData : MonoBehaviour
 
         float currentMult = GetStageSpeedMult();
         float normalMult = GetStageSpeedMultIgnoringObstacleSlowdown();
+        StageManager phases = StageManager.Instance;
+        if (phases != null && phases.IsSpeedPhaseSpeedActive)
+        {
+            // Entry bursts may exceed the sustained speed; only falling below that baseline fades effects.
+            normalMult = normalMult / phases.SpecialPhaseSpeedMultiplier * phases.SpecialPhaseSteadySpeedMultiplier;
+        }
         return currentMult > 0f && normalMult > 0f && currentMult >= normalMult - 0.01f;
     }
 
@@ -870,6 +876,17 @@ public class GameData : MonoBehaviour
         o2Score = Mathf.Max(0, o2Score - amount);
     }
 
+    public void HandleTrainObstacleHit(int oxygenPenalty = 1)
+    {
+        if (oxygenPenalty <= 0)
+            return;
+
+        SpendO2(oxygenPenalty);
+        ResolveTrain()?.FlashOxygenLoss();
+        ResolveScoreUi()?.FlashOxygenLoss();
+        CameraShakeManager.Shake(CameraShakeManager.ShakeEvent.TrainHit);
+    }
+
     public int GetCleanScore()
     {
         return score;
@@ -898,7 +915,8 @@ public class GameData : MonoBehaviour
             ? fastInterval
             : normalInterval;
 
-        runScoreElapsed += Mathf.Max(0f, deltaTime);
+        float scoreMultiplier = StageManager.Instance != null && StageManager.Instance.IsSpeedPhaseSpeedActive ? 1.5f : 1f;
+        runScoreElapsed += Mathf.Max(0f, deltaTime) * scoreMultiplier;
         while (runScoreElapsed >= interval)
         {
             runScore++;

@@ -87,7 +87,7 @@ public sealed class BombLauncherSmokeTests
         yield return WaitForReady(launcher);
         yield return new WaitForSeconds(0.4f);
         Assert.IsTrue(launcher.CanFire(), "A cancelled return must not later hide the refilled launcher.");
-        Assert.AreEqual(launcher.activePos, launcher.transform.position);
+        Assert.AreEqual(launcher.activePos, launcher.transform.localPosition);
         Assert.AreEqual(6, Heads(launcher).Count);
         foreach (GameObject head in Heads(launcher)) Assert.IsTrue(head.activeInHierarchy);
         launcher.ResetLauncherState();
@@ -112,6 +112,52 @@ public sealed class BombLauncherSmokeTests
     public IEnumerator Cleanup()
     {
         if (Application.isPlaying) yield return new ExitPlayMode();
+    }
+
+    [UnityTest]
+    public IEnumerator LauncherUsesLocalPositionsWhileItsParentMovesAndWhenReturningOrResetting()
+    {
+        yield return new EnterPlayMode();
+        BombLauncher launcher = PrepareLauncher(CreateParticleSmoke(), out _);
+        Transform parent = new GameObject("Moving launcher parent").transform;
+        parent.SetPositionAndRotation(new Vector3(12f, -3f, 2f), Quaternion.Euler(0f, 0f, 30f));
+        parent.localScale = new Vector3(1.5f, 0.8f, 1f);
+        launcher.transform.SetParent(parent, false);
+        Vector3 home = launcher.transform.localPosition;
+        launcher.moveDuration = 0.1f;
+        launcher.autoReturnDelay = 0f;
+
+        launcher.ActivateLauncher();
+        yield return null;
+        parent.position += Vector3.left * 4f;
+        yield return WaitForReady(launcher);
+        Assert.That(Vector3.Distance(launcher.activePos, launcher.transform.localPosition), Is.LessThan(0.0001f));
+        Assert.That(Vector3.Distance(parent.TransformPoint(launcher.activePos), launcher.transform.position), Is.LessThan(0.0001f));
+
+        Transform target = Target();
+        for (int i = 0; i < launcher.ammoCount; i++) launcher.FireAt(target);
+        parent.position += Vector3.up * 2f;
+        float deadline = Time.time + 1f;
+        var returnRoutine = typeof(BombLauncher).GetField("returnAndReloadCoroutine", Private);
+        while (returnRoutine.GetValue(launcher) != null && Time.time < deadline) yield return null;
+        Assert.IsNull(returnRoutine.GetValue(launcher));
+        Assert.That(Vector3.Distance(home, launcher.transform.localPosition), Is.LessThan(0.0001f));
+
+        foreach (string reset in new[] { "Stop", "Reset", "Reenable" })
+        {
+            launcher.ActivateLauncher();
+            yield return WaitForReady(launcher);
+            parent.position += Vector3.right * 3f;
+            if (reset == "Stop") launcher.ForceStopAndReturnHome();
+            else if (reset == "Reset") launcher.ResetLauncherState();
+            else
+            {
+                launcher.gameObject.SetActive(false);
+                launcher.gameObject.SetActive(true);
+            }
+            Assert.That(Vector3.Distance(home, launcher.transform.localPosition), Is.LessThan(0.0001f));
+            Assert.That(Vector3.Distance(parent.TransformPoint(home), launcher.transform.position), Is.LessThan(0.0001f));
+        }
     }
 
     [UnityTest]

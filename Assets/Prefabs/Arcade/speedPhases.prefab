@@ -45,7 +45,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   startPhasePrefab: {fileID: 2659614723417223950, guid: f54ac985296364499ae5e566e881704f, type: 3}
-  endPhasePrefab: {fileID: 2659614723417223950, guid: f54ac985296364499ae5e566e881704f, type: 3}
+  endPhasePrefab: {fileID: 2659614723417223950, guid: c9f0d0acd200148598a66e27db9231db, type: 3}
   phasePrefabs:
   - {fileID: 2659614723417223950, guid: 911b34a85e88c46caa2b1cca7ef1d1d1, type: 3}
   - {fileID: 2659614723417223950, guid: d08f6fb72c7764075afed67b9e518af3, type: 3}
@@ -84,6 +84,10 @@ MonoBehaviour:
   - {fileID: 2659614723417223950, guid: e2a2682eacd9b40dc8595f84223ab37d, type: 3}
   - {fileID: 2659614723417223950, guid: b9798a3d388f24417873d1f62513e3f8, type: 3}
   phaseSpawnCount: 6
-  speedMultiplier: 1.55
+  speedMultiplier: 1.7
+  entrySpeedMultiplier: 3
+  entryHoldDuration: 0.4
+  entryReturnDuration: 0.7
   speedEffectPrefab: {fileID: 8730433929646113536, guid: ce10425395c6b46709c9216c07ed749c, type: 3}
-  speedEffectMoveSpeed: 16
+  speedEffectMoveSpeed: 18
+  speedEffectFadeDuration: 1

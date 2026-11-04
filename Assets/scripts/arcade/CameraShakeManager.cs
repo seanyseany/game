@@ -10,7 +10,7 @@ public class CameraShakeManager : MonoBehaviour
         RageTransform, RagePlayer3Landing,
         MissileHit, CholesterolBombExplosion, FishBombExplosion, BossSlimeArmImpact,
         BossDeath, MiniBossLanding, BossSlimeCannonBallExplosion, GateHit,
-        GenericHalf, GenericQuarter
+        GenericHalf, GenericQuarter, TrainHit = 23
     }
 
     private sealed class ShakeRequest
@@ -70,6 +70,7 @@ public class CameraShakeManager : MonoBehaviour
     [Min(0f)] public float miniBossLandingMultiplier = 0.5f;
     [Min(0f)] public float bossSlimeCannonBallExplosionMultiplier = 0.5f;
     [Min(0f)] public float gateHitMultiplier = 0.5f;
+    [Min(0f)] public float trainHitMultiplier = 0.5f;
 
     [Header("Generic Preset Multipliers")]
     [Min(0f)] public float genericHalfMultiplier = 0.5f;
@@ -165,6 +166,7 @@ public class CameraShakeManager : MonoBehaviour
             ShakeEvent.MiniBossLanding => miniBossLandingMultiplier,
             ShakeEvent.BossSlimeCannonBallExplosion => bossSlimeCannonBallExplosionMultiplier,
             ShakeEvent.GateHit => gateHitMultiplier,
+            ShakeEvent.TrainHit => trainHitMultiplier,
             ShakeEvent.GenericHalf => genericHalfMultiplier,
             ShakeEvent.GenericQuarter => genericQuarterMultiplier,
             _ => 0f

@@ -32,6 +32,7 @@ public class BuildingListUI : ShopSectionUI
         public SpecialBuilding specialPrefab;
         public int level1Price;
         public int level2Price;
+        public int requiredVillageLevel = 1;
     }
 
     [Header("Building Shop")]
@@ -97,6 +98,7 @@ public class BuildingListUI : ShopSectionUI
                 entryType = CatalogEntryType.Building,
                 displayName = prefab.DisplayName,
                 prefab = prefab,
+                requiredVillageLevel = prefab.RequiredVillageLevel,
                 level1Price = prefab.GetPurchasePriceForLevel(1),
                 level2Price = prefab.GetPurchasePriceForLevel(2)
             });
@@ -117,6 +119,7 @@ public class BuildingListUI : ShopSectionUI
                 entryType = CatalogEntryType.SpecialBuilding,
                 displayName = prefab.name,
                 specialPrefab = prefab,
+                requiredVillageLevel = prefab.RequiredVillageLevel,
                 level1Price = Mathf.Max(0, prefab.SpecialBuildingValue),
                 level2Price = 0
             });
@@ -321,12 +324,15 @@ public class BuildingListUI : ShopSectionUI
                 : purchaseState != BuildingPurchaseState.Level1Available || Path.FindFirstEmpty() != null;
             bool canAfford = villageManagement != null && villageManagement.CurrentOxygen >= price;
 
-            buildingButtons[i].interactable = canPurchase && canPlace && canAfford;
+            bool unlocked = villageManagement != null && villageManagement.IsVillageLevelUnlocked(entry.requiredVillageLevel);
+            buildingButtons[i].interactable = unlocked && canPurchase && canPlace && canAfford;
             Text label = buildingButtons[i].GetComponentInChildren<Text>();
             if (label != null)
                 label.text = entry.entryType == CatalogEntryType.LiftToken
                     ? BuildLiftButtonLabel(entry, purchaseState, price, canPlace, canAfford)
                     : BuildStandardButtonLabel(entry, purchaseState, price, canPlace, canAfford);
+            if (label != null && !unlocked)
+                label.text = $"{entry.displayName}\n마을 {entry.requiredVillageLevel}레벨에 해금";
         }
 
         bool confirmationActive = confirmationRoot != null && confirmationRoot.activeSelf;
@@ -351,6 +357,11 @@ public class BuildingListUI : ShopSectionUI
 
         VillageManagement villageManagement = VillageManagement.EnsureInstance();
         BuildingCatalogEntry entry = entries[index];
+        if (villageManagement == null || !villageManagement.IsVillageLevelUnlocked(entry.requiredVillageLevel))
+        {
+            SetStatus($"마을 {entry.requiredVillageLevel}레벨에 해금됩니다.");
+            return;
+        }
         BuildingPurchaseState purchaseState = GetPurchaseState(entry);
         if (purchaseState == BuildingPurchaseState.Level1Constructing || purchaseState == BuildingPurchaseState.Level2Constructing)
         {
@@ -397,6 +408,11 @@ public class BuildingListUI : ShopSectionUI
         }
 
         BuildingCatalogEntry entry = entries[index];
+        if (!villageManagement.IsVillageLevelUnlocked(entry.requiredVillageLevel))
+        {
+            SetStatus($"마을 {entry.requiredVillageLevel}레벨에 해금됩니다.");
+            return;
+        }
         BuildingPurchaseState purchaseState = GetPurchaseState(entry);
         if (purchaseState == BuildingPurchaseState.Level1Constructing || purchaseState == BuildingPurchaseState.Level2Constructing)
         {

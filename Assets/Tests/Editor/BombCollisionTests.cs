@@ -16,6 +16,61 @@ public sealed class BombCollisionTests
     }
 
     [UnityTest]
+    public IEnumerator BombHitsDestroyMiniBossBombsWithoutRage(
+        [Values("miniBossBomb.prefab", "miniBossBomb 1.prefab")] string prefabName,
+        [Values(false, true)] bool triggerContact)
+    {
+        yield return new EnterPlayMode();
+        var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Arcade/" + prefabName);
+        MiniBossBomb target = Object.Instantiate(prefab, new Vector3(3f, 0f, 0f), Quaternion.identity)
+            .GetComponent<MiniBossBomb>();
+        Collider2D collider = target.GetComponent<Collider2D>();
+        Bomb bomb = Projectile(Vector3.zero);
+        bomb.SetTarget(target.transform);
+        Physics2D.SyncTransforms();
+        if (triggerContact)
+            typeof(Bomb).GetMethod("OnTriggerEnter2D", BindingFlags.Instance | BindingFlags.NonPublic)
+                .Invoke(bomb, new object[] { collider });
+        else
+            Advance(bomb, 0.2f);
+
+        Assert.IsTrue(Exploded(bomb));
+        Assert.IsFalse(collider.enabled, "A confirmed Bomb impact must immediately stop MiniBossBomb damage.");
+        Assert.IsTrue(target != null, "Keep the MiniBossBomb alive for its destruction animation.");
+        Vector3 impactPosition = target.transform.position;
+        typeof(MiniBossBomb).GetMethod("Update", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(target, null);
+        Assert.AreEqual(impactPosition, target.transform.position, "A destroyed MiniBossBomb must stop tracking the player.");
+        float deadline = Time.time + 1.5f;
+        while (target != null && Time.time < deadline) yield return null;
+        Assert.IsTrue(target == null, "Remove the MiniBossBomb after its destruction animation.");
+    }
+
+    [UnityTest]
+    public IEnumerator BombExplosionDestroysMiniBossBombChildCollidersAndAllowsPhaseReuse()
+    {
+        yield return new EnterPlayMode();
+        var phase = new GameObject("Reusable mini boss phase", typeof(PhaseLayoutSnapshot));
+        var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Arcade/miniBossBomb.prefab");
+        MiniBossBomb target = Object.Instantiate(prefab, phase.transform).GetComponent<MiniBossBomb>();
+        var child = new GameObject("MiniBossBomb child collider", typeof(BoxCollider2D));
+        child.transform.SetParent(target.transform, false);
+        Collider2D collider = child.GetComponent<Collider2D>();
+        var explosion = new GameObject("Bomb explosion", typeof(BombHitBox)).GetComponent<BombHitBox>();
+        var trigger = typeof(BombHitBox).GetMethod("OnTriggerEnter2D", BindingFlags.Instance | BindingFlags.NonPublic);
+        var stay = typeof(BombHitBox).GetMethod("OnTriggerStay2D", BindingFlags.Instance | BindingFlags.NonPublic);
+        trigger.Invoke(explosion, new object[] { collider });
+        Assert.IsFalse(target.GetComponent<Collider2D>().enabled);
+        stay.Invoke(explosion, new object[] { collider });
+        float deadline = Time.time + 1.5f;
+        while (target.gameObject.activeSelf && Time.time < deadline) yield return null;
+        Assert.IsFalse(target.gameObject.activeSelf, "Phase children must remain available for pool restoration.");
+        target.gameObject.SetActive(true);
+        Assert.IsTrue(target.GetComponent<Collider2D>().enabled);
+        trigger.Invoke(explosion, new object[] { collider });
+        Assert.IsFalse(target.GetComponent<Collider2D>().enabled, "A reused MiniBossBomb must remain destructible.");
+    }
+
+    [UnityTest]
     public IEnumerator PooledBombSmokeFinishesBeforeReturnAndRestartsOnReuse()
     {
         yield return new EnterPlayMode();

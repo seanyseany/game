@@ -193,6 +193,14 @@ public class Player : MonoBehaviour
     public float speedEffectMoveSpeed = 10f;
     public float speedEffectSpawnInterval = 0.2f;
     public float speedEffectDespawnX = -20f;
+    [Min(0f)]
+    [Tooltip("분노 종료 시 이미 생성된 스피드 이펙트가 이동하면서 투명해지는 시간(초)입니다. 0이면 즉시 투명해집니다.")]
+    public float speedEffectFadeDuration = 1f;
+
+    [Header("Sonic Boom (index 0~4 = Player1~5)")]
+    [Tooltip("각 플레이어가 스피드 모션 중 정상 속도로 이동할 때 표시할 프리팹입니다. 비워두면 표시하지 않습니다.")]
+    public GameObject[] sonicBoomPrefabs = new GameObject[5];
+    public Vector3 sonicBoomLocalOffset = Vector3.zero;
 
     private float lastStompTime = -999f;
 
@@ -346,9 +354,12 @@ public class Player : MonoBehaviour
     private readonly HashSet<int> activeHazardContactIds = new HashSet<int>();
     private readonly Dictionary<int, ObstacleType> cachedObstacleTypes = new Dictionary<int, ObstacleType>(64);
     private float nextSpeedEffectSpawnTime = -1f;
+    private readonly List<speedEffect> activeRageSpeedEffects = new List<speedEffect>();
     private float jumpObstacleJumpLockUntil = -1f;
     private bool resumeStompAttackAfterJumpObstacle = false;
     private GameObject activeRunningSmoke;
+    private GameObject activeSonicBoom;
+    private GameObject activeSonicBoomPrefab;
     private GameObject activeP2RageLaser;
     private GameObject activeP4RageLightning;
     private bool nextP4NormalAnimationIsSecond;
@@ -516,6 +527,10 @@ public class Player : MonoBehaviour
 
     protected virtual void LateUpdate()
     {
+        normalJumpParticles.DeactivateIfFinished();
+        rageJumpParticles.DeactivateIfFinished();
+        speedJumpParticles.DeactivateIfFinished();
+        SyncSonicBoom();
         SyncRunningSmoke();
         SyncRageTransformSmokes();
         SyncP2RageLaser();
@@ -551,6 +566,12 @@ public class Player : MonoBehaviour
     private bool observedSpeedPhaseActive;
     private bool speedStartRequired;
     private bool speedStartWaitsForJump;
+    private enum SpeedAirPose { Level, Up, Down }
+    private const float SpeedAirVelocityThreshold = 0.5f;
+    private const float SpeedAirBridgeDuration = 0.3f;
+    private bool speedAirBridgeActive;
+    private SpeedAirPose speedAirBridgeTarget;
+    private float speedAirBridgeEndTime;
 
     private bool IsSpeedPhaseAnimationActive => UsesArcadeSystems && !isDead && !isRageMode &&
         StageManager.Instance != null && StageManager.Instance.IsSpeedPhaseSpeedActive;
@@ -566,6 +587,7 @@ public class Player : MonoBehaviour
         {
             observedSpeedPhaseActive = active;
             speedPhaseTransition = SpeedPhaseTransition.None;
+            speedAirBridgeActive = false;
             ResetSpeedAnimationTrigger();
             speedStartRequired = active;
             speedStartWaitsForJump = false;
@@ -591,6 +613,7 @@ public class Player : MonoBehaviour
 
     private void BeginSpeedPhaseTransition()
     {
+        speedAirBridgeActive = false;
         const string trigger = "Speed Start";
         speedStartRequired = false;
         speedStartWaitsForJump = false;
@@ -617,12 +640,16 @@ public class Player : MonoBehaviour
 
         if (logicalTrigger == "Hurt" || logicalTrigger == "Die" || logicalTrigger == "Transform")
         {
+            speedAirBridgeActive = false;
             speedPhaseTransition = SpeedPhaseTransition.None;
             speedStartRequired = active && logicalTrigger == "Hurt";
             speedStartWaitsForJump = speedStartRequired;
             ResetSpeedAnimationTrigger();
             return false;
         }
+
+        if (logicalTrigger != "Jump")
+            speedAirBridgeActive = false;
 
         bool locomotion = logicalTrigger == "Walk" || logicalTrigger == "Jump" || logicalTrigger == "Still" || logicalTrigger == "Steady";
         // Each new jump plays its intro once; per-frame Jump synchronization must not restart it.
@@ -674,10 +701,12 @@ public class Player : MonoBehaviour
 
     private void ResetSpeedPhasePresentation()
     {
+        HideSonicBoom();
         speedPhaseTransition = SpeedPhaseTransition.None;
         observedSpeedPhaseActive = false;
         speedStartRequired = false;
         speedStartWaitsForJump = false;
+        speedAirBridgeActive = false;
         ResetSpeedAnimationTrigger();
         if (speedJumpParticleObject != null)
             speedJumpParticles.Apply(speedJumpParticleObject, false, false);
@@ -696,12 +725,78 @@ public class Player : MonoBehaviour
         UpdateSpeedPhasePresentation();
         if (currentAnim == "Jump" && !isLanding)
             ChangeAnimation("Jump");
+        UpdateSpeedAirAnimation();
+    }
+
+    private static bool IsSpeedAirState(AnimatorStateInfo state)
+    {
+        return state.IsName("Base Speed") || state.IsName("Base Speed Up") || state.IsName("Base Speed Down");
+    }
+
+    private void UpdateSpeedAirAnimation()
+    {
+        if (!IsSpeedPhaseAnimationActive || !CanPresentSpeedPhaseTransition || currentAnim != "Jump" ||
+            isGrounded || isAttacking || isLanding || speedPhaseTransition != SpeedPhaseTransition.None ||
+            anim == null || rb == null)
+        {
+            speedAirBridgeActive = false;
+            return;
+        }
+        if (Time.timeScale <= 0f || RageTransformFreezeController.ShouldSkipGameplayFrame())
+            return;
+
+        // Never interrupt the intro or a pending action with a directional speed pose.
+        if (anim.IsInTransition(0))
+            return;
+        AnimatorStateInfo state = anim.GetCurrentAnimatorStateInfo(0);
+        if (!IsSpeedAirState(state))
+            return;
+
+        float velocityY = rb.linearVelocity.y;
+        SpeedAirPose target = velocityY >= SpeedAirVelocityThreshold ? SpeedAirPose.Up :
+            velocityY <= -SpeedAirVelocityThreshold ? SpeedAirPose.Down : SpeedAirPose.Level;
+        SpeedAirPose current = state.IsName("Base Speed Up") ? SpeedAirPose.Up :
+            state.IsName("Base Speed Down") ? SpeedAirPose.Down : SpeedAirPose.Level;
+
+        if (speedAirBridgeActive)
+        {
+            // Re-evaluate velocity while waiting so a landing, apex or new jump cannot leave a stale request.
+            if (target != speedAirBridgeTarget)
+                speedAirBridgeActive = false;
+            else if (Time.time < speedAirBridgeEndTime)
+                return;
+            else
+                speedAirBridgeActive = false;
+        }
+
+        if (current == target)
+            return;
+        if (current != SpeedAirPose.Level && target != SpeedAirPose.Level)
+        {
+            speedAirBridgeActive = true;
+            speedAirBridgeTarget = target;
+            speedAirBridgeEndTime = Time.time + SpeedAirBridgeDuration;
+            target = SpeedAirPose.Level;
+        }
+
+        string stateName = target == SpeedAirPose.Up ? "Base Speed Up" :
+            target == SpeedAirPose.Down ? "Base Speed Down" : "Base Speed";
+        if (!anim.HasState(0, Animator.StringToHash("Base Layer." + stateName)))
+            return;
+
+        ResetSpeedAnimationTrigger();
+        // The clips share a timeline: carry the current loop position across instead of restarting frame 0.
+        anim.Play(stateName, 0, Mathf.Repeat(state.normalizedTime, 1f));
     }
 
     private void ResetSpeedAnimationTrigger()
     {
         if (HasParam(anim, "Speed"))
             anim.ResetTrigger("Speed");
+        if (HasParam(anim, "Speed Up"))
+            anim.ResetTrigger("Speed Up");
+        if (HasParam(anim, "Speed Down"))
+            anim.ResetTrigger("Speed Down");
         if (HasParam(anim, "Speed Start"))
             anim.ResetTrigger("Speed Start");
     }
@@ -709,7 +804,7 @@ public class Player : MonoBehaviour
     private void ChangeAnimation(string triggerName)
     {
         // Keep Jump as the gameplay state so jump physics, particles and landing routines remain intact.
-        if (triggerName == "Speed")
+        if (triggerName == "Speed" || triggerName == "Speed Up" || triggerName == "Speed Down")
             triggerName = "Jump";
         if (isTransformLock && triggerName != "Die" && triggerName != "Transform")
             return;
@@ -769,8 +864,8 @@ public class Player : MonoBehaviour
         return logicalName switch
         {
             "Walk" => st.IsName("Base Walk"),
-            "Speed" => st.IsName("Base Speed"),
-            "Jump" => st.IsName(ResolveSpeedPhaseAnimationTrigger("Jump") == "Speed" ? "Base Speed" : "Base Jump"),
+            "Speed" => IsSpeedAirState(st),
+            "Jump" => ResolveSpeedPhaseAnimationTrigger("Jump") == "Speed" ? IsSpeedAirState(st) : st.IsName("Base Jump"),
             "Still" => st.IsName("Base Still"),
             "Attack" => st.IsName("Base Attack"),
             "Flyattack" => st.IsName("Base Flyattack"),
@@ -797,8 +892,8 @@ public class Player : MonoBehaviour
         return logicalName switch
         {
             "Walk" => st.IsName("Base Walk"),
-            "Speed" => st.IsName("Base Speed"),
-            "Jump" => st.IsName("Base Jump") || st.IsName("Base Speed"),
+            "Speed" => IsSpeedAirState(st),
+            "Jump" => st.IsName("Base Jump") || IsSpeedAirState(st),
             "Still" => st.IsName("Base Still"),
             "Attack" => st.IsName("Base Attack"),
             "Flyattack" => st.IsName("Base Flyattack"),
@@ -1032,7 +1127,7 @@ public class Player : MonoBehaviour
                               (triggerName == "Attack" || triggerName == "Flyattack");
         bool emitting = !normalP3Attack && (triggerName == "Jump" || triggerName == "Flyattack");
 
-        bool useSpeedParticles = IsSpeedPhaseAnimationActive && speedJumpParticleObject != null;
+        bool useSpeedParticles = triggerName == "Jump" && IsSpeedPhaseAnimationActive && speedJumpParticleObject != null;
         normalJumpParticles.Apply(normalJumpParticleObject, !isRageMode && !useSpeedParticles, emitting);
         rageJumpParticles.Apply(rageJumpParticleObject, isRageMode, emitting);
         speedJumpParticles.Apply(speedJumpParticleObject, useSpeedParticles, emitting);
@@ -1042,6 +1137,7 @@ public class Player : MonoBehaviour
     {
         private GameObject root;
         private ParticleSystem[] particles;
+        private bool selected;
 
         public void Apply(GameObject particleObject, bool active, bool emitting)
         {
@@ -1053,6 +1149,7 @@ public class Player : MonoBehaviour
             if (root == null)
                 return;
 
+            selected = active;
             bool enableEmission = active && emitting;
             foreach (ParticleSystem particle in particles)
             {
@@ -1060,19 +1157,35 @@ public class Player : MonoBehaviour
                 var emission = particle.emission;
                 if (emission.enabled != enableEmission)
                     emission.enabled = enableEmission;
-                if (!active && (!particle.isStopped || particle.particleCount > 0))
-                    particle.Stop(false, ParticleSystemStopBehavior.StopEmittingAndClear);
+                if (!enableEmission && !particle.isStopped)
+                    particle.Stop(false, ParticleSystemStopBehavior.StopEmitting);
             }
 
-            if (root.activeSelf != active)
-                root.SetActive(active);
+            if (active && !root.activeSelf)
+                root.SetActive(true);
+
+            DeactivateIfFinished();
 
             if (!enableEmission) return;
             foreach (ParticleSystem particle in particles)
             {
-                if (particle != null && particle.gameObject.activeInHierarchy && !particle.isPlaying)
+                // StopEmitting keeps isPlaying true while old particles are still alive.
+                if (particle != null && particle.gameObject.activeInHierarchy && !particle.isEmitting)
                     particle.Play(false);
             }
+        }
+
+        public void DeactivateIfFinished()
+        {
+            if (selected || root == null || !root.activeSelf)
+                return;
+
+            // Keep the old system visible until its last particles have finished.
+            foreach (ParticleSystem particle in particles)
+                if (particle != null && particle.IsAlive(false))
+                    return;
+
+            root.SetActive(false);
         }
     }
 
@@ -2633,6 +2746,7 @@ public class Player : MonoBehaviour
     private void OnDisable()
     {
         ResetSpeedPhasePresentation();
+        StopRageSpeedEffect(despawnExisting: true);
         activeEscalatorContacts.Clear();
         ClearChewingEffects();
     }
@@ -3489,7 +3603,7 @@ public class Player : MonoBehaviour
         isRageMode = false;
         nextP4NormalAnimationIsSecond = false;
         ClearP2RageLaserReference();
-        StopRageSpeedEffect();
+        StopRageSpeedEffect(despawnExisting: true);
         SetAttachedRageSmokesActive(false);
         ClearRageTransformSmokes();
         UpdateJumpParticleEmission("Walk");
@@ -4589,6 +4703,53 @@ public class Player : MonoBehaviour
         nextSpeedEffectSpawnTime = Time.time;
     }
 
+    private void SyncSonicBoom()
+    {
+        int index = Mathf.Clamp(CharacterType, 1, 5) - 1;
+        GameObject prefab = sonicBoomPrefabs != null && index < sonicBoomPrefabs.Length
+            ? sonicBoomPrefabs[index] : null;
+        if (prefab == null || !IsSpeedPhaseAnimationActive || !CanPresentSpeedPhaseTransition ||
+            currentAnim != "Jump" || isAttacking || isLanding || anim == null || !anim.isActiveAndEnabled ||
+            speedPhaseTransition != SpeedPhaseTransition.None || Time.timeScale <= 0f ||
+            RageTransformFreezeController.ShouldSkipGameplayFrame() ||
+            (GameData.Instance != null && !GameData.Instance.CanSpawnSpeedEffects()))
+        {
+            HideSonicBoom();
+            return;
+        }
+
+        // Use the destination during blends so leaving the speed pose hides the effect immediately.
+        AnimatorStateInfo state = anim.IsInTransition(0)
+            ? anim.GetNextAnimatorStateInfo(0) : anim.GetCurrentAnimatorStateInfo(0);
+        if (!IsSpeedAirState(state))
+        {
+            HideSonicBoom();
+            return;
+        }
+
+        if (activeSonicBoom == null || activeSonicBoomPrefab != prefab)
+        {
+            if (activeSonicBoom != null)
+            {
+                activeSonicBoom.SetActive(false);
+                Destroy(activeSonicBoom);
+            }
+            // Keep one child instance per player and reuse it across jumps and obstacle recovery.
+            activeSonicBoom = Instantiate(prefab, transform, false);
+            activeSonicBoomPrefab = prefab;
+        }
+
+        activeSonicBoom.transform.localPosition = sonicBoomLocalOffset;
+        if (!activeSonicBoom.activeSelf)
+            activeSonicBoom.SetActive(true);
+    }
+
+    private void HideSonicBoom()
+    {
+        if (activeSonicBoom != null && activeSonicBoom.activeSelf)
+            activeSonicBoom.SetActive(false);
+    }
+
     private void TrySpawnRunningSmoke()
     {
         if (!CanSpawnRunningSmoke())
@@ -4695,10 +4856,14 @@ public class Player : MonoBehaviour
 
     private void SpawnRageSpeedEffectOnce()
     {
-        SpawnSpeedEffectWave(speedEffectPrefab, speedEffectPoolTag);
+        for (int i = activeRageSpeedEffects.Count - 1; i >= 0; i--)
+            if (activeRageSpeedEffects[i] == null || !activeRageSpeedEffects[i].gameObject.activeInHierarchy)
+                activeRageSpeedEffects.RemoveAt(i);
+
+        SpawnSpeedEffectWave(speedEffectPrefab, speedEffectPoolTag, activeRageSpeedEffects);
     }
 
-    internal void PrepareSpeedEffectPool(GameObject prefab, string poolTag, float moveSpeed)
+    internal void PrepareSpeedEffectPool(GameObject prefab, string poolTag, float moveSpeed, float? waveSpacing = null)
     {
         if (!useEffectPool || ObjectPool.Instance == null || prefab == null || speedEffectSpawnWorldPositions == null)
             return;
@@ -4710,11 +4875,12 @@ public class Player : MonoBehaviour
         // Preparing against the unaccelerated speed also covers the longer travel after rage ends.
         float velocity = Mathf.Max(0.01f, moveSpeed * Mathf.Min(1f, normalMultiplier));
         float interval = Mathf.Max(0.01f, speedEffectSpawnInterval);
+        float spacing = Mathf.Max(0.01f, waveSpacing ?? velocity * interval);
         int size = 0;
         foreach (Vector2 position in speedEffectSpawnWorldPositions)
         {
-            float lifetime = Mathf.Max(0f, position.x - speedEffectDespawnX) / velocity;
-            size += Mathf.CeilToInt(Mathf.Min(128f, lifetime / interval)) + 2;
+            float distance = Mathf.Max(0f, position.x - speedEffectDespawnX);
+            size += Mathf.CeilToInt(Mathf.Min(128f, distance / spacing)) + 2;
         }
         PrewarmPool(poolTag, prefab, Mathf.Clamp(size, 4, 128));
     }
@@ -4752,10 +4918,29 @@ public class Player : MonoBehaviour
         }
     }
 
-    private void StopRageSpeedEffect()
+    private void StopRageSpeedEffect(bool despawnExisting = false)
     {
         nextSpeedEffectSpawnTime = -1f;
 
+        foreach (speedEffect effect in activeRageSpeedEffects)
+        {
+            if (effect == null || !effect.gameObject.activeInHierarchy)
+                continue;
+            if (despawnExisting)
+            {
+                effect.gameObject.SetActive(false);
+                effect.DespawnNow();
+            }
+            else
+            {
+                effect.FadeOut(speedEffectFadeDuration);
+            }
+        }
+
+        if (!despawnExisting)
+            return;
+
+        activeRageSpeedEffects.Clear();
         if (ObjectPool.Instance != null && !string.IsNullOrEmpty(speedEffectPoolTag) && ObjectPool.Instance.HasPool(speedEffectPoolTag))
         {
             ObjectPool.Instance.ReturnAllActive(speedEffectPoolTag);

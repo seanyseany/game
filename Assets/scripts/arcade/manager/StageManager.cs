@@ -39,11 +39,6 @@ public partial class StageManager : MonoBehaviour
     public GameObject[] stage1PhasePrefabs;
     public SpecialPhaseEntry[] stage1SpecialPhasePrefabs;
 
-    [Header("Stage 1.5 Phase Prefabs")]
-    [FormerlySerializedAs("stage2_5PhasePrefabs")]
-    [Tooltip("스테이지 1 종료 후 첫 배경 교체가 완료되면 사용할 노멀 페이즈. 다음 배경 교체까지 사용하며, 비워두면 기존 스테이지 페이즈를 사용합니다.")]
-    public GameObject[] stage1_5PhasePrefabs;
-
     [Header("Stage 2 Phase Prefabs")]
     public GameObject[] stage2PhasePrefabs;
     public SpecialPhaseEntry[] stage2SpecialPhasePrefabs;
@@ -168,26 +163,26 @@ public partial class StageManager : MonoBehaviour
     public GameObject[] backgroundPrefabs;
     [Tooltip("스테이지 1 종료 시 배경 전환 확률. 0 = 0%, 0.5 = 50%, 1 = 100%")]
     [Range(0f, 1f)] public float stage1BackgroundChangeChance = 0.5f;
+    [Tooltip("배경 전환용 프리팹. 자식 center의 월드 X좌표가 0 이하가 되면 배경을 교체합니다.")]
     public GameObject preBackgroundPrefab;
     [FormerlySerializedAs("preBackgroundSpawnPoint")]
     [Tooltip("Pre Background 생성 위치. 프리팹의 Mover가 생성 후 이동을 담당합니다.")]
     public Transform preBackgroundPoint;
     [Tooltip("생성 시 이 지점의 X좌표를 기록하고, Pre Background의 중심이 그 좌표를 통과하면 삭제합니다.")]
     public Transform preBackgroundPoint2;
-    [Tooltip("Pre Background 생성 후 실제 배경을 교체하기까지의 시간")]
-    [Min(0f)] public float backgroundChangeDelay = 1f;
 
     private readonly List<GameObject> backgroundSources = new List<GameObject>();
     private readonly Dictionary<GameObject, GameObject> backgroundInstances = new Dictionary<GameObject, GameObject>();
     private GameObject currentBackgroundSource;
     private GameObject preBackgroundInstance;
+    private Transform preBackgroundCenter;
+    private GameObject preBackgroundNextSource;
     private float preBackgroundPreviousX;
     private float preBackgroundDespawnX;
     private Coroutine backgroundChangeRoutine;
     private int pendingBackgroundChanges;
     private bool stage1BackgroundRollCompleted;
     private bool stage1BackgroundChangeTriggered;
-    private int preBossBackgroundChangeCount;
     private int stage3NormalPhaseSpawnCount;
     private int stage3BackgroundChangeAt;
     private bool stage3BackgroundChangeTriggered;
@@ -420,6 +415,7 @@ public partial class StageManager : MonoBehaviour
         if (gameplayPauseByTransform)
             return;
 
+        UpdateSpeedPhaseEntrySpeed(Time.deltaTime);
         TrySpawnSpeedPhaseEffects();
 
         if (miniBossPhasePauseActive && !HasAliveMiniBoss() && !HasPendingMiniBossTrigger())
@@ -453,6 +449,16 @@ public partial class StageManager : MonoBehaviour
     {
         if (preBackgroundInstance == null)
             return;
+
+        // Check after Mover.Update, before deleting Cave, so even a large step
+        // across both X = 0 and Point 2 still swaps the background this frame.
+        if (preBackgroundNextSource != null && preBackgroundCenter != null &&
+            preBackgroundCenter.position.x <= 0f && !gameplayPauseByTransform &&
+            (GameData.Instance == null || (!GameData.Instance.gameOver && !GameData.Instance.IsResetting)))
+        {
+            ShowBackground(preBackgroundNextSource);
+            preBackgroundNextSource = null;
+        }
 
         // Only an actual crossing deletes Cave. A missing/moving marker or a
         // starting position already left of the marker must not delete it early.
@@ -519,13 +525,17 @@ public partial class StageManager : MonoBehaviour
 
     public void OnPhasePassed(PhaseEndTrigger sourceTrigger)
     {
+        if (!isActiveAndEnabled)
+            return;
         if (GameData.Instance != null && (GameData.Instance.gameOver || GameData.Instance.IsResetting))
             return;
         if (gameplayPauseByTransform)
             return;
 
         PhaseInfo sourcePhase = FindPhaseInfoByTrigger(sourceTrigger);
-        if (sourcePhase != null && sourcePhase.isSpeedPhaseSpawn && sourcePhase.passedEndTrigger)
+        if (sourceTrigger != null && sourcePhase == null)
+            return;
+        if (sourcePhase != null && sourcePhase.passedEndTrigger)
             return;
         if (sourcePhase != null)
             sourcePhase.passedEndTrigger = true;
@@ -535,6 +545,11 @@ public partial class StageManager : MonoBehaviour
             sourcePhase.suppressNextPhasePass = false;
             return;
         }
+
+        if (currentSpawnMode == SpawnMode.Rage && (sourcePhase == null || !sourcePhase.isRageSpawn))
+            return;
+        if (sourcePhase != null && sourcePhase.isRageSpawn && currentSpawnMode == SpawnMode.Normal)
+            return;
 
         if (IsSpeedPhaseSequenceActive)
         {
@@ -550,6 +565,10 @@ public partial class StageManager : MonoBehaviour
 
         // Old speed-phase triggers cannot advance a later normal/rage sequence.
         if (sourcePhase != null && sourcePhase.isSpeedPhaseSpawn)
+            return;
+
+        if (interruptedSpeedPhaseSettings != null && currentSpawnMode == SpawnMode.Normal &&
+            (sourcePhase == null || sourcePhase != currentSpeedRecoveryNormalPhase))
             return;
 
         // ✅ 보스 트리거 상태면 spawnPaused여도 "마지막 페이즈 감지"를 처리해야 함
@@ -680,21 +699,27 @@ public partial class StageManager : MonoBehaviour
             return;
         }
 
+        if (interruptedSpeedPhaseSettings != null)
+        {
+            SpawnSpeedPhaseRecovery();
+            return;
+        }
+
         if (forceNormalPhaseAfterSpeedPhase)
         {
             SpawnNormalPhaseAfterSpeedPhase();
             return;
         }
 
-        int speedStage = GetCurrentPhaseStage();
-        bool isTestPhase = speedStage == TestPhaseStage;
-        if (!isTestPhase)
+        if (GetCurrentPhaseStage() != TestPhaseStage)
             TryRollStage1BackgroundChange();
+        int speedStage = GetCurrentPhaseStage();
+        bool advancesStage = speedStage != TestPhaseStage;
         SpawnPhaseInternal(
             stage: speedStage,
             isRageSpawn: false,
-            countTowardPhaseProgress: !isTestPhase,
-            runPhaseRolls: !isTestPhase);
+            countTowardPhaseProgress: advancesStage,
+            runPhaseRolls: advancesStage);
     }
 
     private IEnumerator CoStartStageLoop()
@@ -787,15 +812,8 @@ public partial class StageManager : MonoBehaviour
 
         if (!paused && currentSpawnMode == SpawnMode.Rage && !bossRunning && !bossTriggered && !machineGunPhasePauseActive)
         {
-            if (pendingInitialRagePhaseSpawn)
-            {
-                SpawnRagePhaseDirect();
-                pendingInitialRagePhaseSpawn = false;
-            }
-            else if (GetActivePhaseCount() == 0)
-            {
-                SpawnRagePhaseDirect();
-            }
+            SpawnRagePhaseDirect();
+            pendingInitialRagePhaseSpawn = false;
         }
     }
 
@@ -805,6 +823,8 @@ public partial class StageManager : MonoBehaviour
     public void TriggerBossEncounter(int stage)
     {
         if (stage != BossStage3 || postBossMixedPhaseUnlocked || bossRunning || bossTriggered)
+            return;
+        if (TryDeferBossForSpeedPhase(stage))
             return;
 
         bossTriggered = true;
@@ -819,6 +839,8 @@ public partial class StageManager : MonoBehaviour
     public void QueueBossEncounterAfterMachineGun(int stage)
     {
         if (stage != BossStage3 || postBossMixedPhaseUnlocked || bossRunning || bossTriggered)
+            return;
+        if (TryDeferBossForSpeedPhase(stage))
             return;
 
         pendingMachineGunBossStage = stage;
@@ -843,6 +865,8 @@ public partial class StageManager : MonoBehaviour
     private void StartBossEncounterNow(int stage)
     {
         if (stage != BossStage3 || postBossMixedPhaseUnlocked || bossRunning || bossTriggered)
+            return;
+        if (TryDeferBossForSpeedPhase(stage))
             return;
 
         bossTriggered = true;
@@ -982,7 +1006,6 @@ public partial class StageManager : MonoBehaviour
         ClearPreBackground();
         stage1BackgroundRollCompleted = false;
         stage1BackgroundChangeTriggered = false;
-        preBossBackgroundChangeCount = 0;
         stage3NormalPhaseSpawnCount = 0;
         stage3BackgroundChangeAt = 0;
         stage3BackgroundChangeTriggered = false;
@@ -1087,7 +1110,7 @@ public partial class StageManager : MonoBehaviour
 
     private IEnumerator CoChangeBackgrounds()
     {
-        // Always yield once so even a zero-delay transition keeps a valid coroutine handle.
+        // Always yield once so an immediate transition keeps a valid coroutine handle.
         yield return null;
         while (pendingBackgroundChanges > 0)
         {
@@ -1106,17 +1129,18 @@ public partial class StageManager : MonoBehaviour
                 continue;
 
             GameObject next = candidates[Random.Range(0, candidates.Count)];
-            float delay = 0f;
             if (preBackgroundPrefab != null)
             {
                 if (preBackgroundPoint != null && preBackgroundPoint2 != null)
                 {
                     preBackgroundInstance = Instantiate(preBackgroundPrefab, preBackgroundPoint.position, preBackgroundPoint.rotation);
+                    preBackgroundCenter = preBackgroundInstance.transform.Find("center");
+                    if (preBackgroundCenter == null)
+                        preBackgroundCenter = preBackgroundInstance.transform;
+                    preBackgroundNextSource = next;
                     preBackgroundPreviousX = preBackgroundInstance.transform.position.x;
                     preBackgroundDespawnX = preBackgroundPoint2.position.x;
                     preBackgroundInstance.SetActive(true);
-                    delay = Mathf.Max(0f, backgroundChangeDelay);
-                    yield return WaitForSecondsRespectingGameplayPause(delay);
                 }
                 else
                 {
@@ -1127,7 +1151,8 @@ public partial class StageManager : MonoBehaviour
             if (GameData.Instance != null && (GameData.Instance.gameOver || GameData.Instance.IsResetting))
                 break;
 
-            ShowBackground(next);
+            if (preBackgroundInstance == null)
+                ShowBackground(next);
             // Keep the moving prefab until its origin reaches Point 2, regardless of travel time.
             while (preBackgroundInstance != null)
             {
@@ -1139,6 +1164,7 @@ public partial class StageManager : MonoBehaviour
 
         // Ending/cancelling a transition must not shorten Cave's trip to Point 2.
         // LateUpdate owns its normal deletion; retry and scene teardown clean it explicitly.
+        preBackgroundNextSource = null;
         pendingBackgroundChanges = 0;
         backgroundChangeRoutine = null;
     }
@@ -1149,17 +1175,6 @@ public partial class StageManager : MonoBehaviour
         {
             instance = source.scene.IsValid() ? source : Instantiate(source, source.transform.position, source.transform.rotation);
             backgroundInstances[source] = instance;
-        }
-
-        if (currentBackgroundSource != null && currentBackgroundSource != source && !postBossMixedPhaseUnlocked)
-        {
-            preBossBackgroundChangeCount++;
-            // Rebuild both affected cycles when entering or leaving the stage 1.5 background.
-            if (preBossBackgroundChangeCount <= 2 && HasConfiguredPhasePrefabs(stage1_5PhasePrefabs))
-            {
-                phaseShuffleByStage.Remove(2);
-                phaseShuffleByStage.Remove(BossStage3);
-            }
         }
 
         if (currentBackgroundSource != null &&
@@ -1178,6 +1193,8 @@ public partial class StageManager : MonoBehaviour
             Destroy(preBackgroundInstance);
         }
         preBackgroundInstance = null;
+        preBackgroundCenter = null;
+        preBackgroundNextSource = null;
     }
 
     private void CancelBackgroundChanges()
@@ -1186,6 +1203,7 @@ public partial class StageManager : MonoBehaviour
             StopCoroutine(backgroundChangeRoutine);
         backgroundChangeRoutine = null;
         pendingBackgroundChanges = 0;
+        preBackgroundNextSource = null;
     }
 
     private void DeactivateBossTemplateIfSceneObject()
@@ -1279,15 +1297,8 @@ public partial class StageManager : MonoBehaviour
 
             if (!gameplayPauseByTransform)
             {
-                if (pendingInitialRagePhaseSpawn)
-                {
-                    SpawnRagePhaseDirect();
-                    pendingInitialRagePhaseSpawn = false;
-                }
-                else if (GetActiveRagePhaseCount() == 0)
-                {
-                    SpawnRagePhaseDirect();
-                }
+                SpawnRagePhaseDirect();
+                pendingInitialRagePhaseSpawn = false;
             }
 
             phasePassedDuringMachineGunPause = false;
@@ -1304,12 +1315,14 @@ public partial class StageManager : MonoBehaviour
 
     private void StartRagePhaseSpawn()
     {
-        if (!HasConfiguredPhasePrefabs(rageStagePrefabs))
+        if (!HasConfiguredPhasePrefabs(rageStagePrefabs) &&
+            !IsSpeedPhaseSequenceActive && interruptedSpeedPhaseSettings == null)
         {
             return;
         }
 
-        CancelSpeedPhaseSequence();
+        bool rageAlreadyRunning = currentSpawnMode == SpawnMode.Rage;
+        InterruptSpeedPhaseSequenceForRage();
         if (ragePhaseRoutine != null)
             StopCoroutine(ragePhaseRoutine);
 
@@ -1318,6 +1331,8 @@ public partial class StageManager : MonoBehaviour
         currentSpawnMode = SpawnMode.Rage;
         pendingInitialRagePhaseSpawn = true;
         SuppressActivePhaseTriggers(false);
+        if (!rageAlreadyRunning)
+            SuppressActivePhaseTriggers(true);
 
         // 분노 시작 시에는 기존 phase trigger를 기다리지 않고
         // 첫 rage phase를 즉시 스폰한다.
@@ -1408,6 +1423,17 @@ public partial class StageManager : MonoBehaviour
     }
     private void SpawnRagePhaseDirect()
     {
+        if (currentSpawnMode != SpawnMode.Rage || spawnPaused || gameplayPauseByTransform ||
+            machineGunPhasePauseActive || bossRunning || bossTriggered)
+            return;
+
+        // Detector callbacks, pause recovery and the presence check share this gate.
+        // Passed phases can keep scrolling out while only one successor waits ahead.
+        foreach (PhaseInfo phase in activePhases)
+            if (phase.isRageSpawn && !phase.passedEndTrigger && !phase.suppressNextPhasePass &&
+                phase.obj != null && activePhaseObjects.Contains(phase.obj))
+                return;
+
         SpawnPhaseInternal(
             stage: RagePhaseStage,
             isRageSpawn: true,
@@ -1448,9 +1474,6 @@ public partial class StageManager : MonoBehaviour
             return;
 
         if (bossRunning || bossTriggered || machineGunPhasePauseActive || pendingInitialRagePhaseSpawn)
-            return;
-
-        if (GetActiveRagePhaseCount() > 0)
             return;
 
         SpawnRagePhaseDirect();
@@ -1561,11 +1584,14 @@ public partial class StageManager : MonoBehaviour
         if (!testPhaseSequenceCompleted && HasConfiguredPhasePrefabs(testPhasePrefabs))
             return TestPhaseStage;
 
-        int speedStage = GetSpeedStage();
         if (postBossMixedPhaseUnlocked)
             return PostBossMixedStage;
 
-        return speedStage;
+        // Recovery normals may cross the boss threshold before the replay finishes.
+        if (deferredSpeedPhaseBossStage != 0)
+            return BossStage3;
+
+        return GetSpeedStage();
     }
 
     private List<GameObject> CollectAllPhasePrefabs()
@@ -1575,7 +1601,6 @@ public partial class StageManager : MonoBehaviour
         AddUniquePrefabs(allPrefabs, rageStagePrefabs);
         AddUniquePrefabs(allPrefabs, stage1PhasePrefabs);
         AddUniquePrefabs(allPrefabs, stage2PhasePrefabs);
-        AddUniquePrefabs(allPrefabs, stage1_5PhasePrefabs);
         AddUniquePrefabs(allPrefabs, stage3PhasePrefabs);
         AddUniquePrefabs(allPrefabs, stage4PhasePrefabs);
         AddUniquePrefabs(allPrefabs, stage1SpecialPhasePrefabs);
@@ -1590,12 +1615,6 @@ public partial class StageManager : MonoBehaviour
                 AddUniquePrefabs(allPrefabs, speedPhase.phasePrefabs);
             }
         return allPrefabs;
-    }
-
-    private bool UsesStage15PhasePrefabs(int stage)
-    {
-        return (stage == 2 || stage == 3) && !postBossMixedPhaseUnlocked &&
-            preBossBackgroundChangeCount == 1 && HasConfiguredPhasePrefabs(stage1_5PhasePrefabs);
     }
 
     private GameObject[] GetPhasePrefabsForStage(int stage)
@@ -1618,9 +1637,6 @@ public partial class StageManager : MonoBehaviour
 
         if (stage == PostBossMixedStage)
             return mixedPhasePrefabs ??= CombinePhasePrefabs(stage3PhasePrefabs, stage4PhasePrefabs);
-
-        if (UsesStage15PhasePrefabs(stage))
-            return stage1_5PhasePrefabs;
 
         switch (Mathf.Clamp(stage, MinPhaseStage, MaxPhaseStage))
         {
@@ -1776,10 +1792,6 @@ public partial class StageManager : MonoBehaviour
 
     private SpecialPhaseEntry[] GetSpecialPhaseEntriesForStage(int stage)
     {
-        // Stage 1.5 has its own normal-only list; do not inherit stage 2/3 specials.
-        if (UsesStage15PhasePrefabs(stage))
-            return null;
-
         if (stage == PostBossMixedStage)
             return mixedSpecialPhasePrefabs ??= CombineSpecialPhaseEntries(stage3SpecialPhasePrefabs, stage4SpecialPhasePrefabs);
 

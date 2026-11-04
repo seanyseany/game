@@ -355,7 +355,7 @@ public class ObstacleMover : MonoBehaviour, IReinitializeOnEnable
             return true;
 
         if (GameData.Instance != null && gateOxygenPenalty > 0)
-            GameData.Instance.SpendO2(gateOxygenPenalty);
+            GameData.Instance.HandleTrainObstacleHit(gateOxygenPenalty);
 
         TriggerDestroyOrDespawn();
         return true;

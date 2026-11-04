@@ -41,6 +41,8 @@ public class Villan : MonoBehaviour
     [FormerlySerializedAs("baseMoveSpeed")]
     [SerializeField] private float moveSpeed = 2f;
     [SerializeField] private int hitCount = 1;
+    [SerializeField, Min(0), Tooltip("마을회관 충돌 시 감소시키는 마을 점수")]
+    private int villageScoreDamage = 1;
     [SerializeField] private SpriteRenderer spriteRenderer;
     [HideInInspector] [SerializeField] private Transform aimTarget;
     [HideInInspector] [SerializeField] private Animator animator;
@@ -62,6 +64,7 @@ public class Villan : MonoBehaviour
     private int baseSortingOrder;
 
     public Transform AimTarget => aimTarget != null ? aimTarget : transform;
+    public int VillageScoreDamage => Mathf.Max(0, villageScoreDamage);
 
     private void OnEnable()
     {
@@ -161,9 +164,20 @@ public class Villan : MonoBehaviour
         if (dead || returningToPool || other == null)
             return;
 
-        Bank bank = other.GetComponent<Bank>() ?? other.GetComponentInParent<Bank>();
-        if (bank != null)
+        VillageTownHall townHall = other.GetComponentInParent<VillageTownHall>();
+        if (townHall != null)
+        {
+            townHall.TakeDamage(VillageScoreDamage);
             StartCoroutine(DieRoutine());
+            return;
+        }
+
+        Bank bank = other.GetComponentInParent<Bank>();
+        if (bank != null)
+        {
+            bank.TakeDamage(VillageScoreDamage);
+            StartCoroutine(DieRoutine());
+        }
     }
 
     private IEnumerator DieRoutine()

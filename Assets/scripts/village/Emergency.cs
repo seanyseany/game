@@ -34,6 +34,8 @@ public class Emergency : MonoBehaviour
     private float nextEmergencyAt = -1f;
     private bool emergencyRunning;
 
+    public int CurrentLevel => VillageManagement.Instance != null ? VillageManagement.Instance.EmergencyDifficulty : 1;
+
     private void Start()
     {
         ChooseNextEmergencyTime();
@@ -64,20 +66,21 @@ public class Emergency : MonoBehaviour
         if (emergencyWarning != null)
             emergencyWarning.SetActive(false);
 
-        for (int i = 0; i < levels.Count; i++)
+        // Each entry is one village difficulty. Reuse the highest configured entry
+        // until the remaining levels have been authored in the Inspector.
+        int difficulty = CurrentLevel;
+        if (levels.Count > 0)
         {
-            EmergencyLevel level = levels[i];
-            if (level == null || !level.enabled)
-                continue;
-
-            yield return StartCoroutine(SpawnLevel(level));
+            EmergencyLevel level = levels[Mathf.Clamp(difficulty - 1, 0, levels.Count - 1)];
+            if (level != null && level.enabled)
+                yield return StartCoroutine(SpawnLevel(level, difficulty));
         }
 
         ChooseNextEmergencyTime();
         emergencyRunning = false;
     }
 
-    private IEnumerator SpawnLevel(EmergencyLevel level)
+    private IEnumerator SpawnLevel(EmergencyLevel level, int difficulty)
     {
         if (level == null || level.villans.Count == 0)
             yield break;
@@ -94,7 +97,7 @@ public class Emergency : MonoBehaviour
 
             for (int spawnIndex = 0; spawnIndex < entry.count; spawnIndex++)
             {
-                Villan.Spawn(entry.villanPrefab, path, 1);
+                Villan.Spawn(entry.villanPrefab, path, difficulty);
                 float interval = GetRandomSpawnInterval(level.spawnIntervals);
                 yield return new WaitForSeconds(interval);
             }

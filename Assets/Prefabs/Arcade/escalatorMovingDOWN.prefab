@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: -4775458514205089586}
   - component: {fileID: 5099521604992070406}
   - component: {fileID: 1220147358973841891}
+  - component: {fileID: 4889019890367941840}
   m_Layer: 0
   m_Name: escalatorMovingDOWN
   m_TagString: platform
@@ -134,6 +135,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0a43e822cc3dc495fa6bef317418b5f7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  hitCount: 1
   breakSprites:
   - {fileID: 8701218567023719543, guid: e49b7fe961c044eefa52466973490033, type: 3}
   - {fileID: 8701218567023719543, guid: e49b7fe961c044eefa52466973490033, type: 3}
@@ -226,3 +228,17 @@ MonoBehaviour:
   triggerOnlyOnce: 1
   animatorStopFadeDuration: 0.4
   moveTarget: {fileID: 0}
+--- !u!114 &4889019890367941840
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2372112319166534553}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce4c00462992547d0bfa5fbfdf523201, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ObstacleRageMover
+  moveDistance: 20
+  isTop: 1

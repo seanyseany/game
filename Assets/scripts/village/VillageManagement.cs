@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 
 [DefaultExecutionOrder(-500)]
-public class VillageManagement : MonoBehaviour
+public partial class VillageManagement : MonoBehaviour
 {
     private enum SaveMode
     {
@@ -89,6 +89,9 @@ public class VillageManagement : MonoBehaviour
     [Serializable]
     public class VillageSaveData
     {
+        public int villageLevel = 1;
+        public long villageScore;
+        public List<int> purchasedPlayerTypes = new List<int> { 1 };
         public int bankLevel = 1;
         public string selectedWhiteBloodCellId = string.Empty;
         public int selectedArcadeSceneIndex = 0;
@@ -155,6 +158,7 @@ public class VillageManagement : MonoBehaviour
     {
         [Range(1, 5)] public int playerType = 1;
         public bool available = true;
+        [Min(0)] public int purchaseOxygenCost = 10;
     }
 
     public static VillageManagement Instance { get; private set; }
@@ -300,22 +304,23 @@ public class VillageManagement : MonoBehaviour
             {
                 string json = File.ReadAllText(SavePath);
                 VillageSaveData loadedData = JsonUtility.FromJson<VillageSaveData>(json);
-                saveData = loadedData ?? new VillageSaveData();
+                saveData = loadedData ?? CreateInitialSaveData();
             }
             else
             {
-                saveData = new VillageSaveData();
+                saveData = CreateInitialSaveData();
                 Save();
             }
         }
         catch (Exception exception)
         {
             Debug.LogWarning($"Village save load failed. A fresh save will be created.\n{exception}");
-            saveData = new VillageSaveData();
+            saveData = CreateInitialSaveData();
             Save();
         }
 
         SanitizeSaveData();
+        saveData.emergencyDifficulty = VillageLevel;
         loaded = true;
         NotifyAllResourceSnapshots();
         SaveDataChanged?.Invoke(saveData);
@@ -371,7 +376,7 @@ public class VillageManagement : MonoBehaviour
 
     public void ResetSaveData()
     {
-        saveData = new VillageSaveData();
+        saveData = CreateInitialSaveData();
         hasPendingDelayedSave = false;
         Save();
         NotifyAllResourceSnapshots();
@@ -383,12 +388,17 @@ public class VillageManagement : MonoBehaviour
     public void ResetAllVillageProgress()
     {
         ClearPlacedVillageObjects();
+        VillageSaveData initial = CreateInitialSaveData();
         saveData.bankLevel = 1;
+        saveData.villageLevel = initial.villageLevel;
+        saveData.villageScore = initial.villageScore;
+        saveData.purchasedPlayerTypes = new List<int> { 1 };
+        saveData.selectedArcadePlayerType = -1;
         saveData.selectedWhiteBloodCellId = string.Empty;
         saveData.selectedArcadeSceneIndex = 0;
         saveData.currentOxygen = 0;
         saveData.currentEnergy = 0;
-        saveData.emergencyDifficulty = 1;
+        saveData.emergencyDifficulty = initial.emergencyDifficulty;
         saveData.lifetimeArcadeOxygenEarned = 0;
         saveData.lifetimeArcadeEnergyEarned = 0;
         saveData.lastSavedUtc = string.Empty;
@@ -601,6 +611,8 @@ public class VillageManagement : MonoBehaviour
 
     public void SetSelectedArcadePlayerType(int playerType)
     {
+        if (playerType > 0 && !IsArcadePlayerAvailable(playerType))
+            return;
         int next = playerType <= 0 ? -1 : Mathf.Clamp(playerType, 1, 5);
         if (saveData.selectedArcadePlayerType == next)
             return;
@@ -811,7 +823,7 @@ public class VillageManagement : MonoBehaviour
     public bool IsArcadePlayerAvailable(int playerType)
     {
         ArcadePlayerEntry entry = FindArcadePlayerEntry(playerType);
-        return entry != null && entry.available;
+        return entry != null && entry.available && IsVillageLevelUnlocked(playerType) && HasPurchasedPlayer(playerType);
     }
 
     public bool TryGetArcadePlayer(int playerType, out ArcadePlayerEntry entry)
@@ -826,7 +838,7 @@ public class VillageManagement : MonoBehaviour
         for (int i = 0; i < arcadePlayers.Count; i++)
         {
             ArcadePlayerEntry entry = arcadePlayers[i];
-            if (entry == null || !entry.available)
+            if (entry == null || !IsArcadePlayerAvailable(entry.playerType))
                 continue;
 
             results.Add(entry);
@@ -1428,6 +1440,12 @@ public class VillageManagement : MonoBehaviour
         saveData.oxygenCapacity = Mathf.Max(0, saveData.oxygenCapacity);
         saveData.energyCapacity = Mathf.Max(0, saveData.energyCapacity);
         saveData.bankLevel = Mathf.Clamp(saveData.bankLevel, 1, 3);
+        saveData.villageLevel = Mathf.Clamp(saveData.villageLevel, 1, MaxVillageLevel);
+        saveData.villageScore = Math.Max(0L, saveData.villageScore);
+        if (saveData.purchasedPlayerTypes == null)
+            saveData.purchasedPlayerTypes = new List<int>();
+        if (!saveData.purchasedPlayerTypes.Contains(1))
+            saveData.purchasedPlayerTypes.Add(1);
         saveData.selectedArcadeSceneIndex = Mathf.Max(0, saveData.selectedArcadeSceneIndex);
         saveData.selectedArcadePlayerType = saveData.selectedArcadePlayerType <= 0
             ? -1

@@ -361,11 +361,13 @@ public sealed class TycoonWorkflowTests
     }
 
     [Test]
-    public void BuildingTradesAwardOxygenAndLeaveEnergyUntouched()
+    public void BuildingTradesAwardVillageScoreAndLeaveResourcesUntouched()
     {
-        Set(breadBuilding, "oxygenProducedPerTrade", 5);
-        breadBuilding.AwardTradeOxygen();
-        Assert.AreEqual(35, village.CurrentOxygen);
+        Set(breadBuilding, "villageScorePerTrade", 5);
+        long previousScore = village.VillageScore;
+        breadBuilding.AwardTradeVillageScore();
+        Assert.AreEqual(previousScore + 5, village.VillageScore);
+        Assert.AreEqual(30, village.CurrentOxygen);
         Assert.AreEqual(30, village.CurrentEnergy);
     }
 
@@ -501,7 +503,7 @@ public sealed class TycoonWorkflowTests
         Assert.IsNotNull(prefab);
         Building building = prefab.GetComponent<Building>();
         Assert.AreEqual(100f, building.CurrentSalary);
-        Assert.AreEqual(5, building.OxygenValue);
+        Assert.AreEqual(5, building.VillageScorePerTrade);
         var serialized = new UnityEditor.SerializedObject(building);
         var icon = serialized.FindProperty("exclamationPrefab").objectReferenceValue;
         Assert.AreEqual("Assets/Prefabs/Village/OxygenTradeIcon.prefab", UnityEditor.AssetDatabase.GetAssetPath(icon));

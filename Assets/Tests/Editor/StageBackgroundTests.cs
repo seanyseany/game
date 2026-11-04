@@ -87,44 +87,30 @@ public sealed class StageBackgroundTests
     }
 
     [UnityTest]
-    public IEnumerator Stage15OnlyRunsDuringEachBackgroundTransitionWithoutConsumingStageProgress()
+    public IEnumerator BackgroundChangesKeepStage2AndStage3SpawningAndAdvancing()
     {
-        var intermediate = new GameObject("Stage 1.5 transition phase");
-        intermediate.SetActive(false);
-        manager.stage1_5PhasePrefabs = new[] { intermediate };
         manager.stage1BackgroundChangeChance = 1f;
         manager.speedUp2 = 6;
-        CollectionAssert.Contains((List<GameObject>)Call("CollectAllPhasePrefabs"), intermediate);
-
-        // Stage 1 -> 2: the triggering spawn must immediately use the transition list.
         Set("phaseSpawnCount", manager.speedUp1);
-        Assert.AreEqual(2, Call("GetCurrentPhaseStage"));
-        Assert.AreSame(normal, NextPhase(2));
         Call("SpawnPhase");
-        Assert.IsTrue(Get<bool>("backgroundTransitionPhaseActive"));
-        Assert.AreEqual(15, Call("GetCurrentPhaseStage"));
-        Assert.AreEqual(manager.speedUp1, manager.GetPhaseSpawnCount());
-        Assert.AreEqual(1, Get<Dictionary<GameObject, int>>("createdCountByPrefab")[intermediate]);
-        for (int i = 0; i < 4; i++) Call("SpawnPhase");
-        Assert.AreEqual(manager.speedUp1, manager.GetPhaseSpawnCount());
-        for (int frame = 0; frame < 5 && Get<bool>("backgroundTransitionPhaseActive"); frame++)
+        Assert.AreEqual(1, Get<int>("pendingBackgroundChanges"));
+        Assert.AreEqual(2, Call("GetCurrentPhaseStage"));
+        Assert.AreEqual(manager.speedUp1 + 1, manager.GetPhaseSpawnCount());
+        for (int i = 0; i < 3; i++) Call("SpawnPhase");
+        Assert.AreEqual(manager.speedUp1 + 4, manager.GetPhaseSpawnCount());
+        for (int frame = 0; frame < 5 && !second.activeSelf; frame++)
             yield return null;
         Assert.IsTrue(second.activeSelf);
-        Assert.IsFalse(Get<bool>("backgroundTransitionPhaseActive"));
         Assert.AreEqual(2, Call("GetCurrentPhaseStage"));
-        Call("SpawnPhase");
-        Assert.AreEqual(manager.speedUp1 + 1, manager.GetPhaseSpawnCount());
 
-        // The existing stage 3 normal-count trigger starts the same temporary window again.
         Set("phaseSpawnCount", manager.speedUp2);
         Set("stage3BackgroundChangeAt", 1);
-        Spawn(3, normal);
+        Call("SpawnPhase");
         Assert.IsTrue(Get<bool>("stage3BackgroundChangeTriggered"));
-        Assert.AreEqual(15, Call("GetCurrentPhaseStage"));
+        Assert.AreEqual(3, Call("GetCurrentPhaseStage"));
         for (int i = 0; i < 4; i++) Call("SpawnPhase");
-        Assert.AreEqual(manager.speedUp2, manager.GetPhaseSpawnCount());
-        Assert.AreEqual(1, Get<int>("stage3NormalPhaseSpawnCount"));
-        for (int frame = 0; frame < 5 && Get<bool>("backgroundTransitionPhaseActive"); frame++)
+        Assert.AreEqual(manager.speedUp2 + 5, manager.GetPhaseSpawnCount());
+        for (int frame = 0; frame < 5 && !first.activeSelf; frame++)
             yield return null;
         Assert.IsTrue(first.activeSelf);
         Assert.AreEqual(3, Call("GetCurrentPhaseStage"));
@@ -132,25 +118,15 @@ public sealed class StageBackgroundTests
     }
 
     [UnityTest]
-    public IEnumerator Stage15ExcludesForeignSpecialsAndEndsWhenPreBackgroundFinishes()
+    public IEnumerator MovingPreBackgroundDoesNotReplaceNormalOrSpecialPhaseCycles()
     {
-        var intermediate = new GameObject("Stage 1.5 only phase");
-        intermediate.SetActive(false);
-        var foreignSpecial = new GameObject("Stage 2 and 3 special");
-        foreignSpecial.SetActive(false);
-        manager.stage1_5PhasePrefabs = new[] { intermediate };
-        var specials = new[] { new SpecialPhaseEntry { prefab = foreignSpecial, spawnChance = 1f } };
+        var special = new GameObject("Stage 2 and 3 special");
+        special.SetActive(false);
+        var specials = new[] { new SpecialPhaseEntry { prefab = special, spawnChance = 1f } };
         manager.stage2SpecialPhasePrefabs = specials;
         manager.stage3SpecialPhasePrefabs = specials;
         manager.speedUp2 = 6;
         manager.speedUp3 = 12;
-        foreach (int stage in new[] { 2, 3 })
-        {
-            var beforeTransition = new List<GameObject>();
-            for (int i = 0; i < 3; i++) beforeTransition.Add(NextPhase(stage));
-            CollectionAssert.Contains(beforeTransition, foreignSpecial);
-        }
-
         var pre = new GameObject("Pre background template");
         pre.SetActive(false);
         manager.preBackgroundPrefab = pre;
@@ -158,73 +134,71 @@ public sealed class StageBackgroundTests
         manager.preBackgroundPoint.position = Vector3.right * 10f;
         manager.preBackgroundPoint2 = new GameObject("Transition end").transform;
         manager.preBackgroundPoint2.position = Vector3.left * 10f;
-        manager.backgroundChangeDelay = 0.05f;
         Set("phaseSpawnCount", manager.speedUp1);
         Call("RequestBackgroundChange");
-        Assert.AreEqual(15, Call("GetCurrentPhaseStage"));
-        for (int i = 0; i < 40; i++)
-            Assert.AreSame(intermediate, NextPhase((int)Call("GetCurrentPhaseStage")));
-        yield return WaitGameSeconds(0.2f);
-        Assert.IsTrue(second.activeSelf);
-        Assert.AreEqual(15, Call("GetCurrentPhaseStage"), "The moving pre-background is still part of the transition.");
-        GameObject effect = Get<GameObject>("preBackgroundInstance");
-        Assert.IsNotNull(effect);
-        effect.transform.position = Vector3.left * 11f;
-        for (int frame = 0; frame < 5 && Get<bool>("backgroundTransitionPhaseActive"); frame++)
-            yield return null;
-        Assert.IsNull(Get<GameObject>("preBackgroundInstance"));
-        Assert.IsFalse(Get<bool>("backgroundTransitionPhaseActive"));
         Assert.AreEqual(2, Call("GetCurrentPhaseStage"));
         foreach (int stage in new[] { 2, 3 })
         {
-            var afterTransition = new List<GameObject>();
-            for (int i = 0; i < 4; i++) afterTransition.Add(NextPhase(stage));
-            CollectionAssert.Contains(afterTransition, foreignSpecial);
-            CollectionAssert.DoesNotContain(afterTransition, intermediate);
+            var cycle = new List<GameObject>();
+            for (int i = 0; i < (stage == 2 ? 5 : 6); i++) cycle.Add(NextPhase(stage));
+            CollectionAssert.Contains(cycle, normal);
+            CollectionAssert.Contains(cycle, special);
         }
+        yield return WaitGameSeconds(0.2f);
+        Assert.IsTrue(first.activeSelf);
+        GameObject effect = Get<GameObject>("preBackgroundInstance");
+        Assert.IsNotNull(effect);
+        effect.transform.position = Vector3.zero;
+        Call("LateUpdate");
+        Assert.IsTrue(second.activeSelf);
+        Assert.AreEqual(2, Call("GetCurrentPhaseStage"));
+        effect.transform.position = Vector3.left * 11f;
+        for (int frame = 0; frame < 5 && Get<GameObject>("preBackgroundInstance") != null; frame++)
+            yield return null;
+        Assert.IsNull(Get<GameObject>("preBackgroundInstance"));
+        Assert.AreEqual(2, Call("GetCurrentPhaseStage"));
     }
 
     [UnityTest]
-    public IEnumerator FailedMissingCancelledResetAndPostBossTransitionsDoNotLeaveStage15Active()
+    public IEnumerator CancelledResetMissingAndPostBossBackgroundChangesKeepTheirPhasePools()
     {
-        var intermediate = new GameObject("Stage 1.5 transition phase");
-        intermediate.SetActive(false);
-        manager.stage1_5PhasePrefabs = new[] { intermediate };
         manager.stage1BackgroundChangeChance = 0f;
         Set("phaseSpawnCount", manager.speedUp1);
         Call("TryRollStage1BackgroundChange");
-        Assert.IsFalse(Get<bool>("backgroundTransitionPhaseActive"));
+        Assert.AreEqual(0, Get<int>("pendingBackgroundChanges"));
         Assert.AreEqual(2, Call("GetCurrentPhaseStage"));
-
         Call("RequestBackgroundChange");
-        Assert.AreEqual(15, Call("GetCurrentPhaseStage"));
-        manager.stage1_5PhasePrefabs = new GameObject[] { null };
-        Assert.AreEqual(2, Call("GetCurrentPhaseStage"), "An empty transition list falls back to the current stage.");
-        manager.stage1_5PhasePrefabs = new[] { intermediate };
         manager.enabled = false;
-        Assert.IsFalse(Get<bool>("backgroundTransitionPhaseActive"));
+        Assert.AreEqual(0, Get<int>("pendingBackgroundChanges"));
         Assert.AreEqual(2, Call("GetCurrentPhaseStage"));
         manager.enabled = true;
-
         Call("RequestBackgroundChange");
-        Assert.AreEqual(15, Call("GetCurrentPhaseStage"));
         manager.ResetState();
-        Assert.IsFalse(Get<bool>("backgroundTransitionPhaseActive"));
         Assert.AreEqual(1, Call("GetCurrentPhaseStage"));
-        Set("phaseSpawnCount", manager.speedUp1);
         manager.backgroundPrefabs = new[] { first };
         manager.ResetState();
         Set("phaseSpawnCount", manager.speedUp1);
         Assert.IsFalse((bool)Call("RequestBackgroundChange"));
         Assert.AreEqual(2, Call("GetCurrentPhaseStage"));
 
+        var stage4 = new GameObject("Stage 4 normal phase");
+        stage4.SetActive(false);
+        manager.stage4PhasePrefabs = new[] { stage4 };
         manager.backgroundPrefabs = new[] { second };
         manager.ResetState();
         Call("ResumeAfterBoss");
-        Assert.IsFalse(Get<bool>("backgroundTransitionPhaseActive"));
         Assert.AreEqual(104, Call("GetCurrentPhaseStage"));
-        Assert.AreSame(normal, NextPhase(104));
         Assert.AreEqual(1, Get<int>("pendingBackgroundChanges"));
+        for (int cycle = 0; cycle < 4; cycle++)
+        {
+            // Start a fresh two-phase cycle while the background change is still queued.
+            Get<Dictionary<int, List<GameObject>>>("phaseShuffleByStage").Clear();
+            CollectionAssert.AreEquivalent(new[] { normal, stage4 }, new[] { NextPhase(104), NextPhase(104) });
+        }
+        int count = manager.GetPhaseSpawnCount();
+        Call("SpawnPhase");
+        Assert.AreEqual(count + 1, manager.GetPhaseSpawnCount());
+        Assert.AreEqual(104, Call("GetCurrentPhaseStage"));
         manager.ResetState();
         yield return null;
     }
@@ -334,17 +308,20 @@ public sealed class StageBackgroundTests
     }
 
     [UnityTest]
-    public IEnumerator PreBackgroundPrecedesSwapPauseStopsDelayAndRetryRestoresStartingBackground()
+    public IEnumerator ChildCenterWorldPositionControlsSwapAndPauseAndRetryAreRespected()
     {
         var pre = new GameObject("Pre background template");
         pre.SetActive(false);
         pre.transform.position = new Vector3(4f, 5f, 6f);
+        pre.transform.localScale = new Vector3(2f, 1f, 1f);
+        var center = new GameObject("center").transform;
+        center.SetParent(pre.transform, false);
+        center.localPosition = Vector3.right * 2f;
         manager.preBackgroundPrefab = pre;
         manager.preBackgroundPoint = new GameObject("Pre Background Point").transform;
         manager.preBackgroundPoint.position = new Vector3(10f, 2f, 3f);
         manager.preBackgroundPoint2 = new GameObject("Pre Background Point 2").transform;
         manager.preBackgroundPoint2.position = new Vector3(-10f, 0f, 0f);
-        manager.backgroundChangeDelay = 0.1f;
         Assert.IsTrue((bool)Call("RequestBackgroundChange"));
         for (int frame = 0; frame < 5 && Get<GameObject>("preBackgroundInstance") == null; frame++)
             yield return null;
@@ -353,12 +330,17 @@ public sealed class StageBackgroundTests
         Assert.AreEqual(manager.preBackgroundPoint.position, effect.transform.position);
         Assert.IsTrue(first.activeSelf);
         Assert.IsFalse(second.activeSelf);
+        effect.transform.position = new Vector3(-3f, 2f, 3f);
+        yield return WaitGameSeconds(0.2f);
+        Assert.AreEqual(1f, effect.transform.Find("center").position.x);
+        Assert.IsTrue(first.activeSelf, "A negative root X must not swap while the child center is still positive.");
         manager.SetGameplayPause(true);
+        effect.transform.position = new Vector3(-4f, 2f, 3f);
         yield return WaitGameSeconds(0.2f);
         Assert.IsTrue(first.activeSelf);
         Assert.IsFalse(second.activeSelf);
         manager.SetGameplayPause(false);
-        yield return WaitGameSeconds(0.2f);
+        Call("LateUpdate");
         Assert.IsFalse(first.activeSelf);
         Assert.IsTrue(second.activeSelf);
         Assert.IsTrue(effect.activeSelf);
@@ -374,7 +356,7 @@ public sealed class StageBackgroundTests
         yield return null;
         manager.ResetState();
         yield return WaitGameSeconds(0.2f);
-        Assert.IsTrue(first.activeSelf, "A previous run's delayed swap must stay cancelled.");
+        Assert.IsTrue(first.activeSelf, "A previous run's pending swap must stay cancelled.");
         Assert.IsFalse(second.activeSelf);
     }
 
@@ -386,7 +368,6 @@ public sealed class StageBackgroundTests
         manager.preBackgroundPoint.position = new Vector3(8f, 2f, 3f);
         manager.preBackgroundPoint2 = new GameObject("Pre Background Point 2").transform;
         manager.preBackgroundPoint2.position = new Vector3(-24f, -100f, 50f);
-        manager.backgroundChangeDelay = 0.1f;
         Call("RequestBackgroundChange");
         for (int frame = 0; frame < 5 && Get<GameObject>("preBackgroundInstance") == null; frame++)
             yield return null;
@@ -400,7 +381,7 @@ public sealed class StageBackgroundTests
         Assert.Less(cave.transform.position.x, startX);
         Assert.Greater(cave.transform.position.x, manager.preBackgroundPoint2.position.x);
         Assert.AreEqual(manager.preBackgroundPoint.position.y, cave.transform.position.y);
-        Assert.IsTrue(second.activeSelf, "The background swap still uses Background Change Delay.");
+        Assert.IsTrue(second.activeSelf, "The background swaps when Cave's child center crosses world X = 0.");
 
         float deadline = Time.time + 2f;
         while (Get<GameObject>("preBackgroundInstance") != null && Time.time < deadline)
@@ -411,29 +392,28 @@ public sealed class StageBackgroundTests
     }
 
     [UnityTest]
-    public IEnumerator CaveIsRemovedAtPoint2EvenBeforeBackgroundChangeDelayFinishes()
+    public IEnumerator CaveCrossingCenterAndPoint2InOneFrameSwapsBeforeDeletion()
     {
         manager.preBackgroundPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Arcade/Cave.prefab");
         manager.preBackgroundPoint = new GameObject("Pre Background Point").transform;
         manager.preBackgroundPoint.position = new Vector3(5f, 0f, 3f);
         manager.preBackgroundPoint2 = new GameObject("Pre Background Point 2").transform;
-        manager.preBackgroundPoint2.position = new Vector3(4f, 0f, 3f);
-        manager.backgroundChangeDelay = 0.5f;
+        manager.preBackgroundPoint2.position = new Vector3(-0.5f, 0f, 3f);
         Call("RequestBackgroundChange");
         for (int frame = 0; frame < 5 && Get<GameObject>("preBackgroundInstance") == null; frame++)
             yield return null;
         GameObject cave = Get<GameObject>("preBackgroundInstance");
         Assert.IsNotNull(cave);
-        yield return WaitGameSeconds(0.25f);
-        Assert.IsNull(Get<GameObject>("preBackgroundInstance"));
         Assert.IsTrue(first.activeSelf);
-        yield return WaitGameSeconds(0.4f);
+        cave.transform.position = new Vector3(-1f, 0f, 3f);
+        Call("LateUpdate");
+        Assert.IsNull(Get<GameObject>("preBackgroundInstance"));
         Assert.IsFalse(first.activeSelf);
         Assert.IsTrue(second.activeSelf);
     }
 
     [UnityTest]
-    public IEnumerator SevenSecondSwapGameOverAndMissingMarkerCannotDeleteCaveBeforeItsDestination()
+    public IEnumerator CenterSwapGameOverAndMissingMarkerCannotDeleteCaveBeforeItsDestination()
     {
         float previousTimeScale = Time.timeScale;
         GameData data = null;
@@ -445,7 +425,6 @@ public sealed class StageBackgroundTests
             manager.preBackgroundPoint.position = new Vector3(51.1f, -0.7f, 3f);
             manager.preBackgroundPoint2 = new GameObject("Cave Point 2").transform;
             manager.preBackgroundPoint2.position = new Vector3(-63.9f, -0.7f, 3f);
-            manager.backgroundChangeDelay = 7f;
             Call("RequestBackgroundChange");
             for (int frame = 0; frame < 5 && Get<GameObject>("preBackgroundInstance") == null; frame++)
                 yield return null;
@@ -453,7 +432,7 @@ public sealed class StageBackgroundTests
             Assert.IsNotNull(cave);
             yield return WaitGameSeconds(7.1f);
             Assert.IsTrue(second.activeSelf);
-            Assert.IsTrue(cave != null && cave.activeSelf, "Swapping backgrounds after seven seconds must keep Cave alive.");
+            Assert.IsTrue(cave != null && cave.activeSelf, "Swapping backgrounds at center must keep Cave alive.");
             Assert.Greater(cave.transform.position.x, -63.9f);
 
             data = new GameObject("Background game-over check").AddComponent<GameData>();
@@ -489,7 +468,6 @@ public sealed class StageBackgroundTests
         manager.preBackgroundPoint.position = new Vector3(-10f, 0f, 3f);
         manager.preBackgroundPoint2 = new GameObject("Cave Point 2").transform;
         manager.preBackgroundPoint2.position = new Vector3(10f, 0f, 3f);
-        manager.backgroundChangeDelay = 0f;
         Call("RequestBackgroundChange");
         for (int frame = 0; frame < 5 && Get<GameObject>("preBackgroundInstance") == null; frame++)
             yield return null;

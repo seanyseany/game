@@ -1,12 +1,10 @@
 using UnityEngine;
-using System.Collections;
 
 [RequireComponent(typeof(Collider2D))]
 public class PhaseEndTrigger : MonoBehaviour
 {
     private Collider2D col;
     private bool triggered = false;
-    private const float reactivateDelay = 10f;
 
     private void Awake()
     {
@@ -38,23 +36,9 @@ public class PhaseEndTrigger : MonoBehaviour
         triggered = true;
         col.enabled = false;  // 즉시 비활성화
 
-        ;
-
         if (StageManager.Instance != null)
             StageManager.Instance.OnPhasePassed(this);
-
-        // 10초 뒤 다시 활성화
-        StartCoroutine(ReactivateAfterDelay());
-    }
-
-    private IEnumerator ReactivateAfterDelay()
-    {
-        yield return new WaitForSeconds(reactivateDelay);
-
-        triggered = false;
-
-        if (col != null)
-            col.enabled = true;
+        // A phase can pass only once per activation. OnEnable resets pooled reuse.
     }
 
     public void SuppressFuturePasses()

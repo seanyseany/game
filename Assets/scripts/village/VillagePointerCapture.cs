@@ -7,6 +7,14 @@ public static class VillagePointerCapture
 
     public static bool HasActiveCapture => ActiveCaptures.Count > 0;
 
+    public static bool ContainsPoint(Transform target, Vector2 worldPoint)
+    {
+        foreach (Collider2D collider in target.GetComponentsInChildren<Collider2D>())
+            if (collider.enabled && collider.gameObject.activeInHierarchy && collider.OverlapPoint(worldPoint))
+                return true;
+        return false;
+    }
+
     public static void Acquire(Object owner)
     {
         int key = GetKey(owner);

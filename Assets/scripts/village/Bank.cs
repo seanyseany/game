@@ -61,9 +61,15 @@ public class Bank : MonoBehaviour
 
     public void TakeDamage(int amount)
     {
+        VillageTownHall townHall = GetComponent<VillageTownHall>();
+        if (townHall != null)
+        {
+            townHall.TakeDamage(amount);
+            return;
+        }
         VillageManagement villageManagement = VillageManagement.EnsureInstance();
         if (villageManagement != null)
-            villageManagement.SetCurrentOxygen(villageManagement.CurrentOxygen - Mathf.Max(0, amount));
+            villageManagement.RemoveVillageScore(Mathf.Max(0, amount));
 
         if (animator != null && !string.IsNullOrWhiteSpace(hitTrigger))
             animator.SetTrigger(hitTrigger);

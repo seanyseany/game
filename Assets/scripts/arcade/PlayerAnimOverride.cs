@@ -19,6 +19,8 @@ public class PlayerAnimOverride : MonoBehaviour
     public AnimationClip baseHurt;
     public AnimationClip baseStill;
     public AnimationClip baseSpeed;
+    public AnimationClip baseSpeedUp;
+    public AnimationClip baseSpeedDown;
     public AnimationClip baseSpeedStart;
 
     [Header("Overrides per Type (index = 0..4 → Player1~5)")]
@@ -33,6 +35,8 @@ public class PlayerAnimOverride : MonoBehaviour
     public AnimationClip[] stillClips;
     [Tooltip("일반 상태의 스피드 페이즈에서 Jump 대신 재생할 클립입니다. 0~4 = Player1~5. 비워두면 해당 플레이어의 Jump 클립을 사용합니다.")]
     public AnimationClip[] speedClips = new AnimationClip[5];
+    public AnimationClip[] speedUpClips = new AnimationClip[5];
+    public AnimationClip[] speedDownClips = new AnimationClip[5];
     public AnimationClip[] speedStartClips = new AnimationClip[5];
 
     [Header("Rage Clips (index = 0..4 → RageP1~RageP5)")]
@@ -47,7 +51,7 @@ public class PlayerAnimOverride : MonoBehaviour
     private AnimatorOverrideController aoc;
     private int cachedType = -1;
     private bool isRageMode = false;
-    private readonly List<KeyValuePair<AnimationClip, AnimationClip>> overrideMap = new List<KeyValuePair<AnimationClip, AnimationClip>>(12);
+    private readonly List<KeyValuePair<AnimationClip, AnimationClip>> overrideMap = new List<KeyValuePair<AnimationClip, AnimationClip>>(14);
 
     void Awake()
     {
@@ -114,6 +118,12 @@ public class PlayerAnimOverride : MonoBehaviour
         if (baseSpeed != null)
             map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseSpeed,
                 isRageMode ? baseSpeed : SafeGet(speedClips, i) ?? SafeGet(jumpClips, i) ?? baseSpeed));
+        if (baseSpeedUp != null)
+            map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseSpeedUp,
+                isRageMode ? baseSpeedUp : SafeGet(speedUpClips, i) ?? SafeGet(speedClips, i) ?? SafeGet(jumpClips, i) ?? baseSpeedUp));
+        if (baseSpeedDown != null)
+            map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseSpeedDown,
+                isRageMode ? baseSpeedDown : SafeGet(speedDownClips, i) ?? SafeGet(speedClips, i) ?? SafeGet(jumpClips, i) ?? baseSpeedDown));
         if (baseSpeedStart != null)
             map.Add(new KeyValuePair<AnimationClip, AnimationClip>(baseSpeedStart,
                 isRageMode ? baseSpeedStart : SafeGet(speedStartClips, i) ?? baseSpeedStart));

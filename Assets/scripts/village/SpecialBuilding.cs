@@ -12,6 +12,8 @@ public class SpecialBuilding : MonoBehaviour
     [Header("Identity")]
     [SerializeField] private string slotId;
     [SerializeField] private string specialBuildingId;
+    [SerializeField, Range(0, 9), Tooltip("0: 온천 3, 호텔 6, 그 외 특별빌딩 8레벨. 1~9: 직접 지정.")]
+    private int requiredVillageLevel;
 
     [Header("Special")]
     [SerializeField] private Transform customerEntrance;
@@ -42,6 +44,7 @@ public class SpecialBuilding : MonoBehaviour
     private readonly HashSet<CustomerBlood> insideCustomers = new HashSet<CustomerBlood>();
 
     public string SlotId => slotId;
+    public int RequiredVillageLevel => requiredVillageLevel > 0 ? requiredVillageLevel : VillageManagement.GetSpecialBuildingUnlockLevel(SpecialBuildingId);
     public string SpecialBuildingId => string.IsNullOrWhiteSpace(specialBuildingId) ? SanitizeId(name) : specialBuildingId;
     public int SpecialBuildingValue => specialBuildingValue;
     public float StarRating => starRating;
@@ -81,16 +84,29 @@ public class SpecialBuilding : MonoBehaviour
 
     private void Update()
     {
-        if ((pointerHeld || isDragging) && !IsPointerStillPressed())
-            ReleasePointerHold();
-
-        if (pointerHeld && !isDragging && Time.unscaledTime - pointerDownStartedAt >= HoldDurationSeconds)
-            BeginDrag();
+        if (pointerHeld || isDragging)
+            UpdatePointerHold(GetPointerWorldPosition(), IsPointerStillPressed());
 
         if (isDragging)
             UpdateDragPosition();
         else if (pointerHeld)
-            holdShake.Tick(Time.unscaledTime - pointerDownStartedAt);
+            holdShake.Tick(Time.unscaledTime - pointerDownStartedAt, HoldDurationSeconds);
+    }
+
+    private void UpdatePointerHold(Vector3 worldPoint, bool pressed)
+    {
+        if (pointerHeld && !isDragging &&
+            !VillagePointerCapture.ContainsPoint(transform, worldPoint + holdShake.WorldOffset))
+        {
+            ReleasePointerHold();
+            return;
+        }
+
+        if ((pointerHeld || isDragging) && !pressed)
+            ReleasePointerHold();
+
+        if (pointerHeld && !isDragging && Time.unscaledTime - pointerDownStartedAt >= HoldDurationSeconds)
+            BeginDrag();
     }
 
     private void OnMouseDown()

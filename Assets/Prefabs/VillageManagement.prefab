@@ -49,6 +49,33 @@ MonoBehaviour:
   saveFileName: village_save.json
   awardArcadeOxygenToCurrentOxygen: 1
   awardArcadeEnergyToCurrentEnergy: 1
+  initialVillageLevel: 1
+  initialVillageScore: 0
+  villageLevelRequirements:
+    level1To2: 100
+    level2To3: 200
+    level3To4: 300
+    level4To5: 400
+    level5To6: 500
+    level6To7: 600
+    level7To8: 700
+    level8To9: 800
+  arcadePlayers:
+  - playerType: 1
+    available: 1
+    purchaseOxygenCost: 0
+  - playerType: 2
+    available: 1
+    purchaseOxygenCost: 50
+  - playerType: 3
+    available: 1
+    purchaseOxygenCost: 100
+  - playerType: 4
+    available: 1
+    purchaseOxygenCost: 150
+  - playerType: 5
+    available: 1
+    purchaseOxygenCost: 200
   debugControls:
     currentOxygen: 0
     oxygenCapacity: 0

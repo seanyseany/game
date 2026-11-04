@@ -5,6 +5,7 @@ using System.Collections.Generic;
 public class BombLauncher : MonoBehaviour
 {
     [Header("Positions")]
+    [Tooltip("런처가 활성화될 때 이동할 부모 기준 로컬 위치입니다.")]
     public Vector3 activePos = new Vector3(-7f, 1.4f, 0f);
     public float moveDuration = 0.5f;
 
@@ -32,7 +33,7 @@ public class BombLauncher : MonoBehaviour
     public Vector2[] forcedTargetWorldPositions = new Vector2[3];
 
     // runtime
-    private Vector3 startPos;
+    private Vector3 startLocalPos;
     private List<GameObject> loadedHeads = new List<GameObject>();
     private bool isActive = false;
     private bool isMoving = false;
@@ -43,7 +44,7 @@ public class BombLauncher : MonoBehaviour
 
     void Awake()
     {
-        startPos = transform.position; // ✅ 원래 위치 저장
+        startLocalPos = transform.localPosition;
         EnsureForcedTargetPoints();
         EnsurePoolCapacity();
     }
@@ -52,7 +53,7 @@ public class BombLauncher : MonoBehaviour
     {
         GameData.OnRageStart += HandleRageStart;
         // 혹시 풀/재시작으로 Enable 될 때 기본값 복구
-        transform.position = startPos;
+        transform.localPosition = startLocalPos;
         isActive = false;
         isMoving = false;
         returnAndReloadCoroutine = null;
@@ -169,7 +170,7 @@ public class BombLauncher : MonoBehaviour
         // ✅ 활성화될 때마다 “장전 새로” (머리 안 달리는 문제 방지)
         if (resetAmmo) ResetAmmo();
 
-        yield return Move(transform.position, activePos);
+        yield return MoveLocal(transform.localPosition, activePos);
 
         isActive = true;
         isMoving = false;
@@ -183,7 +184,7 @@ public class BombLauncher : MonoBehaviour
         isMoving = true;
         isActive = false;
 
-        yield return Move(activePos, startPos);
+        yield return MoveLocal(transform.localPosition, startLocalPos);
 
         // ✅ 복귀 후 재장전해서 다음 루프 준비
         ResetAmmo();
@@ -192,18 +193,18 @@ public class BombLauncher : MonoBehaviour
         returnAndReloadCoroutine = null;
     }
 
-    private IEnumerator Move(Vector3 from, Vector3 to)
+    private IEnumerator MoveLocal(Vector3 from, Vector3 to)
     {
         float t = 0f;
         float dur = Mathf.Max(0.0001f, moveDuration);
 
         while (t < dur)
         {
-            transform.position = Vector3.Lerp(from, to, t / dur);
+            transform.localPosition = Vector3.Lerp(from, to, t / dur);
             t += Time.deltaTime;
             yield return null;
         }
-        transform.position = to;
+        transform.localPosition = to;
     }
 
     // =========================
@@ -462,7 +463,7 @@ public class BombLauncher : MonoBehaviour
         ClearLaunchSmokes();
 
         // 원래 자리로 순간이동
-        transform.position = startPos;
+        transform.localPosition = startLocalPos;
     }
     public void ResetLauncherState()
     {
@@ -474,7 +475,7 @@ public class BombLauncher : MonoBehaviour
 
         ClearHeads();
         ClearLaunchSmokes();
-        transform.position = startPos;
+        transform.localPosition = startLocalPos;
     }
 
     private void OnDisable()

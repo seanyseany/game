@@ -17,14 +17,31 @@ public class speedPhases : MonoBehaviour
     public int phaseSpawnCount = 3;
 
     [Min(0.01f)]
-    [Tooltip("시작 페이즈의 종료 트리거를 통과한 뒤 기존 게임 속도에 곱할 배율입니다. 1 = 기존 속도, 2 = 두 배, 0.5 = 절반입니다.")]
+    [Tooltip("진입 배속 연출이 끝난 뒤 유지할 스피드 페이즈 배율입니다. 기존 게임 속도 기준이며, 1 = 기존 속도, 2 = 두 배입니다.")]
     public float speedMultiplier = 1.5f;
+
+    [Header("Entry Speed")]
+    [Min(0.01f)]
+    [Tooltip("스피드 트리거 순간 즉시 적용할 배율입니다. 기존 게임 속도 기준이며 Speed Multiplier에 추가로 곱하지 않습니다.")]
+    public float entrySpeedMultiplier = 1.7f;
+
+    [Min(0f)]
+    [Tooltip("진입 배율을 유지할 시간(초)입니다.")]
+    public float entryHoldDuration = 0.5f;
+
+    [Min(0f)]
+    [Tooltip("유지 시간이 끝난 뒤 Speed Multiplier로 서서히 복귀하는 시간(초)입니다. 0이면 즉시 복귀합니다.")]
+    public float entryReturnDuration = 0.5f;
 
     [Header("Speed Effect")]
     [Tooltip("스피드 배율이 적용되는 동안 표시할 이펙트입니다. 생성 위치·간격·삭제 위치는 Player의 Rage Speed Effect 설정을 함께 사용합니다.")]
     public GameObject speedEffectPrefab;
 
     [Min(0f)]
-    [Tooltip("이펙트 기본 이동 속도입니다. 생성 시 정상 스테이지 속도 배율을 곱하며, 생성된 이펙트는 이후 감속·정지와 무관하게 끝 위치까지 이동합니다.")]
+    [Tooltip("이펙트 기본 이동 속도입니다. 진입 배속 변화는 현재 구간의 이펙트 전체에 함께 적용하며, 장애물 감속 중에도 이동합니다. 빠를수록 생성 간격을 줄여 앞뒤 이펙트를 이어 줍니다.")]
     public float speedEffectMoveSpeed = 26f;
+
+    [Min(0f)]
+    [Tooltip("Speed Multiplier 기준의 정상 속도보다 느려지거나 구간이 끝날 때 이펙트가 투명해지는 시간(초)입니다. 정상 속도 이상에서는 계속 보이며, 감속 중에도 스폰과 이동은 유지합니다. 0이면 즉시 전환합니다.")]
+    public float speedEffectFadeDuration = 1f;
 }

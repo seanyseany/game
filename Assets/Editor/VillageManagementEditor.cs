@@ -6,11 +6,15 @@ public class VillageManagementEditor : Editor
 {
     public override void OnInspectorGUI()
     {
-        DrawDefaultInspector();
+        serializedObject.Update();
+        DrawPropertiesExcluding(serializedObject, "villageLevelRequirements", "initialVillageLevel", "initialVillageScore");
+        serializedObject.ApplyModifiedProperties();
 
         VillageManagement villageManagement = (VillageManagement)target;
         if (villageManagement == null)
             return;
+
+        VillageScoreInspector.Draw(villageManagement);
 
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("Debug Actions", EditorStyles.boldLabel);

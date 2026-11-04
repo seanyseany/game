@@ -242,6 +242,8 @@ public class Path : MonoBehaviour
             return;
 
         int targetLevel = 1;
+        if (!villageManagement.IsVillageLevelUnlocked(selectedPrefab.RequiredVillageLevel))
+            return;
         int price = selectedPrefab.GetPurchasePriceForLevel(targetLevel);
         float constructionTime = selectedPrefab.GetConstructionTimeForLevel(targetLevel);
 
@@ -265,6 +267,8 @@ public class Path : MonoBehaviour
         if (villageManagement == null)
             return;
 
+        if (!villageManagement.IsVillageLevelUnlocked(selectedPrefab.RequiredVillageLevel))
+            return;
         int price = Mathf.Max(0, selectedPrefab.SpecialBuildingValue);
         if (price > 0 && !villageManagement.TrySpendOxygen(price))
             return;
@@ -282,6 +286,8 @@ public class Path : MonoBehaviour
         if (villageManagement == null)
             return;
 
+        if (!villageManagement.IsVillageLevelUnlocked(buildingInstance.RequiredVillageLevel))
+            return;
         int targetLevel = 2;
         int price = buildingInstance.GetPurchasePriceForLevel(targetLevel);
         if (!villageManagement.TrySpendOxygen(price))
