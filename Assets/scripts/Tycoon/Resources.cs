@@ -23,7 +23,6 @@ namespace Tycoon
         private Camera dragCamera;
         private RectTransform dragRect;
         private Vector2 dragScreenPosition;
-        private Vector2 dragTargetPosition;
         private Vector2 grabOffset;
         private float dragPlaneZ;
 
@@ -89,24 +88,22 @@ namespace Tycoon
                 : (Vector2)preview.position;
             // Preserve the point the user grabbed: no initial snap to the icon's pivot.
             grabOffset = dragScreenPosition - screen;
-            dragTargetPosition = dragScreenPosition;
             dragVisual.SetActive(true);
             if (!DeliveryRuntime.Ensure().BeginDrag(this, screen, finger, MoveDragPreview, FinishDrag))
                 ReleaseDragVisual();
             else DeliveryMotion.ShakeResource(transform);
         }
 
-        private void MoveDragPreview(Vector2 screen) { dragTargetPosition = screen + grabOffset; }
+        private void MoveDragPreview(Vector2 screen) { dragScreenPosition = screen + grabOffset; }
 
         // Run after the panel/camera has moved, with no hierarchy searches or
-        // allocations in the follow loop. Use unscaled time like the store effects.
-        private void LateUpdate() { AdvanceDrag(Time.unscaledDeltaTime); }
+        // allocations in the follow loop, even when time is paused.
+        private void LateUpdate() { AdvanceDrag(); }
 
-        private void AdvanceDrag(float deltaSeconds)
+        private void AdvanceDrag()
         {
             if (dragVisual == null) return;
-            float blend = 1f - Mathf.Exp(-40f * Mathf.Max(0f, deltaSeconds));
-            dragScreenPosition = Vector2.Lerp(dragScreenPosition, dragTargetPosition, blend);
+            // Keep the grabbed point under the pointer without follow smoothing.
             if (dragRect != null)
             {
                 if (RectTransformUtility.ScreenPointToWorldPointInRectangle(dragRect, dragScreenPosition, dragCamera, out Vector3 world))
@@ -127,7 +124,7 @@ namespace Tycoon
         private void FinishDrag(Vector2 screen, bool cancelled)
         {
             ReleaseDragVisual();
-            // Purchase uses the release position, not the smoothed visual position.
+            // Purchase uses the pointer's release position.
             if (!cancelled && store != null) store.TryBuyAt(definition, screen);
         }
 

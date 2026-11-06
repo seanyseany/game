@@ -66,6 +66,7 @@ public class GameData : MonoBehaviour
     public float decelerateTime = 0.5f;
     public float pushSpeed = 1.2f;
     public float stopTime = 0.5f;
+    [Tooltip("장애물 접촉 후 속도 복구 시간(초). 스피드 모드에서는 절반으로 적용됩니다.")]
     public float recoverTime = 1.0f;
 
     [Header("Escalator Contact")]
@@ -326,6 +327,8 @@ public class GameData : MonoBehaviour
     private bool UseSpeedPhaseObstacleMinimum => !gameOver && !IsResetting &&
         StageManager.Instance != null && StageManager.Instance.IsSpeedPhaseSpeedActive;
 
+    private float ObstacleRecoveryTime => recoverTime * (UseSpeedPhaseObstacleMinimum ? 0.5f : 1f);
+
     public float GetStageSpeedMult()
     {
         float effectiveMult = stageSpeedMult;
@@ -474,7 +477,7 @@ public class GameData : MonoBehaviour
 
         float recoveryStrength = baseMult > 0f ? Mathf.Clamp01(1f - stageSpeedMult / baseMult) : strength;
         obstacleState = ObstacleContactState.Recovering;
-        yield return TweenStageSpeedMultCoroutine(stageSpeedMult, baseMult, recoverTime * recoveryStrength);
+        yield return TweenStageSpeedMultCoroutine(stageSpeedMult, baseMult, ObstacleRecoveryTime * recoveryStrength);
 
         obstacleState = ObstacleContactState.None;
         obstacleRoutine = null;
@@ -551,7 +554,7 @@ public class GameData : MonoBehaviour
         }
 
         obstacleState = ObstacleContactState.Recovering;
-        yield return TweenStageSpeedMultCoroutine(pushMult, baseMult, recoverTime);
+        yield return TweenStageSpeedMultCoroutine(pushMult, baseMult, ObstacleRecoveryTime);
 
         obstacleState = ObstacleContactState.None;
         obstacleRoutine = null;

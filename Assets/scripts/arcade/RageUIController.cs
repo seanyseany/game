@@ -15,7 +15,7 @@ public class RageUIController : MonoBehaviour
     private Outline outlineEffect;
 
     private int killCount = 0;
-    private int killsToActivate = 10;
+    private int killsToActivate = 12;
 
     private Coroutine rageRoutineCoroutine;
 

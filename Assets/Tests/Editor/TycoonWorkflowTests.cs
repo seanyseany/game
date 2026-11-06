@@ -912,7 +912,7 @@ public sealed class TycoonWorkflowTests
     [TestCase(false, 7)]
     [TestCase(true, -1)]
     [TestCase(true, 7)]
-    public void ResourceDragPreservesGrabPointSmoothsWithoutWaitingAndReusesPreview(bool overlay, int finger)
+    public void ResourceDragPreservesGrabPointFollowsPointerWithoutLagAndReusesPreview(bool overlay, int finger)
     {
         StoreIn store = StorePanel();
         Camera camera = Root("DragCamera").AddComponent<Camera>();
@@ -943,16 +943,15 @@ public sealed class TycoonWorkflowTests
             Call(bread, "BeginDrag", press, finger);
             Assert.AreEqual(original, prepared.position, "Pressing off-center must not snap the pivot to the pointer");
             Call(bread, "MoveDragPreview", press + new Vector2(120f, 60f));
-            Call(bread, "AdvanceDrag", 1f / 60f);
+            Call(bread, "LateUpdate");
             Vector2 first = overlay ? (Vector2)prepared.position : (Vector2)camera.WorldToScreenPoint(prepared.position);
-            Assert.Greater(first.x, start.x);
-            Assert.Less(first.x, start.x + 120f);
-            Assert.Greater(first.y, start.y);
-            Assert.Less(first.y, start.y + 60f);
-            Vector3 firstPose = prepared.position;
-            Call(bread, "AdvanceDrag", 0.2f);
-            Vector2 settled = overlay ? (Vector2)prepared.position : (Vector2)camera.WorldToScreenPoint(prepared.position);
-            Assert.Less(Vector2.Distance(start + new Vector2(120f, 60f), settled), 0.1f);
+            Assert.Less(Vector2.Distance(start + new Vector2(120f, 60f), first), 0.01f,
+                "The grabbed point must reach the pointer in the same frame");
+            Call(bread, "MoveDragPreview", press + new Vector2(-90f, -40f));
+            Call(bread, "LateUpdate");
+            Vector2 reversed = overlay ? (Vector2)prepared.position : (Vector2)camera.WorldToScreenPoint(prepared.position);
+            Assert.Less(Vector2.Distance(start + new Vector2(-90f, -40f), reversed), 0.01f,
+                "Changing direction must not leave the preview trailing behind");
             Assert.AreEqual(30, village.CurrentEnergy);
             Assert.AreEqual(0, receipt.Quantity);
             Call(DeliveryRuntime.Ensure(), "End", true);
@@ -963,9 +962,9 @@ public sealed class TycoonWorkflowTests
             Assert.AreSame(prepared.gameObject, typeof(ResourceItem).GetField("dragVisual", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(bread));
             Assert.AreEqual(original, prepared.position);
             Call(bread, "MoveDragPreview", press + new Vector2(120f, 60f));
-            Call(bread, "AdvanceDrag", 1f / 120f);
-            Call(bread, "AdvanceDrag", 1f / 120f);
-            Assert.Less(Vector3.Distance(firstPose, prepared.position), 0.0001f, "Follow speed should be independent of frame rate");
+            Call(bread, "LateUpdate");
+            Vector2 reused = overlay ? (Vector2)prepared.position : (Vector2)camera.WorldToScreenPoint(prepared.position);
+            Assert.Less(Vector2.Distance(first, reused), 0.01f, "Reusing the preview must follow immediately");
             store.Close();
             // Edit-mode objects do not receive play-mode lifecycle callbacks.
             bread.gameObject.SetActive(false);
