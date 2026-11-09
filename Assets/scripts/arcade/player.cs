@@ -208,6 +208,7 @@ public class Player : MonoBehaviour
     private Collider2D lastGroundCol = null;
     private readonly Collider2D[] groundOverlapResults = new Collider2D[8];
     private readonly ContactPoint2D[] groundContactPoints = new ContactPoint2D[16];
+    private readonly RaycastHit2D[] introGroundHits = new RaycastHit2D[16];
     private readonly JumpParticleState normalJumpParticles = new JumpParticleState();
     private readonly JumpParticleState rageJumpParticles = new JumpParticleState();
     private readonly JumpParticleState speedJumpParticles = new JumpParticleState();
@@ -256,6 +257,8 @@ public class Player : MonoBehaviour
     private float flyattackProtectedUntil = -999f;
     private bool isSpawnIntroActive = false;
     private Coroutine spawnIntroRoutine;
+    private bool spawnIntroPhysicsActive;
+    private RigidbodyType2D spawnIntroOriginalBodyType;
     // A stopped intro coroutine must return its gate hold before another intro begins.
     private bool spawnIntroGateHoldActive;
     private bool isMachineGunTransferActive;
@@ -576,6 +579,9 @@ public class Player : MonoBehaviour
     private bool IsSpeedPhaseAnimationActive => UsesArcadeSystems && !isDead && !isRageMode &&
         StageManager.Instance != null && StageManager.Instance.IsSpeedPhaseSpeedActive;
 
+    private bool CanUseSpeedPhaseJumpAnimation => IsSpeedPhaseAnimationActive &&
+        (GameData.Instance == null || !GameData.Instance.IsObstacleSlowdownActive);
+
     private bool CanPresentSpeedPhaseTransition => !isDead && !isRageMode && !isTransformLock &&
         !isSpawnIntroActive && !isMachineGunTransferActive && !isMachineGunBoarded &&
         !isInHurtWindow && currentAnim != "Hurt" && currentAnim != "Die" && currentAnim != "Transform";
@@ -592,6 +598,16 @@ public class Player : MonoBehaviour
             speedStartRequired = active;
             speedStartWaitsForJump = false;
             UpdateJumpParticleEmission(currentAnim);
+        }
+
+        if (active && !CanUseSpeedPhaseJumpAnimation)
+        {
+            speedPhaseTransition = SpeedPhaseTransition.None;
+            speedAirBridgeActive = false;
+            speedStartRequired = true;
+            speedStartWaitsForJump = true;
+            ResetSpeedAnimationTrigger();
+            return;
         }
 
         if (active && HasParam(anim, "Steady"))
@@ -613,6 +629,9 @@ public class Player : MonoBehaviour
 
     private void BeginSpeedPhaseTransition()
     {
+        if (GameData.Instance != null && GameData.Instance.IsObstacleSlowdownActive)
+            return;
+
         speedAirBridgeActive = false;
         const string trigger = "Speed Start";
         speedStartRequired = false;
@@ -634,7 +653,7 @@ public class Player : MonoBehaviour
     private bool HandleSpeedPhaseAnimationRequest(ref string logicalTrigger)
     {
         ObserveSpeedPhaseWindow();
-        bool active = IsSpeedPhaseAnimationActive;
+        bool active = CanUseSpeedPhaseJumpAnimation;
         if (active && (logicalTrigger == "Still" || logicalTrigger == "Steady"))
             logicalTrigger = isGrounded ? "Walk" : "Jump";
 
@@ -717,7 +736,7 @@ public class Player : MonoBehaviour
         if (triggerName != "Jump" && triggerName != "Speed")
             return triggerName;
 
-        return IsSpeedPhaseAnimationActive && HasParam(anim, "Speed") ? "Speed" : "Jump";
+        return CanUseSpeedPhaseJumpAnimation && HasParam(anim, "Speed") ? "Speed" : "Jump";
     }
 
     private void SyncSpeedPhaseAirAnimation()
@@ -735,7 +754,7 @@ public class Player : MonoBehaviour
 
     private void UpdateSpeedAirAnimation()
     {
-        if (!IsSpeedPhaseAnimationActive || !CanPresentSpeedPhaseTransition || currentAnim != "Jump" ||
+        if (!CanUseSpeedPhaseJumpAnimation || !CanPresentSpeedPhaseTransition || currentAnim != "Jump" ||
             isGrounded || isAttacking || isLanding || speedPhaseTransition != SpeedPhaseTransition.None ||
             anim == null || rb == null)
         {
@@ -1127,7 +1146,7 @@ public class Player : MonoBehaviour
                               (triggerName == "Attack" || triggerName == "Flyattack");
         bool emitting = !normalP3Attack && (triggerName == "Jump" || triggerName == "Flyattack");
 
-        bool useSpeedParticles = triggerName == "Jump" && IsSpeedPhaseAnimationActive && speedJumpParticleObject != null;
+        bool useSpeedParticles = triggerName == "Jump" && CanUseSpeedPhaseJumpAnimation && speedJumpParticleObject != null;
         normalJumpParticles.Apply(normalJumpParticleObject, !isRageMode && !useSpeedParticles, emitting);
         rageJumpParticles.Apply(rageJumpParticleObject, isRageMode, emitting);
         speedJumpParticles.Apply(speedJumpParticleObject, useSpeedParticles, emitting);
@@ -2143,7 +2162,7 @@ public class Player : MonoBehaviour
                 case T5:
                     if (onFloor && (rageAttackSmokePrefab != null || rageAttackSmokePrefabSecondary != null))
                     {
-                        Vector3 ragePos = new Vector3(transform.position.x, transform.position.y - 0.5f, -0.5f);
+                        Vector3 ragePos = GetAttackSmokeSpawnPosition();
                         SpawnP5RageAttackSmokes(ragePos, 4f);
                         return;
                     }
@@ -2175,11 +2194,29 @@ public class Player : MonoBehaviour
         }
 
         if (!prefab) return;
-        Vector3 pos = new Vector3(transform.position.x, transform.position.y - 0.5f, -0.5f);
+        Vector3 pos = GetAttackSmokeSpawnPosition();
         SpawnSmokeFromPrefab(prefab, pos, tag, scale);
 
         if (isRageMode && selectedType == T1 && prefab == rage1SmokePrefab)
             TriggerReducedRageSmokeShake();
+    }
+
+    private Vector3 GetAttackSmokeSpawnPosition()
+    {
+        Vector3 pos = new Vector3(transform.position.x, transform.position.y - 0.5f, -0.5f);
+        if (!IsStompPlayerType(CharacterType) || bodyCollider == null)
+            return pos;
+
+        if (TryGetGroundSurface(out var groundCol, out var groundTag, out _) && groundTag == "floor")
+        {
+            // Preserve the existing art offset at rest, but remove the current fall height
+            // and Rigidbody interpolation from the smoke's world Y coordinate.
+            float bodyBottomOffset = bodyCollider.bounds.extents.y -
+                bodyCollider.transform.TransformVector(bodyCollider.offset).y;
+            pos.y = groundCol.bounds.max.y + bodyBottomOffset - 0.5f;
+        }
+
+        return pos;
     }
 
     private IEnumerator MoveToWorldPosition(Vector3 worldStart, Vector3 worldTarget, float duration)
@@ -2374,7 +2411,7 @@ public class Player : MonoBehaviour
                     if (hbComp) hbComp.damage = 1;
                     StartCoroutine(ActivateAndDestroyCollider(hb, 0f, 0.2f));
                 }
-                Vector3 pos = new Vector3(transform.position.x, transform.position.y - 0.5f, -0.5f);
+                Vector3 pos = GetAttackSmokeSpawnPosition();
                 if (landedOnFloor && rage1SmokePrefab != null)
                 {
                     SpawnSmokeFromPrefab(rage1SmokePrefab, pos, rage1SmokePoolTag);
@@ -2513,7 +2550,7 @@ public class Player : MonoBehaviour
             }
             else
             {
-                Vector3 pos = new Vector3(transform.position.x, transform.position.y - 0.5f, -0.5f);
+                Vector3 pos = GetAttackSmokeSpawnPosition();
                 SpawnP5RageAttackSmokes(pos, 4f);  // 🔥 크기 4배
             }
         }
@@ -2745,6 +2782,7 @@ public class Player : MonoBehaviour
 
     private void OnDisable()
     {
+        RestoreSpawnIntroBodyType();
         ResetSpeedPhasePresentation();
         StopRageSpeedEffect(despawnExisting: true);
         activeEscalatorContacts.Clear();
@@ -3669,7 +3707,16 @@ public class Player : MonoBehaviour
             spawnIntroRoutine = null;
         }
 
+        RestoreSpawnIntroBodyType();
+        isSpawnIntroActive = false;
         EndSpawnIntroGateHold();
+    }
+
+    private void RestoreSpawnIntroBodyType()
+    {
+        if (!spawnIntroPhysicsActive) return;
+        spawnIntroPhysicsActive = false;
+        if (rb != null) rb.bodyType = spawnIntroOriginalBodyType;
     }
 
     private void BeginSpawnIntroGateHold()
@@ -3774,6 +3821,7 @@ public class Player : MonoBehaviour
 
     private void RestoreAfterMachineGunTransfer()
     {
+        RestoreSpawnIntroBodyType();
         if (rb != null)
         {
             rb.linearVelocity = Vector2.zero;
@@ -3822,6 +3870,14 @@ public class Player : MonoBehaviour
         Collider2D col = bodyCollider != null ? bodyCollider : GetComponent<Collider2D>();
         if (rb != null)
         {
+            if (!spawnIntroPhysicsActive)
+            {
+                spawnIntroOriginalBodyType = rb.bodyType;
+                spawnIntroPhysicsActive = true;
+            }
+            // The intro follows collision surfaces explicitly; the solver must not push
+            // a body being moved by the script through the shovel between render frames.
+            rb.bodyType = RigidbodyType2D.Kinematic;
             rb.simulated = true;
             rb.linearVelocity = Vector2.zero;
             rb.gravityScale = 0f;
@@ -3843,61 +3899,65 @@ public class Player : MonoBehaviour
         if (gateLead > 0f)
             yield return new WaitForSeconds(gateLead);
 
-        transform.position = new Vector3(introAppearPosition.x, introAppearPosition.y, transform.position.z);
+        transform.position = GetSpawnIntroAppearPosition();
+        if (col != null)
+            col.enabled = true;
+        Physics2D.SyncTransforms();
+        // The gate marker is inside the train. Put the feet on its shovel before revealing the player.
+        if (TryGetIntroSurfaceSnapY(Mathf.Max(0f, introGroundProbeDistance), true, out float appearY, out _))
+            transform.position = new Vector3(transform.position.x, appearY, transform.position.z);
         if (sr != null)
             sr.enabled = true;
         RestoreMachineGunChildVisuals();
-        if (col != null)
-            col.enabled = true;
 
         ForceAnimationState("Base Walk", "Walk");
 
         float elapsed = gateLead;
-        bool landed = false;
-        float diagonalElapsed = 0f;
+        float travelDuration = Mathf.Max(0.01f, totalDuration - gateLead);
+        float moveSpeed = Mathf.Max(Mathf.Abs(introDiagonalXSpeed),
+            Mathf.Abs(gameplayX - transform.position.x) / travelDuration);
+        float travelElapsed = 0f;
         float minDiagonalTime = Mathf.Max(0f, introMinDiagonalTime);
+        // If the route leaves the shovel late, finish the short descent before handing back control.
+        float maxDuration = totalDuration + Mathf.Max(0.25f,
+            introGroundProbeDistance / Mathf.Max(1f, -introClimbYSpeed));
 
-        while (elapsed < totalDuration)
+        while (elapsed < totalDuration || (!isGrounded && elapsed < maxDuration))
         {
-            float dt = Time.deltaTime;
-            transform.position += new Vector3(Mathf.Abs(introDiagonalXSpeed), introClimbYSpeed, 0f) * dt;
+            float phaseEnd = elapsed < totalDuration ? totalDuration : maxDuration;
+            float dt = Mathf.Min(Time.deltaTime, phaseEnd - elapsed);
+            Vector3 position = transform.position;
+            position.x = Mathf.MoveTowards(position.x, gameplayX, moveSpeed * dt);
+            position.y += introClimbYSpeed * dt;
+            transform.position = position;
+            // Ground queries must see this frame's scripted position, not the previous physics pose.
+            Physics2D.SyncTransforms();
             elapsed += dt;
-            diagonalElapsed += dt;
+            travelElapsed += dt;
 
-            if (diagonalElapsed >= minDiagonalTime && TryGetIntroGroundSnapY(out float snapY, out var groundCol))
+            bool foundSupport = TryGetIntroGroundSnapY(out float snapY, out var groundCol);
+            if (foundSupport && (travelElapsed >= minDiagonalTime || groundCol.GetComponentInParent<GateShovel>() != null))
             {
                 transform.position = new Vector3(transform.position.x, snapY, transform.position.z);
+                Physics2D.SyncTransforms();
                 isGrounded = true;
                 lastGroundedTime = Time.time;
                 lastGroundCol = groundCol;
                 lastGroundTag = groundCol != null && TryResolveGroundSurface(groundCol, out _, out var resolvedTag)
                     ? resolvedTag
                     : groundCol != null ? groundCol.tag : null;
-                landed = true;
-                break;
+            }
+            else
+            {
+                isGrounded = false;
             }
 
             yield return null;
         }
 
-        float targetX = gameplayX;
-        float remaining = Mathf.Max(0f, totalDuration - elapsed);
-        if (landed && remaining > 0f)
-        {
-            Vector3 startPos = transform.position;
-            Vector3 targetPos = new Vector3(targetX, startPos.y, startPos.z);
-            float t = 0f;
-
-            while (t < remaining)
-            {
-                t += Time.deltaTime;
-                float ratio = remaining <= 0f ? 1f : Mathf.Clamp01(t / remaining);
-                transform.position = Vector3.Lerp(startPos, targetPos, ratio);
-                yield return null;
-            }
-        }
-
-        transform.position = new Vector3(targetX, transform.position.y, transform.position.z);
+        transform.position = new Vector3(gameplayX, transform.position.y, transform.position.z);
+        Physics2D.SyncTransforms();
+        RestoreSpawnIntroBodyType();
         if (rb != null)
         {
             rb.linearVelocity = Vector2.zero;
@@ -3920,7 +3980,29 @@ public class Player : MonoBehaviour
         spawnIntroRoutine = null;
     }
 
+    private Vector3 GetSpawnIntroAppearPosition()
+    {
+        GateHealth gate = GateHealth.Instance;
+        if (gate != null)
+        {
+            Train train = gate.GetComponentInParent<Train>();
+            Transform exit = train != null && train.playerBoardingPoint != null
+                ? train.playerBoardingPoint
+                : gate.transform;
+            return new Vector3(exit.position.x, exit.position.y, transform.position.z);
+        }
+
+        return new Vector3(introAppearPosition.x, introAppearPosition.y, transform.position.z);
+    }
+
     private bool TryGetIntroGroundSnapY(out float snappedY, out Collider2D groundCol)
+    {
+        // A long search may find the floor far below the shovel; it is not a walkable step.
+        float stepDown = Mathf.Min(Mathf.Max(0f, introGroundProbeDistance), groundProbeDistance);
+        return TryGetIntroSurfaceSnapY(stepDown, false, out snappedY, out groundCol);
+    }
+
+    private bool TryGetIntroSurfaceSnapY(float stepDown, bool shovelOnly, out float snappedY, out Collider2D groundCol)
     {
         snappedY = transform.position.y;
         groundCol = null;
@@ -3929,24 +4011,40 @@ public class Player : MonoBehaviour
             return false;
 
         Bounds bounds = bodyCollider.bounds;
-        float startY = bounds.min.y + 0.05f;
+        const float stepUp = 0.2f;
+        float startY = bounds.min.y + stepUp;
         float inset = Mathf.Min(bounds.extents.x * 0.8f, 0.2f);
-        float[] xs = { bounds.center.x, bounds.center.x - inset, bounds.center.x + inset };
         float bestTop = float.NegativeInfinity;
         bool found = false;
-
-        for (int i = 0; i < xs.Length; i++)
+        var filter = new ContactFilter2D
         {
-            RaycastHit2D hit = Physics2D.Raycast(new Vector2(xs[i], startY), Vector2.down, introGroundProbeDistance);
-            if (hit.collider == null || hit.collider == bodyCollider) continue;
-            if (!IsGroundSurfaceTag(hit.collider.tag)) continue;
+            useLayerMask = true,
+            layerMask = Physics2D.DefaultRaycastLayers,
+            useTriggers = false
+        };
 
-            float top = hit.collider.bounds.max.y;
-            if (!found || top > bestTop)
+        for (int i = 0; i < 3; i++)
+        {
+            float x = bounds.center.x + (i == 1 ? -inset : i == 2 ? inset : 0f);
+            int count = Physics2D.Raycast(new Vector2(x, startY), Vector2.down, filter,
+                introGroundHits, stepUp + stepDown);
+            for (int j = 0; j < count; j++)
             {
-                bestTop = top;
-                groundCol = hit.collider;
-                found = true;
+                RaycastHit2D hit = introGroundHits[j];
+                introGroundHits[j] = default;
+                if (hit.collider == null || hit.collider.attachedRigidbody == rb) continue;
+                if (hit.distance <= 0f || hit.normal.y < MinGroundContactNormalY) continue;
+                bool isShovel = hit.collider.GetComponentInParent<GateShovel>() != null;
+                if (shovelOnly ? !isShovel : !isShovel && !TryResolveGroundSurface(hit.collider, out _, out _)) continue;
+
+                // The shovel is sloped: its bounding-box top is not the surface under the feet.
+                float top = hit.point.y;
+                if (!found || top > bestTop)
+                {
+                    bestTop = top;
+                    groundCol = hit.collider;
+                    found = true;
+                }
             }
         }
 
@@ -3954,7 +4052,7 @@ public class Player : MonoBehaviour
             return false;
 
         float delta = bestTop - bounds.min.y;
-        snappedY = transform.position.y + delta;
+        snappedY = transform.position.y + delta + Physics2D.defaultContactOffset;
         return true;
     }
 
@@ -4708,7 +4806,7 @@ public class Player : MonoBehaviour
         int index = Mathf.Clamp(CharacterType, 1, 5) - 1;
         GameObject prefab = sonicBoomPrefabs != null && index < sonicBoomPrefabs.Length
             ? sonicBoomPrefabs[index] : null;
-        if (prefab == null || !IsSpeedPhaseAnimationActive || !CanPresentSpeedPhaseTransition ||
+        if (prefab == null || !CanUseSpeedPhaseJumpAnimation || !CanPresentSpeedPhaseTransition ||
             currentAnim != "Jump" || isAttacking || isLanding || anim == null || !anim.isActiveAndEnabled ||
             speedPhaseTransition != SpeedPhaseTransition.None || Time.timeScale <= 0f ||
             RageTransformFreezeController.ShouldSkipGameplayFrame() ||

@@ -85,6 +85,7 @@ public class GameData : MonoBehaviour
     }
 
     private ObstacleContactState obstacleState = ObstacleContactState.None;
+    public bool IsObstacleSlowdownActive => obstacleState != ObstacleContactState.None;
     private Coroutine obstacleRoutine;
     private int obstacleContactCount = 0;
     private bool forceStopStage = false;

@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 3372728597166327916}
   - component: {fileID: 3861317006378835481}
   - component: {fileID: 3370661305281328837}
+  - component: {fileID: -3053487988763432365}
   m_Layer: 0
   m_Name: monster
   m_TagString: Untagged
@@ -197,3 +198,22 @@ MonoBehaviour:
   destroyAnimationDuration: 0.6
   gateTag: Gate
   damageGateOnContact: 1
+--- !u!114 &-3053487988763432365
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6842220691773557582}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b2c8398b94f841fe95b6d7bc35fdac89, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  timeTerms:
+  - minDelay: 0
+    maxDelay: 1
+  verticalStretchRange: {x: 0.1, y: 0.1}
+  horizontalResponse: 0.6
+  moveSpeed: 0.2
+  arriveDistance: 0.005

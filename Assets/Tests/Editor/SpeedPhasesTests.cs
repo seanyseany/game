@@ -1519,6 +1519,118 @@ public sealed class SpeedPhasesTests
     }
 
     [UnityTest]
+    public IEnumerator ObstacleSlowdownUsesNormalJumpUntilRecoveryForEveryCharacter()
+    {
+        Player hero = MakePlayer(out var overrides);
+        var speedParticles = new GameObject("Recovery speed particles", typeof(ParticleSystem));
+        speedParticles.transform.SetParent(hero.transform, false);
+        speedParticles.SetActive(false);
+        hero.speedJumpParticleObject = speedParticles;
+        var obstacleState = typeof(GameData).GetField("obstacleState", Private);
+        data.defaultStageSpeedMult = data.stageSpeedMult = 0.8f;
+        typeof(Player).GetField("isGrounded", Private).SetValue(hero, false);
+        Begin();
+
+        for (int type = 1; type <= 5; type++)
+        {
+            data.selectedPlayerType = type;
+            overrides.ApplyOverrides(true);
+            Play(hero, "ChangeAnimation", "Jump");
+            Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed"));
+            obstacleState.SetValue(data, GameData.ObstacleContactState.Decelerating);
+            Play(hero, "ChangeAnimation", "Hurt");
+            Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("base_hurt"));
+
+            foreach (var state in new[]
+            {
+                GameData.ObstacleContactState.Decelerating, GameData.ObstacleContactState.Pushing,
+                GameData.ObstacleContactState.Stopped, GameData.ObstacleContactState.Recovering
+            })
+            {
+                obstacleState.SetValue(data, state);
+                data.stageSpeedMult = state == GameData.ObstacleContactState.Recovering ? 0.799f : 0.4f;
+                Play(hero, "ChangeAnimation", "Jump");
+                hero.rb.linearVelocity = Vector2.up * 3f;
+                Play(hero, "SyncSpeedPhaseAirAnimation");
+                Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Jump"), $"Player {type}, {state}");
+                Assert.IsTrue(hero.normalJumpParticleObject.activeSelf);
+                Assert.IsFalse(speedParticles.activeSelf);
+                Play(hero, "ForceAnimationState", "Base Jump", "Jump");
+                Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Jump"));
+            }
+
+            data.stageSpeedMult = 0.8f;
+            obstacleState.SetValue(data, GameData.ObstacleContactState.None);
+            Play(hero, "SyncSpeedPhaseAirAnimation");
+            Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed"), "An ongoing jump resumes speed as soon as recovery completes.");
+            Assert.AreEqual("Jump", typeof(Player).GetField("currentAnim", Private).GetValue(hero));
+            Assert.IsFalse(hero.normalJumpParticleObject.activeSelf);
+            Assert.IsTrue(speedParticles.activeSelf);
+        }
+        yield break;
+    }
+
+    [UnityTest]
+    public IEnumerator ObstacleContactCancelsSpeedIntroAndGroundRecoveryWaitsForJump()
+    {
+        Player hero = MakePlayer(out _);
+        data.defaultStageSpeedMult = data.stageSpeedMult = 0.8f;
+        data.decelerateTime = 0.05f;
+        data.recoverTime = 0.1f;
+        typeof(Player).GetField("isGrounded", Private).SetValue(hero, false);
+        Begin();
+        RawPlay(hero, "ChangeAnimation", "Jump");
+        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed Start"));
+
+        data.BeginObstacleContact();
+        typeof(GameData).GetField("lastObstacleTouchTime", Private).SetValue(data, -100f);
+        data.EndObstacleContact();
+        Assert.IsTrue(data.IsObstacleSlowdownActive);
+        Play(hero, "SyncSpeedPhaseAirAnimation");
+        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Jump"), "Contact also cancels a speed intro already playing.");
+        Play(hero, "ChangeAnimation", "Hurt");
+        typeof(Player).GetField("isGrounded", Private).SetValue(hero, true);
+        Play(hero, "ChangeAnimation", "Walk");
+
+        float deadline = Time.time + 3f;
+        while (data.IsObstacleSlowdownActive && Time.time < deadline)
+        {
+            Play(hero, "SyncSpeedPhaseAirAnimation");
+            Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Walk"));
+            yield return null;
+        }
+        Assert.IsFalse(data.IsObstacleSlowdownActive, "The actual contact coroutine must finish recovery.");
+        Assert.AreEqual(0.8f, data.stageSpeedMult, 0.0001f);
+        Play(hero, "SyncSpeedPhaseAirAnimation");
+        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Walk"));
+        typeof(Player).GetField("isGrounded", Private).SetValue(hero, false);
+        Play(hero, "ChangeAnimation", "Jump");
+        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed"));
+    }
+
+    [UnityTest]
+    public IEnumerator EndingSpeedPhaseDuringObstacleRecoveryKeepsNormalJump()
+    {
+        Player hero = MakePlayer(out _);
+        typeof(Player).GetField("isGrounded", Private).SetValue(hero, false);
+        settings.phaseSpawnCount = 1;
+        Begin();
+        Play(hero, "ChangeAnimation", "Jump");
+        var obstacleState = typeof(GameData).GetField("obstacleState", Private);
+        obstacleState.SetValue(data, GameData.ObstacleContactState.Recovering);
+        Play(hero, "SyncSpeedPhaseAirAnimation");
+        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Jump"));
+        PassLastPhase();
+        PassLastPhase();
+        RawPlay(hero, "SyncSpeedPhaseAirAnimation");
+        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Jump"));
+        obstacleState.SetValue(data, GameData.ObstacleContactState.None);
+        RawPlay(hero, "SyncSpeedPhaseAirAnimation");
+        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Jump"));
+        yield break;
+    }
+
+    [UnityTest]
     public IEnumerator SonicBoomRequiresSpeedPoseAndNormalSpeedAndReusesItsInstanceAfterRecovery()
     {
         Player hero = MakePlayer(out _);
@@ -1557,6 +1669,7 @@ public sealed class SpeedPhasesTests
             Assert.IsFalse(effect.activeSelf, "Hide the existing boom throughout slowdown and recovery.");
         }
         data.stageSpeedMult = 0.8f;
+        obstacleState.SetValue(data, GameData.ObstacleContactState.None);
         RawPlay(hero, "SyncSonicBoom");
         Assert.IsTrue(effect.activeSelf);
         Assert.AreSame(effect, effectField.GetValue(hero));
