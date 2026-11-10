@@ -415,6 +415,7 @@ public partial class StageManager : MonoBehaviour
         if (gameplayPauseByTransform)
             return;
 
+        UpdateSpeedPhaseExitHold(Time.deltaTime);
         UpdateSpeedPhaseEntrySpeed(Time.deltaTime);
         TrySpawnSpeedPhaseEffects();
 

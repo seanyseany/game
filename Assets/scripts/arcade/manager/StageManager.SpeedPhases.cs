@@ -12,6 +12,8 @@ public partial class StageManager
     private float speedPhaseSteadyMultiplier = 1f;
     private float speedPhaseEntryHoldDuration;
     private float speedPhaseEntryReturnDuration;
+    private float speedPhaseExitHoldRemaining;
+    private float speedPhaseExitHoldMultiplier = 1f;
     private bool waitingForSpeedPhaseStart;
     private bool waitingForSpeedPhaseEnd;
     private bool forceNormalPhaseAfterSpeedPhase;
@@ -32,7 +34,10 @@ public partial class StageManager
     public bool IsSpeedPhaseSequenceActive => activeSpeedPhaseSettings != null;
     public bool IsSpeedPhaseSpeedActive => IsSpeedPhaseSequenceActive && !waitingForSpeedPhaseStart && isActiveAndEnabled &&
         (GameData.Instance == null || (!GameData.Instance.gameOver && !GameData.Instance.IsResetting));
-    public float SpecialPhaseSpeedMultiplier => IsSpeedPhaseSpeedActive ? speedPhaseMultiplier : 1f;
+    private bool IsSpeedPhaseExitHoldActive => speedPhaseExitHoldRemaining > 0f && isActiveAndEnabled &&
+        (GameData.Instance == null || (!GameData.Instance.gameOver && !GameData.Instance.IsResetting));
+    public float SpecialPhaseSpeedMultiplier => IsSpeedPhaseSpeedActive ? speedPhaseMultiplier :
+        IsSpeedPhaseExitHoldActive ? speedPhaseExitHoldMultiplier : 1f;
     public float SpecialPhaseSteadySpeedMultiplier => IsSpeedPhaseSpeedActive ? speedPhaseSteadyMultiplier : 1f;
 
     private bool TryStartSpeedPhaseSequence(speedPhases settings, bool countTowardPhaseProgress, bool runPhaseRolls)
@@ -142,6 +147,9 @@ public partial class StageManager
             return;
         }
 
+        // Continue spawning normal phases immediately, but keep the outgoing speed for two seconds.
+        speedPhaseExitHoldMultiplier = speedPhaseMultiplier;
+        speedPhaseExitHoldRemaining = 2f;
         StopSpeedPhaseEffects(despawnExisting: false);
         ResetSpeedPhaseSequenceState();
         Player player = GameData.Instance != null ? GameData.Instance.playerRef : null;
@@ -157,6 +165,7 @@ public partial class StageManager
 
     private void BeginSpeedPhaseEntrySpeed()
     {
+        speedPhaseExitHoldRemaining = 0f;
         speedPhaseSteadyMultiplier = SanitizeSpeedPhaseMultiplier(activeSpeedPhaseSettings.speedMultiplier);
         speedPhaseEntryMultiplier = SanitizeSpeedPhaseMultiplier(activeSpeedPhaseSettings.entrySpeedMultiplier);
         speedPhaseEntryHoldDuration = SanitizeSpeedPhaseDuration(activeSpeedPhaseSettings.entryHoldDuration);
@@ -194,8 +203,17 @@ public partial class StageManager
     private static float SanitizeSpeedPhaseDuration(float value) =>
         float.IsNaN(value) || float.IsInfinity(value) ? 0f : Mathf.Max(0f, value);
 
+    private void UpdateSpeedPhaseExitHold(float deltaTime)
+    {
+        if (!IsSpeedPhaseExitHoldActive || gameplayPauseByTransform || RageTransformFreezeController.ShouldSkipGameplayFrame())
+            return;
+
+        speedPhaseExitHoldRemaining = Mathf.Max(0f, speedPhaseExitHoldRemaining - Mathf.Max(0f, deltaTime));
+    }
+
     private void InterruptSpeedPhaseSequenceForRage()
     {
+        speedPhaseExitHoldRemaining = 0f;
         if (IsSpeedPhaseSequenceActive)
             interruptedSpeedPhaseSettings = activeSpeedPhaseSettings;
         if (interruptedSpeedPhaseSettings != null)
@@ -253,6 +271,7 @@ public partial class StageManager
 
     private void CancelSpeedPhaseSequence()
     {
+        speedPhaseExitHoldRemaining = 0f;
         StopSpeedPhaseEffects();
         ResetSpeedPhaseSequenceState();
         interruptedSpeedPhaseSettings = null;

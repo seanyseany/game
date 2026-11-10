@@ -6,7 +6,7 @@ public class speedPhases : MonoBehaviour
     [Tooltip("랜덤과 무관하게 맨 처음 스폰할 시작 페이즈입니다. 이 페이즈의 PhaseEndTrigger가 PhaseDetector에 닿으면 속도 배율과 아래 페이즈 스폰을 시작합니다.")]
     public GameObject startPhasePrefab;
 
-    [Tooltip("랜덤과 무관하게 맨 마지막에 스폰할 종료 페이즈입니다. 이 페이즈의 PhaseEndTrigger가 PhaseDetector에 닿으면 속도 배율을 해제하고 일반 페이즈로 복귀합니다.")]
+    [Tooltip("랜덤과 무관하게 맨 마지막에 스폰할 종료 페이즈입니다. 이 페이즈의 PhaseEndTrigger가 PhaseDetector에 닿으면 일반 페이즈로 복귀하고 2초 후 속도 배율을 해제합니다.")]
     public GameObject endPhasePrefab;
 
     [Tooltip("이 스페셜 구간에서 스폰할 페이즈들입니다. 각 프리팹에 PhaseEndTrigger가 필요합니다. 목록을 섞어 사용하고, 부족하면 다시 순환합니다.")]

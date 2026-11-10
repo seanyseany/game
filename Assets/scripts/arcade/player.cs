@@ -832,10 +832,12 @@ public class Player : MonoBehaviour
         if (isInHurtWindow && currentAnim == "Hurt" && !CanInterruptHurtWindow(triggerName))
             return;
 
+        // The speed intro may consume this request and change currentAnim to Jump.
+        // Release the previous attack while its Flyattack state is still available.
+        ReleaseRangedFlyattackState(triggerName);
+
         if (HandleSpeedPhaseAnimationRequest(ref triggerName))
             return;
-
-        ReleaseRangedFlyattackState(triggerName);
 
         if (currentAnim == triggerName && currentAnim != "Hurt" && IsAnimatorInLogicalState(triggerName))
             return;
@@ -929,6 +931,7 @@ public class Player : MonoBehaviour
         if (anim == null) return;
 
         if (logicalName == "Speed") logicalName = "Jump";
+        ReleaseRangedFlyattackState(logicalName);
         if (HandleSpeedPhaseAnimationRequest(ref logicalName))
             return;
 
@@ -937,8 +940,6 @@ public class Player : MonoBehaviour
             logicalName = "Jump";
             stateName = ResolveSpeedPhaseAnimationTrigger(logicalName) == "Speed" ? "Base Speed" : "Base Jump";
         }
-
-        ReleaseRangedFlyattackState(logicalName);
 
         if (logicalName != "Walk")
             ResetWalkAnimationSpeedImmediate();
@@ -1680,7 +1681,8 @@ public class Player : MonoBehaviour
             bool preserveAirAttackAnimation =
                 !isGrounded &&
                 isAttacking &&
-                (t == T2 || t == T4 || (isRageMode && t == T3)) &&
+                // A previous ranged attack must not keep its pose when only jump is held.
+                (((t == T2 || t == T4) && ReadKey(KeyCode.DownArrow)) || (isRageMode && t == T3)) &&
                 (currentAnim == "Flyattack" || IsAnimatorShowingLogicalState("Flyattack"));
 
             if (!isTransformLock && currentAnim != "Jump" && !preserveAirAttackAnimation)

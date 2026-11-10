@@ -165,10 +165,13 @@ public sealed class SpeedPhasesTests
             detector.GetComponent<Rigidbody2D>().bodyType = RigidbodyType2D.Kinematic;
             trigger.SendMessage("OnTriggerEnter2D", detector.GetComponent<Collider2D>());
             Assert.IsFalse(manager.IsSpeedPhaseSequenceActive);
-            Assert.AreEqual(1f, manager.SpecialPhaseSpeedMultiplier);
-            Assert.AreEqual(0.8f, data.GetStageSpeedMult(), 0.0001f);
+            Assert.AreEqual(2.5f, manager.SpecialPhaseSpeedMultiplier);
+            Assert.AreEqual(2f, data.GetStageSpeedMult(), 0.0001f);
             Assert.AreSame(normal, Prefabs[LastObject]);
             Assert.AreEqual(4, Active.Count);
+            AdvanceExitHold(2f);
+            Assert.AreEqual(1f, manager.SpecialPhaseSpeedMultiplier);
+            Assert.AreEqual(0.8f, data.GetStageSpeedMult(), 0.0001f);
             detector.SetActive(false);
             unrelated.SetActive(false);
             Object.Destroy(detector);
@@ -332,6 +335,8 @@ public sealed class SpeedPhasesTests
         manager.OnPhasePassed(finalTrigger);
         Assert.AreEqual(6, Active.Count);
         Assert.IsFalse(manager.IsSpeedPhaseSequenceActive);
+        Assert.AreEqual(2.5f, manager.SpecialPhaseSpeedMultiplier);
+        AdvanceExitHold(2f);
         Assert.AreEqual(1f, manager.SpecialPhaseSpeedMultiplier);
         Assert.AreEqual(0.8f, data.GetStageSpeedMult(), 0.0001f);
         Assert.AreSame(normal, Prefabs[LastObject]);
@@ -703,6 +708,49 @@ public sealed class SpeedPhasesTests
             Assert.AreEqual("Jump", typeof(Player).GetField("currentAnim", Private).GetValue(hero));
             Assert.IsTrue((bool)typeof(Player).GetMethod("IsAnimatorShowingLogicalState", Private).Invoke(hero, new object[] { "Jump" }));
             Assert.IsFalse((bool)typeof(Player).GetMethod("IsFlyattackStateActive", Private).Invoke(hero, null));
+        }
+        yield break;
+    }
+
+    [UnityTest]
+    public IEnumerator SpeedAirPosesSurviveTheFullPlayerUpdateForEveryCharacter()
+    {
+        Player hero = MakePlayer(out var overrides);
+        typeof(Player).GetField("isGrounded", Private).SetValue(hero, false);
+        Begin();
+        Play(hero, "ChangeAnimation", "Jump");
+        for (int type = 1; type <= 5; type++)
+        {
+            data.selectedPlayerType = type;
+            overrides.ApplyOverrides(true);
+            typeof(Player).GetField("stats", Private).SetValue(hero, StatsManager.GetPlayerStats(type, 1));
+            if (type == 2 || type == 4)
+            {
+                // Recover from the real ranged attack, including its airborne latch.
+                var attack = (IEnumerator)typeof(Player).GetMethod(type == 2 ? "P2_FireRanged" : "P4_FireLightning", Private)
+                    .Invoke(hero, null);
+                attack.MoveNext();
+                hero.anim.Update(0f);
+                Play(hero, "ChangeAnimation", "Jump");
+                Assert.IsFalse((bool)typeof(Player).GetField("isAttacking", Private).GetValue(hero),
+                    "Jump must release Flyattack before the speed intro consumes the animation request.");
+                Assert.IsNull(typeof(Player).GetField("rangedFlyattackLatchRoutine", Private).GetValue(hero));
+            }
+            foreach (float velocity in new[] { 0f, 2f, 0f, -2f, 0f })
+            {
+                string pose = velocity > 0f ? "Speed Up" : velocity < 0f ? "Speed Down" : "Speed";
+                for (int frame = 0; frame < 4; frame++)
+                {
+                    hero.rb.linearVelocity = new Vector2(0f, velocity);
+                    typeof(Player).GetMethod("Update", Private).Invoke(hero, null);
+                    hero.anim.Update(1f / 60f);
+                    Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base " + pose),
+                        $"Player {type}, Y {velocity}, frame {frame}");
+                }
+                AnimationClip expected = velocity > 0f ? overrides.speedUpClips[type - 1] :
+                    velocity < 0f ? overrides.speedDownClips[type - 1] : overrides.speedClips[type - 1];
+                Assert.AreSame(expected, hero.anim.GetCurrentAnimatorClipInfo(0)[0].clip);
+            }
         }
         yield break;
     }
@@ -1738,6 +1786,8 @@ public sealed class SpeedPhasesTests
             manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
             Assert.IsFalse(manager.IsSpeedPhaseSequenceActive);
             Assert.AreSame(normal, Prefabs[LastObject]);
+            Assert.AreEqual(2.5f, manager.SpecialPhaseSpeedMultiplier);
+            AdvanceExitHold(2f);
             Assert.AreEqual(1f, manager.SpecialPhaseSpeedMultiplier);
             manager.ResetState();
         }
@@ -2110,6 +2160,46 @@ public sealed class SpeedPhasesTests
             yield return null;
         Assert.AreEqual(targetX, train.transform.localPosition.x, 0.0001f);
     }
+
+    [UnityTest]
+    public IEnumerator ExitSpeedHoldsForTwoGameplaySecondsAndCancelsOnResetDisableGameOverOrRage()
+    {
+        for (int mode = 0; mode < 5; mode++)
+        {
+            Begin();
+            for (int i = 0; i < settings.phaseSpawnCount + 1; i++) PassLastPhase();
+            Assert.IsFalse(manager.IsSpeedPhaseSequenceActive);
+            Assert.AreSame(normal, Prefabs[LastObject]);
+            Assert.AreEqual(2f, data.GetStageSpeedMult(), 0.0001f);
+
+            AdvanceExitHold(1f);
+            manager.SetGameplayPause(true);
+            AdvanceExitHold(10f);
+            manager.SetGameplayPause(false);
+            AdvanceExitHold(0.99f);
+            Assert.AreEqual(2f, data.GetStageSpeedMult(), 0.0001f);
+
+            switch (mode)
+            {
+                case 0: AdvanceExitHold(0.02f); break;
+                case 1: manager.ResetState(); break;
+                case 2: manager.enabled = false; manager.enabled = true; break;
+                case 3:
+                    data.gameOver = true;
+                    GameData.OnGameOver?.Invoke();
+                    data.gameOver = false;
+                    break;
+                case 4: Call("InterruptSpeedPhaseSequenceForRage"); break;
+            }
+            Assert.AreEqual(1f, manager.SpecialPhaseSpeedMultiplier);
+            Assert.AreEqual(0.8f, data.GetStageSpeedMult(), 0.0001f);
+            manager.ResetState();
+        }
+        yield break;
+    }
+
+    private void AdvanceExitHold(float seconds) => typeof(StageManager)
+        .GetMethod("UpdateSpeedPhaseExitHold", Private).Invoke(manager, new object[] { seconds });
 
     private void Begin(bool activateSpeed = true)
     {
