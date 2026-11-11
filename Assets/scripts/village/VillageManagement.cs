@@ -822,8 +822,8 @@ public partial class VillageManagement : MonoBehaviour
 
     public bool IsArcadePlayerAvailable(int playerType)
     {
-        ArcadePlayerEntry entry = FindArcadePlayerEntry(playerType);
-        return entry != null && entry.available && IsVillageLevelUnlocked(playerType) && HasPurchasedPlayer(playerType);
+        // Catalog availability and village level gate purchases, not permanent ownership.
+        return playerType >= 1 && playerType <= 5 && HasPurchasedPlayer(playerType);
     }
 
     public bool TryGetArcadePlayer(int playerType, out ArcadePlayerEntry entry)
@@ -835,13 +835,12 @@ public partial class VillageManagement : MonoBehaviour
     public List<ArcadePlayerEntry> GetAvailableArcadePlayers()
     {
         List<ArcadePlayerEntry> results = new List<ArcadePlayerEntry>();
-        for (int i = 0; i < arcadePlayers.Count; i++)
+        for (int playerType = 1; playerType <= 5; playerType++)
         {
-            ArcadePlayerEntry entry = arcadePlayers[i];
-            if (entry == null || !IsArcadePlayerAvailable(entry.playerType))
+            if (!IsArcadePlayerAvailable(playerType))
                 continue;
 
-            results.Add(entry);
+            results.Add(FindArcadePlayerEntry(playerType) ?? new ArcadePlayerEntry { playerType = playerType });
         }
 
         return results;
@@ -1444,6 +1443,9 @@ public partial class VillageManagement : MonoBehaviour
         saveData.villageScore = Math.Max(0L, saveData.villageScore);
         if (saveData.purchasedPlayerTypes == null)
             saveData.purchasedPlayerTypes = new List<int>();
+        var purchasedPlayerTypes = new HashSet<int>();
+        saveData.purchasedPlayerTypes.RemoveAll(playerType =>
+            playerType < 1 || playerType > 5 || !purchasedPlayerTypes.Add(playerType));
         if (!saveData.purchasedPlayerTypes.Contains(1))
             saveData.purchasedPlayerTypes.Add(1);
         saveData.selectedArcadeSceneIndex = Mathf.Max(0, saveData.selectedArcadeSceneIndex);
@@ -1750,7 +1752,9 @@ public partial class VillageManagement : MonoBehaviour
 
     private ArcadePlayerEntry FindArcadePlayerEntry(int playerType)
     {
-        playerType = Mathf.Clamp(playerType, 1, 5);
+        if (playerType < 1 || playerType > 5 || arcadePlayers == null)
+            return null;
+
         for (int i = 0; i < arcadePlayers.Count; i++)
         {
             ArcadePlayerEntry entry = arcadePlayers[i];

@@ -357,6 +357,55 @@ public sealed class ArcadePerformanceTests
         }
     }
 
+    [UnityTest] public IEnumerator BloodArrivingDuringPlayerExitAndGateClosingIsCollectedBelowThreshold()
+    {
+        EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        yield return new EnterPlayMode();
+        var data = new GameObject("Exit suction data").AddComponent<GameData>();
+        data.enabled = false;
+        var pool = new GameObject("Exit suction pool").AddComponent<ObjectPool>();
+        pool.RegisterPool("Blood", AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Arcade/Blood.prefab"), 1);
+        var gate = new GameObject("Exit gate", typeof(SpriteRenderer)).AddComponent<GateHealth>();
+        var shovel = new GameObject("Exit shovel", typeof(BoxCollider2D)).AddComponent<GateShovel>();
+        shovel.baseRequiredBloodCount = 4;
+        shovel.closeDelay = 0.01f;
+        int initialScore = data.GetO2Score();
+
+        gate.BeginOpenHold();
+        yield return null;
+        Assert.IsNull(Get(shovel, "cycleRoutine"), "Opening an empty shovel should not start a collection cycle.");
+
+        // The player holds the gate open after the opening event and after a suction cycle ends.
+        for (int arrival = 0; arrival < 3; arrival++)
+        {
+            if (arrival == 2)
+                gate.EndOpenHold(); // The last arrival happens during the closing animation.
+
+            Assert.IsTrue(gate.IsOpenForSuction);
+            GameObject instance = pool.SpawnFromPool("Blood", shovel.transform.position, Quaternion.identity);
+            shovel.RegisterBloodInstance(instance.GetComponent<Blood>());
+            float deadline = Time.time + 2f;
+            while ((instance.activeSelf || Get(shovel, "cycleRoutine") != null) && Time.time < deadline)
+                yield return null;
+            Assert.IsFalse(instance.activeSelf, "A single blood must be collected while the gate is open or closing.");
+            Assert.IsNull(Get(shovel, "cycleRoutine"));
+            Assert.AreEqual(initialScore + arrival + 1, data.GetO2Score());
+        }
+
+        float closeDeadline = Time.time + 2f;
+        while (gate.IsOpenForSuction && Time.time < closeDeadline)
+            yield return null;
+        Assert.IsFalse(gate.IsOpenForSuction, "The gate must finish closing after suction.");
+
+        GameObject waiting = pool.SpawnFromPool("Blood", shovel.transform.position, Quaternion.identity);
+        shovel.RegisterBloodInstance(waiting.GetComponent<Blood>());
+        yield return null;
+        yield return null;
+        Assert.IsTrue(waiting.activeSelf, "A fully closed gate must still require the usual blood count.");
+        Assert.IsNull(Get(shovel, "cycleRoutine"));
+        Assert.AreEqual(initialScore + 3, data.GetO2Score());
+    }
+
     [UnityTest] public IEnumerator JumpParticlePresentationDoesNotAllocateAcrossRepeatedFrames()
     {
         EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);

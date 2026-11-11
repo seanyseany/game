@@ -53,7 +53,9 @@ public class GateShovel : MonoBehaviour
     {
         CleanupBloodSets();
 
-        if (cycleRoutine == null && !cycleStarting && bloodCount >= GetRequiredBloodCount())
+        // Blood arriving after the opening event can still enter until the gate is fully closed.
+        bool canEnterOpenGate = bloodsInRange.Count > 0 && GateHealth.Instance != null && GateHealth.Instance.IsOpenForSuction;
+        if (cycleRoutine == null && !cycleStarting && (canEnterOpenGate || bloodCount >= GetRequiredBloodCount()))
             StartCycle();
     }
 

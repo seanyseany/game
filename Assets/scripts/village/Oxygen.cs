@@ -20,6 +20,7 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
     [SerializeField] private GameObject exclamationPrefab;
     [SerializeField] private Transform exclamationAnchor;
     [SerializeField] private Animator animator;
+    [Tooltip("Seconds between production cycles. Collecting oxygen starts a fresh cycle for this oil only.")]
     [SerializeField] private float productionInterval = 10f;
     [SerializeField] private Vector2 bottomLocalPosition;
 
@@ -237,6 +238,10 @@ public class Oxygen : MonoBehaviour, IColliderPointerTarget
             villageManagement.AddOxygen(storedOxygen);
 
         storedOxygen = 0;
+
+        // Discard the remaining wait so collection always starts a full, independent interval.
+        if (isActiveAndEnabled)
+            RestartProduction();
 
         if (collectedIcon != null && exclamationInstance == collectedIcon.gameObject)
             exclamationInstance = null;

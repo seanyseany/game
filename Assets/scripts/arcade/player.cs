@@ -577,7 +577,7 @@ public class Player : MonoBehaviour
     private float speedAirBridgeEndTime;
 
     private bool IsSpeedPhaseAnimationActive => UsesArcadeSystems && !isDead && !isRageMode &&
-        StageManager.Instance != null && StageManager.Instance.IsSpeedPhaseSpeedActive;
+        StageManager.Instance != null && StageManager.Instance.IsSpeedPhaseAnimationActive;
 
     private bool CanUseSpeedPhaseJumpAnimation => IsSpeedPhaseAnimationActive &&
         (GameData.Instance == null || !GameData.Instance.IsObstacleSlowdownActive);
@@ -622,9 +622,9 @@ public class Player : MonoBehaviour
     public void NotifySpeedPhaseCompleted()
     {
         ObserveSpeedPhaseWindow();
-        if (currentAnim == "Jump" && IsAnimatorShowingLogicalState("Jump") &&
+        if (!IsSpeedPhaseAnimationActive && currentAnim == "Jump" && IsAnimatorShowingLogicalState("Jump") &&
             CanPresentSpeedPhaseTransition && !isAttacking && !isLanding)
-            BeginSpeedPhaseTransition();
+            ChangeAnimation("Jump");
     }
 
     private void BeginSpeedPhaseTransition()

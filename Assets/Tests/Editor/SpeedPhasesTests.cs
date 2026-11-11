@@ -169,7 +169,7 @@ public sealed class SpeedPhasesTests
             Assert.AreEqual(2f, data.GetStageSpeedMult(), 0.0001f);
             Assert.AreSame(normal, Prefabs[LastObject]);
             Assert.AreEqual(4, Active.Count);
-            AdvanceExitHold(2f);
+            AdvanceExitHold(1.5f);
             Assert.AreEqual(1f, manager.SpecialPhaseSpeedMultiplier);
             Assert.AreEqual(0.8f, data.GetStageSpeedMult(), 0.0001f);
             detector.SetActive(false);
@@ -336,7 +336,7 @@ public sealed class SpeedPhasesTests
         Assert.AreEqual(6, Active.Count);
         Assert.IsFalse(manager.IsSpeedPhaseSequenceActive);
         Assert.AreEqual(2.5f, manager.SpecialPhaseSpeedMultiplier);
-        AdvanceExitHold(2f);
+        AdvanceExitHold(1.5f);
         Assert.AreEqual(1f, manager.SpecialPhaseSpeedMultiplier);
         Assert.AreEqual(0.8f, data.GetStageSpeedMult(), 0.0001f);
         Assert.AreSame(normal, Prefabs[LastObject]);
@@ -874,6 +874,9 @@ public sealed class SpeedPhasesTests
         Play(hero, "SyncSpeedPhaseAirAnimation");
         Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed"));
         manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
+        Play(hero, "SyncSpeedPhaseAirAnimation");
+        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed"));
+        AdvanceExitHold(1.5f);
         Play(hero, "SyncSpeedPhaseAirAnimation");
         Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Jump"));
         Assert.IsTrue((bool)typeof(Player).GetField("isAttacking", Private).GetValue(hero));
@@ -1430,7 +1433,7 @@ public sealed class SpeedPhasesTests
     }
 
     [UnityTest]
-    public IEnumerator SpeedStartFinishesBeforeLocomotionAndPhaseEndPlaysItOnceBeforeRestoringJump()
+    public IEnumerator SpeedStartFinishesBeforeLocomotionAndPhaseEndKeepsSpeedUntilHoldExpires()
     {
         Player hero = MakePlayer(out _);
         settings.phaseSpawnCount = 1;
@@ -1464,12 +1467,14 @@ public sealed class SpeedPhasesTests
         manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
         manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
         RawPlay(hero, "SyncSpeedPhaseAirAnimation");
-        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed Start"));
+        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed"));
         RawPlay(hero, "ChangeAnimation", "Jump");
-        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed Start"));
+        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed"));
+        AdvanceExitHold(1.49f);
         RawPlay(hero, "SyncSpeedPhaseAirAnimation");
-        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed Start"));
-        FinishSpeedTransition(hero);
+        Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed"));
+        AdvanceExitHold(0.01f);
+        RawPlay(hero, "SyncSpeedPhaseAirAnimation");
         Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Jump"));
         RawPlay(hero, "ChangeAnimation", "Jump");
         Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Jump"));
@@ -1483,6 +1488,7 @@ public sealed class SpeedPhasesTests
             Play(hero, "ChangeAnimation", endAnimation);
             manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
             manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
+            AdvanceExitHold(1.5f);
             RawPlay(hero, "SyncSpeedPhaseAirAnimation");
             Assert.IsFalse(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed Start"),
                 $"Ending during {endAnimation} must not play the exit animation.");
@@ -1516,6 +1522,10 @@ public sealed class SpeedPhasesTests
         FinishSpeedTransition(hero);
         manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
         manager.OnPhasePassed(LastObject.GetComponentInChildren<PhaseEndTrigger>());
+        RawPlay(hero, "SyncSpeedPhaseAirAnimation");
+        Assert.IsTrue(speedParticles.activeSelf);
+        Assert.IsFalse(hero.normalJumpParticleObject.activeSelf);
+        AdvanceExitHold(1.5f);
         RawPlay(hero, "SyncSpeedPhaseAirAnimation");
         Assert.IsTrue(hero.normalJumpParticleObject.activeSelf);
         Assert.IsFalse(speedParticles.activeSelf);
@@ -1787,7 +1797,7 @@ public sealed class SpeedPhasesTests
             Assert.IsFalse(manager.IsSpeedPhaseSequenceActive);
             Assert.AreSame(normal, Prefabs[LastObject]);
             Assert.AreEqual(2.5f, manager.SpecialPhaseSpeedMultiplier);
-            AdvanceExitHold(2f);
+            AdvanceExitHold(1.5f);
             Assert.AreEqual(1f, manager.SpecialPhaseSpeedMultiplier);
             manager.ResetState();
         }
@@ -2162,7 +2172,49 @@ public sealed class SpeedPhasesTests
     }
 
     [UnityTest]
-    public IEnumerator ExitSpeedHoldsForTwoGameplaySecondsAndCancelsOnResetDisableGameOverOrRage()
+    public IEnumerator ExitHoldKeepsDirectionalSpeedPosesUntilSpeedAndJumpReturnTogether()
+    {
+        Player hero = MakePlayer(out var overrides);
+        settings.phaseSpawnCount = 1;
+        typeof(Player).GetField("isGrounded", Private).SetValue(hero, false);
+        for (int type = 1; type <= 5; type++)
+        {
+            data.selectedPlayerType = type;
+            overrides.ApplyOverrides(true);
+            Begin();
+            Play(hero, "ChangeAnimation", "Jump");
+            PassLastPhase();
+            PassLastPhase();
+            Assert.IsFalse(manager.IsSpeedPhaseSequenceActive);
+            Assert.IsFalse(manager.IsSpeedPhaseSpeedActive);
+            Assert.IsTrue(manager.IsSpeedPhaseAnimationActive);
+            Assert.AreSame(normal, Prefabs[LastObject]);
+
+            float[] velocities = { 2f, 0f, -2f };
+            string[] poses = { "Base Speed Up", "Base Speed", "Base Speed Down" };
+            for (int i = 0; i < velocities.Length; i++)
+            {
+                hero.rb.linearVelocity = Vector2.up * velocities[i];
+                RawPlay(hero, "SyncSpeedPhaseAirAnimation");
+                Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName(poses[i]));
+                Assert.AreEqual(2f, data.GetStageSpeedMult(), 0.0001f);
+                AdvanceExitHold(i < 2 ? 0.5f : 0.49f);
+            }
+            RawPlay(hero, "SyncSpeedPhaseAirAnimation");
+            Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Speed Down"));
+            Assert.AreEqual(2f, data.GetStageSpeedMult(), 0.0001f);
+            AdvanceExitHold(0.01f);
+            hero.anim.Update(0f);
+            Assert.AreEqual(0.8f, data.GetStageSpeedMult(), 0.0001f);
+            Assert.IsFalse(manager.IsSpeedPhaseAnimationActive);
+            Assert.IsTrue(hero.anim.GetCurrentAnimatorStateInfo(0).IsName("Base Jump"));
+            manager.ResetState();
+        }
+        yield break;
+    }
+
+    [UnityTest]
+    public IEnumerator ExitSpeedHoldsForOneAndAHalfGameplaySecondsAndCancelsOnResetDisableGameOverOrRage()
     {
         for (int mode = 0; mode < 5; mode++)
         {
@@ -2176,7 +2228,7 @@ public sealed class SpeedPhasesTests
             manager.SetGameplayPause(true);
             AdvanceExitHold(10f);
             manager.SetGameplayPause(false);
-            AdvanceExitHold(0.99f);
+            AdvanceExitHold(0.49f);
             Assert.AreEqual(2f, data.GetStageSpeedMult(), 0.0001f);
 
             switch (mode)

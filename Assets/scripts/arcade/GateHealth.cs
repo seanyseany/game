@@ -45,6 +45,7 @@ public class GateHealth : MonoBehaviour
     private int openHoldCount;
 
     public bool IsBroken => state == GateState.Broken;
+    public bool IsOpenForSuction => state == GateState.Opening || state == GateState.Open || state == GateState.Closing;
     public int CurrentHits => hitCount;
     public int RemainingHits => Mathf.Max(0, maxHits - hitCount);
 

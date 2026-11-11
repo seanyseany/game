@@ -57,8 +57,7 @@ public class Play : MonoBehaviour
     {
         if (panelRoot != null) Tycoon.DeliveryWindows.Register(panelRoot.gameObject, ClosePlayMenu);
         VillageManagement.InstanceReady += HandleVillageReady;
-        if (VillageManagement.Instance != null)
-            VillageManagement.Instance.SaveDataChanged += HandleSaveDataChanged;
+        HandleVillageReady(VillageManagement.Instance);
     }
 
     private void OnDisable()
@@ -70,6 +69,7 @@ public class Play : MonoBehaviour
 
     public void OpenPlayMenu()
     {
+        LoadSavedSelection();
         BuildUiIfNeeded();
         Tycoon.DeliveryWindows.Register(panelRoot.gameObject, ClosePlayMenu);
         Tycoon.DeliveryWindows.Open(panelRoot.gameObject);

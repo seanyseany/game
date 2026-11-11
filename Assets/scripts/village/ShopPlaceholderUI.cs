@@ -668,8 +668,8 @@ public class ShopPlaceholderUI : ShopSectionUI
             buttons[i].interactable = unlocked && !owned && entry != null && entry.available && manager.CurrentOxygen >= price;
             Text label = buttons[i].GetComponentInChildren<Text>();
             if (label != null)
-                label.text = !unlocked ? $"Player {playerType}\n마을 {playerType}레벨에 해금"
-                    : owned ? $"Player {playerType}\n구매 완료"
+                label.text = owned ? $"Player {playerType}\n구매 완료"
+                    : !unlocked ? $"Player {playerType}\n마을 {playerType}레벨에 해금"
                     : entry == null || !entry.available ? $"Player {playerType}\n등록 필요"
                     : $"Player {playerType}\n구매 O2 {price}";
         }

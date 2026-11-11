@@ -36,6 +36,7 @@ public partial class StageManager
         (GameData.Instance == null || (!GameData.Instance.gameOver && !GameData.Instance.IsResetting));
     private bool IsSpeedPhaseExitHoldActive => speedPhaseExitHoldRemaining > 0f && isActiveAndEnabled &&
         (GameData.Instance == null || (!GameData.Instance.gameOver && !GameData.Instance.IsResetting));
+    public bool IsSpeedPhaseAnimationActive => IsSpeedPhaseSpeedActive || IsSpeedPhaseExitHoldActive;
     public float SpecialPhaseSpeedMultiplier => IsSpeedPhaseSpeedActive ? speedPhaseMultiplier :
         IsSpeedPhaseExitHoldActive ? speedPhaseExitHoldMultiplier : 1f;
     public float SpecialPhaseSteadySpeedMultiplier => IsSpeedPhaseSpeedActive ? speedPhaseSteadyMultiplier : 1f;
@@ -147,16 +148,11 @@ public partial class StageManager
             return;
         }
 
-        // Continue spawning normal phases immediately, but keep the outgoing speed for two seconds.
+        // Continue spawning normal phases immediately while speed and its animation finish together.
         speedPhaseExitHoldMultiplier = speedPhaseMultiplier;
-        speedPhaseExitHoldRemaining = 2f;
+        speedPhaseExitHoldRemaining = 1.5f;
         StopSpeedPhaseEffects(despawnExisting: false);
         ResetSpeedPhaseSequenceState();
-        Player player = GameData.Instance != null ? GameData.Instance.playerRef : null;
-        if (player == null)
-            player = Object.FindFirstObjectByType<Player>();
-        if (player != null)
-            player.NotifySpeedPhaseCompleted();
         if (TryStartDeferredSpeedPhaseBoss())
             return;
         forceNormalPhaseAfterSpeedPhase = true;
@@ -209,6 +205,14 @@ public partial class StageManager
             return;
 
         speedPhaseExitHoldRemaining = Mathf.Max(0f, speedPhaseExitHoldRemaining - Mathf.Max(0f, deltaTime));
+        if (speedPhaseExitHoldRemaining <= 0f)
+        {
+            Player player = GameData.Instance != null ? GameData.Instance.playerRef : null;
+            if (player == null)
+                player = Object.FindFirstObjectByType<Player>();
+            if (player != null)
+                player.NotifySpeedPhaseCompleted();
+        }
     }
 
     private void InterruptSpeedPhaseSequenceForRage()
