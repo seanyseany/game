@@ -368,8 +368,6 @@ public class Player : MonoBehaviour
     private bool nextP4NormalAnimationIsSecond;
     private bool nextP2RageAnimationIsSecond;
     private bool nextP4RageAnimationIsSecond;
-    private bool skipNextP1RageLandingSmoke = false;
-    private bool skipNextP5RageLandingSmoke = false;
     private float groundProbeDistance = 0.28f;
     private float groundOverlapHeight = 0.12f;
     private float groundedLossGraceTime = 0.06f;
@@ -1075,9 +1073,9 @@ public class Player : MonoBehaviour
             hasLanded = false;
 
             if (playerType == T1)
-                yield return StartCoroutine(P1_Land(isRageMode));
+                yield return P1_Land(spawnLandingSmoke: false);
             else
-                yield return StartCoroutine(P5_Land(true, shakeOnFloor: false));
+                yield return P5_Land(spawnLandingSmoke: !isRageMode, shakeOnFloor: false);
 
             isLanding = false;
             yield break;
@@ -1105,7 +1103,7 @@ public class Player : MonoBehaviour
 
     private IEnumerator RunGroundedAttackRoutine(IEnumerator routine)
     {
-        yield return StartCoroutine(routine);
+        yield return routine;
         activeGroundAttackRoutine = null;
     }
 
@@ -1126,7 +1124,7 @@ public class Player : MonoBehaviour
 
     private IEnumerator RunLandingRoutine(IEnumerator routine)
     {
-        yield return StartCoroutine(routine);
+        yield return routine;
         activeLandingRoutine = null;
     }
 
@@ -1950,12 +1948,10 @@ public class Player : MonoBehaviour
         }
 
         SpawnSmokeEffect();
-        if (isRageMode)
-            skipNextP1RageLandingSmoke = true;
 
         yield return new WaitForSeconds(fireRecovery);
-        yield return StartCoroutine(WaitForGroundAttackAnimationToFinish());
-        yield return StartCoroutine(ResolveGroundAttackEndTransition(T1));
+        yield return WaitForGroundAttackAnimationToFinish();
+        yield return ResolveGroundAttackEndTransition(T1);
     }
 
     private IEnumerator P5_GroundAttack()
@@ -1980,13 +1976,10 @@ public class Player : MonoBehaviour
         }
 
         if (isRageMode)
-        {
             SpawnSmokeEffect();
-            skipNextP5RageLandingSmoke = true;
-        }
 
-        yield return StartCoroutine(WaitForGroundAttackAnimationToFinish());
-        yield return StartCoroutine(ResolveGroundAttackEndTransition(T5));
+        yield return WaitForGroundAttackAnimationToFinish();
+        yield return ResolveGroundAttackEndTransition(T5);
     }
 
     private void HandleAttackInput()
@@ -2086,6 +2079,10 @@ public class Player : MonoBehaviour
     private IEnumerator P1_AirStomp()
     {
         if (isGrounded) yield break;
+        StopGroundedAttackRoutine();
+        StopLandingRoutine();
+        isLanding = false;
+        hasLanded = false;
         isAttacking = true;
         attackStateStartTime = Time.time;
         flyattackProtectedUntil = Time.time + stompFlyattackProtectDuration;
@@ -2102,6 +2099,10 @@ public class Player : MonoBehaviour
     private IEnumerator P5_AirStomp()
     {
         if (isGrounded) yield break;
+        StopGroundedAttackRoutine();
+        StopLandingRoutine();
+        isLanding = false;
+        hasLanded = false;
         isAttacking = true;
         attackStateStartTime = Time.time;
         flyattackProtectedUntil = Time.time + stompFlyattackProtectDuration;
@@ -2143,8 +2144,8 @@ public class Player : MonoBehaviour
         float scale = 1f;
         string tag = smokePoolTag;
 
-        bool hasGround = TryGetGroundSurface(out Collider2D groundCol);
-        string groundTag = hasGround && groundCol != null ? groundCol.tag : lastGroundTag;
+        bool hasGround = TryGetAttackSmokeGroundSurface(out _, out string resolvedGroundTag);
+        string groundTag = hasGround ? resolvedGroundTag : lastGroundTag;
         bool onPlatform = groundTag == "platform";
         bool onFloor = groundTag == "floor";
 
@@ -2209,7 +2210,7 @@ public class Player : MonoBehaviour
         if (!IsStompPlayerType(CharacterType) || bodyCollider == null)
             return pos;
 
-        if (TryGetGroundSurface(out var groundCol, out var groundTag, out _) && groundTag == "floor")
+        if (TryGetAttackSmokeGroundSurface(out var groundCol, out var groundTag) && groundTag == "floor")
         {
             // Preserve the existing art offset at rest, but remove the current fall height
             // and Rigidbody interpolation from the smoke's world Y coordinate.
@@ -2219,6 +2220,29 @@ public class Player : MonoBehaviour
         }
 
         return pos;
+    }
+
+    private bool TryGetAttackSmokeGroundSurface(out Collider2D groundCol, out string groundTag)
+    {
+        if (TryGetGroundSurface(out groundCol, out groundTag, out _))
+            return true;
+
+        // A confirmed landing can outlive the short probe while the rendered player
+        // is still interpolating or already re-jumping. Keep its smoke on that floor.
+        if (bodyCollider == null || !IsStompPlayerType(CharacterType) || (!isGrounded && !isLanding) ||
+            lastGroundTag != "floor" || lastGroundCol == null ||
+            !lastGroundCol.isActiveAndEnabled || lastGroundCol.isTrigger ||
+            !TryResolveGroundSurface(lastGroundCol, out _, out var cachedTag) || cachedTag != "floor")
+            return false;
+
+        Bounds floorBounds = lastGroundCol.bounds;
+        Bounds playerBounds = bodyCollider.bounds;
+        if (playerBounds.max.x < floorBounds.min.x || playerBounds.min.x > floorBounds.max.x)
+            return false;
+
+        groundCol = lastGroundCol;
+        groundTag = "floor";
+        return true;
     }
 
     private IEnumerator MoveToWorldPosition(Vector3 worldStart, Vector3 worldTarget, float duration)
@@ -2397,32 +2421,25 @@ public class Player : MonoBehaviour
 
         if (spawnLandingSmoke && isRageMode)
         {
-            if (skipNextP1RageLandingSmoke)
+            // Rage 전용 히트박스
+            var hb = SpawnHitboxFromPool(hitboxPrefabP1, hitboxP1PoolTag, transform.position);
+            if (hb != null)
             {
-                skipNextP1RageLandingSmoke = false;
+                hb.transform.parent = transform;
+                AdjustHitboxIfRage(hb);
+                var hbComp = hb.GetComponent<Hitbox>();
+                if (hbComp) hbComp.damage = 1;
+                StartCoroutine(ActivateAndDestroyCollider(hb, 0f, 0.2f));
             }
-            else
+            Vector3 pos = GetAttackSmokeSpawnPosition();
+            if (landedOnFloor && rage1SmokePrefab != null)
             {
-                // Rage 전용 히트박스
-                var hb = SpawnHitboxFromPool(hitboxPrefabP1, hitboxP1PoolTag, transform.position);
-                if (hb != null)
-                {
-                    hb.transform.parent = transform;
-                    AdjustHitboxIfRage(hb);
-                    var hbComp = hb.GetComponent<Hitbox>();
-                    if (hbComp) hbComp.damage = 1;
-                    StartCoroutine(ActivateAndDestroyCollider(hb, 0f, 0.2f));
-                }
-                Vector3 pos = GetAttackSmokeSpawnPosition();
-                if (landedOnFloor && rage1SmokePrefab != null)
-                {
-                    SpawnSmokeFromPrefab(rage1SmokePrefab, pos, rage1SmokePoolTag);
-                    TriggerReducedRageSmokeShake();
-                }
-                else if (landedOnPlatform && smokeEffectPrefab != null)
-                {
-                    SpawnSmokeFromPrefab(smokeEffectPrefab, pos, smokePoolTag);
-                }
+                SpawnSmokeFromPrefab(rage1SmokePrefab, pos, rage1SmokePoolTag);
+                TriggerReducedRageSmokeShake();
+            }
+            else if (landedOnPlatform && smokeEffectPrefab != null)
+            {
+                SpawnSmokeFromPrefab(smokeEffectPrefab, pos, smokePoolTag);
             }
         }
         else if (spawnLandingSmoke)
@@ -2454,7 +2471,7 @@ public class Player : MonoBehaviour
             isLanding = false;
             yield break;
         }
-        yield return StartCoroutine(TransitionToWalkAfterLand(T1));
+        yield return TransitionToWalkAfterLand(T1);
         isLanding = false;
     }
 
@@ -2543,18 +2560,11 @@ public class Player : MonoBehaviour
             if (hbComp) hbComp.damage = stats.attack;
         }
 
-        // ✅ Rage 상태일 때 연기 크기 1.5배
+        // Rage floor impacts emit both attack smokes at the configured 4x scale.
         if (spawnLandingSmoke && landedOnFloor && isRageMode && isGrounded)
         {
-            if (skipNextP5RageLandingSmoke)
-            {
-                skipNextP5RageLandingSmoke = false;
-            }
-            else
-            {
-                Vector3 pos = GetAttackSmokeSpawnPosition();
-                SpawnP5RageAttackSmokes(pos, 4f);  // 🔥 크기 4배
-            }
+            Vector3 pos = GetAttackSmokeSpawnPosition();
+            SpawnP5RageAttackSmokes(pos, 4f);
         }
         else if (spawnLandingSmoke)
         {
@@ -2577,7 +2587,7 @@ public class Player : MonoBehaviour
             isLanding = false;
             yield break;
         }
-        yield return StartCoroutine(TransitionToWalkAfterLand(T5));
+        yield return TransitionToWalkAfterLand(T5);
         isLanding = false;
     }
 
@@ -4252,9 +4262,9 @@ public class Player : MonoBehaviour
 
 
 
-    private IEnumerator P1_Land_Wrap() { yield return StartCoroutine(P1_Land()); isLanding = false; }
+    private IEnumerator P1_Land_Wrap() { yield return P1_Land(); isLanding = false; }
     private IEnumerator P3_Land_Wrap() { yield return StartCoroutine(P3_Land()); isLanding = false; }
-    private IEnumerator P5_Land_Wrap() { yield return StartCoroutine(P5_Land()); isLanding = false; }
+    private IEnumerator P5_Land_Wrap() { yield return P5_Land(); isLanding = false; }
 
     private bool IsStompPlayerType(int type)
     {
@@ -4530,6 +4540,14 @@ public class Player : MonoBehaviour
 
         bool groundedNow = isGrounded || IsStandingOnGround();
         if (!groundedNow) return;
+
+        // Resolve an unhandled stomp impact before the stuck-pose fallback clears it.
+        if (isAttacking && !isLanding && !hasLanded && IsFlyattackStateActive())
+        {
+            isGrounded = true;
+            HandleLandSequencing();
+            return;
+        }
 
         float groundedFor = Time.time - lastGroundedTime;
         float verticalSpeed = Mathf.Abs(rb.linearVelocity.y);

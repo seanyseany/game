@@ -53,7 +53,9 @@ public sealed class StompSmokeHeightTests
         foreach (bool pooled in new[] { false, true })
         foreach (string route in new[] { "SpawnSmokeEffect", type == 1 ? "P1_Land" : "P5_Land" })
         foreach (float floorShift in new[] { 0f, 1.25f })
-        foreach (float gap in new[] { 0f, 0.08f, 0.2f })
+        // A P5 stomp travels 0.54 units per default physics tick. Interpolation
+        // and a fast re-jump can exceed the 0.28-unit gameplay ground probe.
+        foreach (float gap in new[] { 0f, 0.08f, 0.6f, 0.2f, 1.08f, 0f, 0.32f })
         {
             string context = $"P{type}, rage={rage}, pool={pooled}, {route}, floor={floorShift}, gap={gap}";
             GameData.Instance.selectedPlayerType = type;
@@ -62,7 +64,6 @@ public sealed class StompSmokeHeightTests
             Set(hero, "isRageMode", rage); Set(hero, "isGrounded", true);
             Set(hero, "isTransformLock", false); Set(hero, "currentAnim", "Flyattack");
             Set(hero, "lastGroundTag", "floor"); Set(hero, "lastGroundCol", floorCol);
-            Set(hero, "skipNextP1RageLandingSmoke", false); Set(hero, "skipNextP5RageLandingSmoke", false);
             floor.transform.position = new Vector3(0f, floorShift - 0.5f);
             hero.transform.position = new Vector3(0f, restingPlayerY + floorShift + gap, hero.transform.position.z);
             Physics2D.SyncTransforms();

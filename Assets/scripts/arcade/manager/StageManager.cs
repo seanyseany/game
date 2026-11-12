@@ -949,7 +949,7 @@ public partial class StageManager : MonoBehaviour
         while (activeBoss != null && activeBoss.activeInHierarchy)
             yield return null;
 
-        yield return WaitForSecondsRespectingGameplayPause(bossResumeDelay);
+        yield return WaitForSecondsRespectingGameplayPause(bossResumeDelay + 1f);
         ResumeAfterBoss();
     }
 
