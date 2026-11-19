@@ -11,6 +11,8 @@ public partial class StageManager
     private float speedPhaseEntryMultiplier = 1f;
     private float speedPhaseSteadyMultiplier = 1f;
     private float speedPhaseEntryHoldDuration;
+    private float speedPhaseEntryMiddleMultiplier = 1f;
+    private float speedPhaseEntryMiddleHoldDuration;
     private float speedPhaseEntryReturnDuration;
     private float speedPhaseExitHoldRemaining;
     private float speedPhaseExitHoldMultiplier = 1f;
@@ -165,10 +167,11 @@ public partial class StageManager
         speedPhaseSteadyMultiplier = SanitizeSpeedPhaseMultiplier(activeSpeedPhaseSettings.speedMultiplier);
         speedPhaseEntryMultiplier = SanitizeSpeedPhaseMultiplier(activeSpeedPhaseSettings.entrySpeedMultiplier);
         speedPhaseEntryHoldDuration = SanitizeSpeedPhaseDuration(activeSpeedPhaseSettings.entryHoldDuration);
+        speedPhaseEntryMiddleMultiplier = SanitizeSpeedPhaseMultiplier(activeSpeedPhaseSettings.entryMiddleSpeedMultiplier);
+        speedPhaseEntryMiddleHoldDuration = SanitizeSpeedPhaseDuration(activeSpeedPhaseSettings.entryMiddleHoldDuration);
         speedPhaseEntryReturnDuration = SanitizeSpeedPhaseDuration(activeSpeedPhaseSettings.entryReturnDuration);
         speedPhaseEntryElapsed = 0f;
-        speedPhaseMultiplier = speedPhaseEntryHoldDuration + speedPhaseEntryReturnDuration > 0f
-            ? speedPhaseEntryMultiplier : speedPhaseSteadyMultiplier;
+        ApplySpeedPhaseEntrySpeed();
     }
 
     private void UpdateSpeedPhaseEntrySpeed(float deltaTime)
@@ -176,21 +179,35 @@ public partial class StageManager
         if (!IsSpeedPhaseSpeedActive || gameplayPauseByTransform || RageTransformFreezeController.ShouldSkipGameplayFrame())
             return;
 
-        float totalDuration = speedPhaseEntryHoldDuration + speedPhaseEntryReturnDuration;
+        float totalDuration = speedPhaseEntryHoldDuration + speedPhaseEntryMiddleHoldDuration + speedPhaseEntryReturnDuration;
         if (speedPhaseEntryElapsed >= totalDuration)
             return;
 
         speedPhaseEntryElapsed = Mathf.Min(totalDuration, speedPhaseEntryElapsed + Mathf.Max(0f, deltaTime));
+        ApplySpeedPhaseEntrySpeed();
+    }
+
+    private void ApplySpeedPhaseEntrySpeed()
+    {
         if (speedPhaseEntryElapsed < speedPhaseEntryHoldDuration)
         {
             speedPhaseMultiplier = speedPhaseEntryMultiplier;
             return;
         }
 
+        float returnStartTime = speedPhaseEntryHoldDuration + speedPhaseEntryMiddleHoldDuration;
+        if (speedPhaseEntryElapsed < returnStartTime)
+        {
+            speedPhaseMultiplier = speedPhaseEntryMiddleMultiplier;
+            return;
+        }
+
+        float returnStartMultiplier = speedPhaseEntryMiddleHoldDuration > 0f
+            ? speedPhaseEntryMiddleMultiplier : speedPhaseEntryMultiplier;
         float progress = speedPhaseEntryReturnDuration > 0f
-            ? Mathf.Clamp01((speedPhaseEntryElapsed - speedPhaseEntryHoldDuration) / speedPhaseEntryReturnDuration)
+            ? Mathf.Clamp01((speedPhaseEntryElapsed - returnStartTime) / speedPhaseEntryReturnDuration)
             : 1f;
-        speedPhaseMultiplier = Mathf.Lerp(speedPhaseEntryMultiplier, speedPhaseSteadyMultiplier, progress);
+        speedPhaseMultiplier = Mathf.Lerp(returnStartMultiplier, speedPhaseSteadyMultiplier, progress);
     }
 
     private static float SanitizeSpeedPhaseMultiplier(float value) =>
@@ -291,8 +308,8 @@ public partial class StageManager
         speedPhasesRemaining = 0;
         speedPhaseMultiplier = 1f;
         speedPhaseEntryElapsed = 0f;
-        speedPhaseEntryMultiplier = speedPhaseSteadyMultiplier = 1f;
-        speedPhaseEntryHoldDuration = speedPhaseEntryReturnDuration = 0f;
+        speedPhaseEntryMultiplier = speedPhaseEntryMiddleMultiplier = speedPhaseSteadyMultiplier = 1f;
+        speedPhaseEntryHoldDuration = speedPhaseEntryMiddleHoldDuration = speedPhaseEntryReturnDuration = 0f;
         waitingForSpeedPhaseStart = false;
         waitingForSpeedPhaseEnd = false;
         forceNormalPhaseAfterSpeedPhase = false;

@@ -1,25 +1,44 @@
-using UnityEngine;
 using System.Collections;
+using UnityEngine;
+using UnityEngine.Serialization;
 
 public class MissileSmoke : MonoBehaviour
 {
-    public float lifeTime = 0.5f; // 연기 지속 시간
+    [SerializeField, FormerlySerializedAs("lifeTime")]
+    private float fallbackLifetime = 0.5f;
 
-    void OnEnable()
+    private Animator animator;
+
+    private void Awake()
     {
-        // 활성화될 때마다 타이머 재시작 보장
-        StopAllCoroutines();
-        StartCoroutine(LifeCo());
+        animator = GetComponentInChildren<Animator>(true);
     }
 
-    private IEnumerator LifeCo()
+    private void OnEnable()
     {
-        yield return new WaitForSeconds(lifeTime);
+        StopAllCoroutines();
+        StartCoroutine(DespawnAfterPlayback());
+    }
 
-        // 태그가 "Smoke" 이고 풀을 쓰는 경우 풀로 반납, 아니면 파괴
-        if (ObjectPool.Instance != null && CompareTag("Smoke"))
-            ObjectPool.Instance.ReturnToPool("Smoke", gameObject);
+    private IEnumerator DespawnAfterPlayback()
+    {
+        if (animator != null && animator.isActiveAndEnabled && animator.runtimeAnimatorController != null)
+        {
+            // Let the Animator enter its state after activation or a pool rebind.
+            do
+            {
+                yield return null;
+            }
+            while (animator != null && (!animator.isInitialized ||
+                (animator.layerCount > 0 && animator.GetCurrentAnimatorStateInfo(0).normalizedTime < 1f)));
+        }
         else
+        {
+            yield return new WaitForSeconds(fallbackLifetime);
+        }
+
+        ObjectPool pool = ObjectPool.Instance;
+        if (pool == null || !pool.TryReturnActive(gameObject))
             Destroy(gameObject);
     }
 }

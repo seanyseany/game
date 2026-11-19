@@ -56,7 +56,6 @@ namespace Tycoon
 
         private void Advance(float deltaSeconds)
         {
-            if (credited) return;
             if (target == null) { DeliveryView.Remove(gameObject); return; }
             elapsed += Mathf.Max(0f, deltaSeconds);
             if (elapsed < ShrinkSeconds)
@@ -78,6 +77,16 @@ namespace Tycoon
                 graphicColors = new Color[graphics.Length];
                 for (int i = 0; i < graphics.Length; i++) graphicColors[i] = graphics[i].color;
             }
+            // Placement completes the delivery; the remaining hold/fade is only visual.
+            // If the building became unavailable during the shrink, retry without losing the order.
+            if (!credited && target.TryReceiveDelivery())
+            {
+                credited = true;
+                Action callback = completed;
+                completed = null;
+                callback?.Invoke();
+                if (this == null) return;
+            }
             if (elapsed < ShrinkSeconds + HoldSeconds) return;
             if (!disappeared)
             {
@@ -91,14 +100,7 @@ namespace Tycoon
                 delivered = null;
                 disappeared = true;
             }
-            // If an upgrade/move started during the visual, retain its credit
-            // until the same building is ready instead of losing the order.
-            if (!target.TryReceiveDelivery()) return;
-            credited = true;
-            Action callback = completed;
-            completed = null;
-            DeliveryView.Remove(gameObject);
-            callback?.Invoke();
+            if (credited) DeliveryView.Remove(gameObject);
         }
 
         private void OnDestroy()

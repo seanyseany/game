@@ -180,7 +180,7 @@ public class OwnerBlood : MonoBehaviour
         }
 
         if (building != null)
-            building.AwardTradeVillageScore();
+            building.AwardTradeVillageScore(customer);
 
         CancelCurrentService(true);
     }

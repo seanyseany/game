@@ -29,8 +29,16 @@ public class speedPhases : MonoBehaviour
     [Tooltip("진입 배율을 유지할 시간(초)입니다.")]
     public float entryHoldDuration = 0.5f;
 
+    [Min(0.01f)]
+    [Tooltip("시작 배율 유지 후 적용할 중간 배율입니다. 기존 게임 속도 기준이며 Speed Multiplier에 추가로 곱하지 않습니다.")]
+    public float entryMiddleSpeedMultiplier = 1.6f;
+
     [Min(0f)]
-    [Tooltip("유지 시간이 끝난 뒤 Speed Multiplier로 서서히 복귀하는 시간(초)입니다. 0이면 즉시 복귀합니다.")]
+    [Tooltip("중간 배율을 유지할 시간(초)입니다. 0이면 중간 단계를 건너뜁니다.")]
+    public float entryMiddleHoldDuration = 0f;
+
+    [Min(0f)]
+    [Tooltip("중간 배율 유지 후 Speed Multiplier로 서서히 복귀하는 시간(초)입니다. 중간 유지 시간이 0이면 시작 배율에서 복귀하며, 복귀 시간이 0이면 즉시 복귀합니다.")]
     public float entryReturnDuration = 0.5f;
 
     [Header("Speed Effect")]

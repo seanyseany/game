@@ -166,24 +166,34 @@ public class Missile : MonoBehaviour, IRageTransformPauseHandler
     {
         ArcadeFeedback.ShowBoom(transform.position);
 
-        // 풀에 Smoke가 있으면 우선 사용
-        if (ObjectPool.Instance != null)
+        GameObject prefab = PickExplosionPrefab();
+        ObjectPool pool = ObjectPool.Instance;
+        if (pool != null && (prefab == null || pool.GetRegisteredPrefab("Smoke") == prefab))
         {
-            GameObject effect = ObjectPool.Instance.SpawnFromPool("Smoke", transform.position, Quaternion.identity);
-            if (effect == null && explosionPrefabs.Length > 0)
-            {
-                int idx = Random.Range(0, explosionPrefabs.Length);
-                Instantiate(explosionPrefabs[idx], transform.position, Quaternion.identity);
-            }
-            return;
+            if (pool.SpawnFromPool("Smoke", transform.position, Quaternion.identity) != null)
+                return;
         }
 
-        // 풀 없을 때
-        if (explosionPrefabs.Length > 0)
+        if (prefab != null)
+            Instantiate(prefab, transform.position, Quaternion.identity);
+    }
+
+    private GameObject PickExplosionPrefab()
+    {
+        if (explosionPrefabs == null || explosionPrefabs.Length == 0) return null;
+        if (explosionPrefabs.Length == 1) return explosionPrefabs[0];
+
+        // Give each assigned prefab the same chance, even if some slots are empty.
+        GameObject selected = null;
+        int assignedCount = 0;
+        foreach (GameObject prefab in explosionPrefabs)
         {
-            int idx = Random.Range(0, explosionPrefabs.Length);
-            Instantiate(explosionPrefabs[idx], transform.position, Quaternion.identity);
+            if (prefab == null) continue;
+            assignedCount++;
+            if (Random.Range(0, assignedCount) == 0)
+                selected = prefab;
         }
+        return selected;
     }
 
     // 🔥 풀 반환을 하나의 메서드로 통일

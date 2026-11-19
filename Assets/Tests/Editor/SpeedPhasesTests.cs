@@ -2020,6 +2020,119 @@ public sealed class SpeedPhasesTests
     }
 
     [UnityTest]
+    public IEnumerator EntryMiddleSpeedUsesInspectorValuesHoldsDuringPauseThenReturnsGradually()
+    {
+        var inspector = new SerializedObject(settings);
+        inspector.FindProperty("speedMultiplier").floatValue = 1.65f;
+        inspector.FindProperty("entrySpeedMultiplier").floatValue = 3.5f;
+        inspector.FindProperty("entryHoldDuration").floatValue = 0.2f;
+        inspector.FindProperty("entryMiddleSpeedMultiplier").floatValue = 2.5f;
+        inspector.FindProperty("entryMiddleHoldDuration").floatValue = 0.3f;
+        inspector.FindProperty("entryReturnDuration").floatValue = 0.7f;
+        inspector.ApplyModifiedPropertiesWithoutUndo();
+        Begin();
+        Assert.AreEqual(3.5f, manager.SpecialPhaseSpeedMultiplier);
+        AdvanceEntrySpeed(0.1f);
+        Assert.AreEqual(3.5f, manager.SpecialPhaseSpeedMultiplier);
+        AdvanceEntrySpeed(0.1f);
+        Assert.AreEqual(2.5f, manager.SpecialPhaseSpeedMultiplier);
+        AdvanceEntrySpeed(0.15f);
+        manager.SetGameplayPause(true);
+        AdvanceEntrySpeed(10f);
+        Assert.AreEqual(2.5f, manager.SpecialPhaseSpeedMultiplier);
+        manager.SetGameplayPause(false);
+        AdvanceEntrySpeed(0.15f);
+        Assert.AreEqual(2.5f, manager.SpecialPhaseSpeedMultiplier, 0.00001f);
+        AdvanceEntrySpeed(0.35f);
+        Assert.AreEqual(2.075f, manager.SpecialPhaseSpeedMultiplier, 0.00001f);
+        Assert.AreEqual(0.8f * 2.075f, data.GetStageSpeedMult(), 0.00001f);
+        PassLastPhase();
+        Assert.AreEqual(2.075f, manager.SpecialPhaseSpeedMultiplier, 0.00001f,
+            "The next phase must not restart the three-stage entry sequence.");
+        AdvanceEntrySpeed(0.35f);
+        Assert.AreEqual(1.65f, manager.SpecialPhaseSpeedMultiplier, 0.00001f);
+        manager.ResetState();
+        yield break;
+    }
+
+    [UnityTest]
+    public IEnumerator EntryMiddleSpeedHandlesLargeStepsAndRestartsAfterResetOrDisable()
+    {
+        settings.entrySpeedMultiplier = 3.5f;
+        settings.entryHoldDuration = 0.2f;
+        settings.entryMiddleSpeedMultiplier = 2.5f;
+        settings.entryMiddleHoldDuration = 0.3f;
+        settings.speedMultiplier = 1.65f;
+        settings.entryReturnDuration = 0.7f;
+        for (int run = 0; run < 3; run++)
+        {
+            Begin(false);
+            AdvanceEntrySpeed(10f);
+            Assert.AreEqual(1f, manager.SpecialPhaseSpeedMultiplier);
+            PassLastPhase();
+            Assert.AreEqual(3.5f, manager.SpecialPhaseSpeedMultiplier);
+            AdvanceEntrySpeed(0.4f);
+            Assert.AreEqual(2.5f, manager.SpecialPhaseSpeedMultiplier);
+            AdvanceEntrySpeed(0.45f);
+            Assert.AreEqual(2.075f, manager.SpecialPhaseSpeedMultiplier, 0.00001f);
+            AdvanceEntrySpeed(10f);
+            Assert.AreEqual(1.65f, manager.SpecialPhaseSpeedMultiplier, 0.00001f);
+            if (run == 1) { manager.enabled = false; manager.enabled = true; }
+            else manager.ResetState();
+            Assert.AreEqual(1f, manager.SpecialPhaseSpeedMultiplier);
+        }
+        yield break;
+    }
+
+    [UnityTest]
+    public IEnumerator ZeroEntryDurationsSkipEachOfTheThreeStagesIndependently()
+    {
+        settings.entrySpeedMultiplier = 3.5f;
+        settings.entryMiddleSpeedMultiplier = 2.5f;
+        settings.speedMultiplier = 1.5f;
+        for (int mask = 0; mask < 8; mask++)
+        {
+            bool start = (mask & 1) != 0, middle = (mask & 2) != 0, returning = (mask & 4) != 0;
+            settings.entryHoldDuration = start ? 0.2f : 0f;
+            settings.entryMiddleHoldDuration = middle ? 0.3f : 0f;
+            settings.entryReturnDuration = returning ? 0.4f : 0f;
+            Begin();
+            Assert.AreEqual(start ? 3.5f : middle ? 2.5f : returning ? 3.5f : 1.5f,
+                manager.SpecialPhaseSpeedMultiplier, 0.00001f, $"Initial speed, mask={mask}");
+            AdvanceEntrySpeed(settings.entryHoldDuration);
+            Assert.AreEqual(middle ? 2.5f : returning ? 3.5f : 1.5f,
+                manager.SpecialPhaseSpeedMultiplier, 0.00001f, $"Middle speed, mask={mask}");
+            AdvanceEntrySpeed(settings.entryMiddleHoldDuration + settings.entryReturnDuration * 0.5f);
+            Assert.AreEqual(returning ? (middle ? 2f : 2.5f) : 1.5f,
+                manager.SpecialPhaseSpeedMultiplier, 0.00001f, $"Returning speed, mask={mask}");
+            AdvanceEntrySpeed(10f);
+            Assert.AreEqual(1.5f, manager.SpecialPhaseSpeedMultiplier, 0.00001f);
+            manager.ResetState();
+        }
+        yield break;
+    }
+
+    [UnityTest]
+    public IEnumerator InvalidMiddleSpeedSettingsAreSanitized()
+    {
+        settings.entryHoldDuration = 0f;
+        settings.entryReturnDuration = 0f;
+        foreach (float invalid in new[] { float.NaN, float.PositiveInfinity, -1f })
+        {
+            settings.entryMiddleSpeedMultiplier = invalid;
+            settings.entryMiddleHoldDuration = 0.3f;
+            Begin();
+            Assert.AreEqual(invalid < 0f ? 0.01f : 1f, manager.SpecialPhaseSpeedMultiplier);
+            manager.ResetState();
+            settings.entryMiddleHoldDuration = invalid;
+            Begin();
+            Assert.AreEqual(settings.speedMultiplier, manager.SpecialPhaseSpeedMultiplier);
+            manager.ResetState();
+        }
+        yield break;
+    }
+
+    [UnityTest]
     public IEnumerator SpeedEffectsStayVisibleAboveSustainedSpeedAndFadeOnlyBelowItDuringEntry()
     {
         new GameObject("Entry effect pool").AddComponent<ObjectPool>();
@@ -2075,6 +2188,8 @@ public sealed class SpeedPhasesTests
         settings.speedMultiplier = 1.6f;
         settings.entrySpeedMultiplier = 5f;
         settings.entryHoldDuration = 0.35f;
+        settings.entryMiddleSpeedMultiplier = 3f;
+        settings.entryMiddleHoldDuration = 0.2f;
         settings.entryReturnDuration = 0.5f;
         Begin();
         float nextSpawn = (float)typeof(StageManager).GetField("nextSpeedPhaseEffectSpawnTime", Private).GetValue(manager);

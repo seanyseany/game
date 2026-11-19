@@ -122,6 +122,7 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
     private void UpdatePointerHold(Vector3 worldPoint, bool pressed)
     {
+        if (Input.touchCount >= 2 && !isDragging) { ReleasePointerHold(); return; }
         if (pointerHeld && !isDragging &&
             !VillagePointerCapture.ContainsPoint(transform, worldPoint + holdShake.WorldOffset))
         {
@@ -158,6 +159,7 @@ public class TurretImplementation : MonoBehaviour, IColliderPointerTarget
 
     public void HandleColliderPointerDown()
     {
+        if (Input.touchCount >= 2) return;
         if (pointerHeld || isDragging)
             return;
 

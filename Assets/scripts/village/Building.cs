@@ -81,10 +81,6 @@ public class Building : MonoBehaviour
     [SerializeField] private GameObject ownerPatrolToPointPrefab;
     [SerializeField] private Transform bottomAnchor;
     [SerializeField] private Transform uiAnchor;
-    [SerializeField] private GameObject exclamationPrefab;
-    [SerializeField] private Transform exclamationAnchor;
-    [SerializeField] private float exclamationDuration = 0.8f;
-    [SerializeField] private float exclamationMoveSpeed = 1.2f;
     [Header("상자 재고 게이지")]
     [FormerlySerializedAs("salaryControlledPrefabs")]
     [SerializeField] private GameObject[] stockControlledPrefabs;
@@ -109,7 +105,6 @@ public class Building : MonoBehaviour
     private CustomerBlood queueCustomer2;
     private bool serviceRunning;
     private Coroutine salaryRoutine;
-    private GameObject exclamationInstance;
     private GameObject runtimeBossCustomerPointObject;
     private GameObject runtimeCustomerPointObject;
     private GameObject runtimeOwnerPatrolFromPointObject;
@@ -173,7 +168,6 @@ public class Building : MonoBehaviour
     {
         ResolveBottomAnchor();
         ResolveUiAnchor();
-        ResolveExclamationAnchor();
         ResolveStatusBar();
         EnsureInteractionCollider();
         EnsureSortingGroup();
@@ -216,7 +210,6 @@ public class Building : MonoBehaviour
     {
         ResolveBottomAnchor();
         ResolveUiAnchor();
-        ResolveExclamationAnchor();
         ResolveStatusBar();
         EnsureInteractionCollider();
         EnsureSortingGroup();
@@ -228,8 +221,6 @@ public class Building : MonoBehaviour
         level1StockConsumptionIntervalSeconds = Mathf.Max(0f, level1StockConsumptionIntervalSeconds);
         level2StockConsumptionIntervalSeconds = Mathf.Max(0f, level2StockConsumptionIntervalSeconds);
         stockConsumedPerCustomer = Mathf.Max(0, stockConsumedPerCustomer);
-        exclamationDuration = Mathf.Max(0.05f, exclamationDuration);
-        exclamationMoveSpeed = Mathf.Max(0f, exclamationMoveSpeed);
 
         ApplyLevelBuildingVisual();
 
@@ -265,6 +256,7 @@ public class Building : MonoBehaviour
 
     private void UpdatePointerHold(Vector3 worldPoint, bool pressed)
     {
+        if (Input.touchCount >= 2 && !isDragging) { ReleasePointerHold(); return; }
         if (pointerHeld && !isDragging &&
             !VillagePointerCapture.ContainsPoint(transform, worldPoint + holdShake.WorldOffset))
         {
@@ -465,13 +457,13 @@ public class Building : MonoBehaviour
         PromoteQueue();
     }
 
-    public void AwardTradeVillageScore()
+    public void AwardTradeVillageScore(CustomerBlood customer = null)
     {
         VillageManagement villageManagement = VillageManagement.EnsureInstance();
         if (villageManagement != null && villageScorePerTrade > 0)
             villageManagement.AddVillageScore(villageScorePerTrade);
 
-        ShowTradeExclamation();
+        if (VillageTownHall.Instance != null) VillageTownHall.Instance.ShowCustomerSatisfaction(customer);
     }
 
     public void AbortService(CustomerBlood customer)
@@ -488,7 +480,6 @@ public class Building : MonoBehaviour
         bool previousWorking = IsWorking;
         isWorking = working && currentBoxStock > 0;
         ToggleWorkObjects(IsWorking);
-        UpdateExclamation();
         RefreshStatusBar();
         NotifyWorkStateChanged(previousWorking);
         PushStateToVillageManagement();
@@ -652,6 +643,7 @@ public class Building : MonoBehaviour
 
     private bool CanStartPointerInteraction(Vector2 screenPosition)
     {
+        if (Input.touchCount >= 2) return false;
         if (Tycoon.DeliveryRuntime.BlocksWorldInput)
             return false;
 
@@ -1016,14 +1008,6 @@ public class Building : MonoBehaviour
             uiAnchor = FindChildRecursive(transform, "UIAnchor");
     }
 
-    private void ResolveExclamationAnchor()
-    {
-        if (exclamationAnchor != null)
-            return;
-
-        exclamationAnchor = FindChildRecursive(transform, "ExclamationAnchor");
-    }
-
     private static Transform FindChildRecursive(Transform root, string childName)
     {
         if (root == null || string.IsNullOrWhiteSpace(childName))
@@ -1127,7 +1111,6 @@ public class Building : MonoBehaviour
             CancelWaitingCustomersForRelocation();
 
         ToggleWorkObjects(IsWorking);
-        UpdateExclamation();
         RefreshStatusBar();
         NotifyWorkStateChanged(previousWorking, notifyEntranceManagement);
 
@@ -1154,30 +1137,6 @@ public class Building : MonoBehaviour
 
             target.SetActive(working);
         }
-    }
-
-    private void UpdateExclamation()
-    {
-        if (exclamationInstance != null)
-        {
-            Destroy(exclamationInstance);
-            exclamationInstance = null;
-        }
-    }
-
-    private void ShowTradeExclamation()
-    {
-        if (exclamationPrefab == null)
-            return;
-
-        ResolveExclamationAnchor();
-        Transform anchor = exclamationAnchor != null ? exclamationAnchor : transform;
-        GameObject instance = Instantiate(exclamationPrefab, anchor.position, Quaternion.identity);
-        EnergyIcon icon = instance.GetComponent<EnergyIcon>();
-        if (icon == null)
-            icon = instance.AddComponent<EnergyIcon>();
-
-        icon.Play(exclamationDuration, exclamationMoveSpeed);
     }
 
     private void NotifyWorkStateChanged(bool previousWorking, bool notifyEntranceManagement = true)
@@ -1247,7 +1206,7 @@ public class Building : MonoBehaviour
                 ? SalaryLowFillColor
                 : salaryStatusNormalFillColor;
 
-        boxStockGauge.gameObject.SetActive(normalized > 0f || !Application.isPlaying);
+        boxStockGauge.gameObject.SetActive(true);
         RefreshStatusBarAnchor();
     }
 

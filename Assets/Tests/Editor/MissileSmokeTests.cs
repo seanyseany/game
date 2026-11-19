@@ -28,6 +28,7 @@ public sealed class MissileSmokeTests
         effectTemplate.SetActive(false);
         pool.RegisterPool("Smoke", effectTemplate, 2);
         Missile missile = Spawn(pool);
+        missile.explosionPrefabs = new GameObject[] { null };
         ParticleSystem particles = missile.GetComponentInChildren<ParticleSystem>();
         particles.Emit(5);
         Vector3 finalPosition = missile.transform.position;
@@ -91,6 +92,65 @@ public sealed class MissileSmokeTests
         Assert.AreEqual(AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath)
             .GetComponentInChildren<ParticleSystem>().main.cullingMode, particles.main.cullingMode);
         pool.ReturnAllActive("missile", "Smoke");
+    }
+
+    [UnityTest]
+    public IEnumerator ConfiguredExplosionPlaysAndDespawnsWithLegacySmokePoolPresent()
+    {
+        yield return new EnterPlayMode();
+        ObjectPool pool = PreparePool();
+        GameObject legacySmoke = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Arcade/missileSmoke.prefab");
+        pool.RegisterPool("Smoke", legacySmoke, 1);
+        Missile missile = Spawn(pool);
+        Assert.AreEqual("BombDestroySmoke", missile.explosionPrefabs[0].name);
+
+        Invoke(missile, "Explode");
+
+        Assert.IsNull(GameObject.Find("missileSmoke(Clone)"));
+        GameObject effect = GameObject.Find("BombDestroySmoke(Clone)");
+        Assert.IsNotNull(effect);
+        Assert.AreEqual(missile.transform.position, effect.transform.position);
+        AnimationClip clip = effect.GetComponent<Animator>().runtimeAnimatorController.animationClips[0];
+        Assert.IsFalse(clip.isLooping);
+        var spriteBinding = EditorCurveBinding.PPtrCurve(string.Empty, typeof(SpriteRenderer), "m_Sprite");
+        Assert.IsNotEmpty(AnimationUtility.GetObjectReferenceCurve(clip, spriteBinding));
+
+        float deadline = Time.time + clip.length + 1f;
+        while (effect != null && Time.time < deadline) yield return null;
+        Assert.IsTrue(effect == null, "An instantiated explosion must be destroyed after playback");
+    }
+
+    [UnityTest]
+    public IEnumerator ExplosionWaitsForExtendedClipEvenWhenPlaybackPauses()
+    {
+        yield return new EnterPlayMode();
+        var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Arcade/BombDestroySmoke.prefab");
+        GameObject effect = Object.Instantiate(prefab);
+        Animator animator = effect.GetComponent<Animator>();
+        var controller = new AnimatorOverrideController(animator.runtimeAnimatorController);
+        var extendedClip = new AnimationClip();
+        Sprite sprite = effect.GetComponent<SpriteRenderer>().sprite;
+        var spriteBinding = EditorCurveBinding.PPtrCurve(string.Empty, typeof(SpriteRenderer), "m_Sprite");
+        AnimationUtility.SetObjectReferenceCurve(extendedClip, spriteBinding, new[]
+        {
+            new ObjectReferenceKeyframe { time = 0f, value = sprite },
+            new ObjectReferenceKeyframe { time = 0.9f, value = sprite }
+        });
+        controller[controller.animationClips[0]] = extendedClip;
+        animator.runtimeAnimatorController = controller;
+
+        yield return new WaitForSeconds(0.6f);
+        Assert.IsTrue(effect != null, "The extended clip must outlive the old fixed timer");
+        animator.speed = 0f;
+        yield return new WaitForSeconds(extendedClip.length);
+        Assert.IsTrue(effect != null, "Pausing the Animator must also delay despawning");
+
+        animator.speed = 1f;
+        float deadline = Time.time + extendedClip.length + 1f;
+        while (effect != null && Time.time < deadline) yield return null;
+        Assert.IsTrue(effect == null, "The explosion must disappear after the extended clip ends");
+        Object.Destroy(controller);
+        Object.Destroy(extendedClip);
     }
 
     [UnityTest]

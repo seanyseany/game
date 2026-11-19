@@ -275,6 +275,12 @@ public class Turret : BaseTurret
 
     private void UpdateTarget()
     {
+        if (!HasAmmo())
+        {
+            currentTarget = null;
+            return;
+        }
+
         if (IsTargetValid(currentTarget))
             return;
 

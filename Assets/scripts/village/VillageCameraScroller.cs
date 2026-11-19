@@ -41,9 +41,13 @@ public class VillageCameraScroller : MonoBehaviour
     private Vector2 pointerDownScreenPosition;
     private Vector2 lastScreenPosition;
     private float inertialVelocityY;
+    private float inertialVelocityX;
     private float accumulatedDragWorldY;
+    private float accumulatedDragWorldX;
     private float targetCameraY;
     private float initialCameraY;
+    private float initialCameraX;
+    private VillageCameraZoom cameraZoom;
 
     public static VillageCameraScroller Instance => instance;
 
@@ -89,6 +93,9 @@ public class VillageCameraScroller : MonoBehaviour
         Camera mainCamera = Camera.main;
         if (mainCamera == null)
             return;
+
+        if (mainCamera.GetComponent<VillageCameraZoom>() == null)
+            mainCamera.gameObject.AddComponent<VillageCameraZoom>();
 
         VillageCameraScroller[] scrollers = mainCamera.GetComponents<VillageCameraScroller>();
         VillageCameraScroller scroller = scrollers.Length > 0 ? scrollers[0] : mainCamera.gameObject.AddComponent<VillageCameraScroller>();
@@ -137,12 +144,21 @@ public class VillageCameraScroller : MonoBehaviour
         if (worldCamera == null)
             return;
 
+        if (cameraZoom == null) cameraZoom = worldCamera.GetComponent<VillageCameraZoom>();
+        if (Input.touchCount >= 2 || (cameraZoom != null && cameraZoom.BlocksPanning))
+        {
+            CancelPointerMotion();
+            return;
+        }
+
         if (Tycoon.DeliveryRuntime.BlocksWorldInput)
         {
             pointerActive = false;
             draggingCamera = false;
             inertialVelocityY = 0f;
+            inertialVelocityX = 0f;
             accumulatedDragWorldY = 0f;
+            accumulatedDragWorldX = 0f;
             // Camera toolbar buttons remain usable; only pointer panning and
             // its release inertia are blocked by the popup.
             if (moveToTargetActive) ApplyIdleMotion();
@@ -173,6 +189,22 @@ public class VillageCameraScroller : MonoBehaviour
         MoveToNormalized(0f);
     }
 
+    public void CancelPointerMotion()
+    {
+        pointerActive = draggingCamera = blockedByUi = moveToTargetActive = false;
+        inertialVelocityY = accumulatedDragWorldY = 0f;
+        inertialVelocityX = accumulatedDragWorldX = 0f;
+    }
+
+    public void ClampToCurrentView()
+    {
+        if (worldCamera != null)
+        {
+            SetCameraY(Mathf.Clamp(worldCamera.transform.position.y, GetCameraMinY(), GetCameraMaxY()));
+            ClampCameraX();
+        }
+    }
+
     public void MoveToBottom()
     {
         MoveToNormalized(1f);
@@ -201,9 +233,12 @@ public class VillageCameraScroller : MonoBehaviour
         blockedByUi = false;
         moveToTargetActive = false;
         inertialVelocityY = 0f;
+        inertialVelocityX = 0f;
         accumulatedDragWorldY = 0f;
+        accumulatedDragWorldX = 0f;
         targetCameraY = initialCameraY;
         SetCameraY(Mathf.Clamp(initialCameraY, GetCameraMinY(), GetCameraMaxY()));
+        SetCameraX(initialCameraX);
     }
 
     public static void ResetActiveToDefaultPosition()
@@ -220,7 +255,9 @@ public class VillageCameraScroller : MonoBehaviour
         blockedByUi = false;
         moveToTargetActive = false;
         inertialVelocityY = 0f;
+        inertialVelocityX = 0f;
         accumulatedDragWorldY = 0f;
+        accumulatedDragWorldX = 0f;
 
         if (worldCamera == null)
             worldCamera = Camera.main;
@@ -231,6 +268,7 @@ public class VillageCameraScroller : MonoBehaviour
         if (worldCamera != null)
         {
             initialCameraY = worldCamera.transform.position.y;
+            initialCameraX = worldCamera.transform.position.x;
             targetCameraY = initialCameraY;
         }
 
@@ -245,9 +283,11 @@ public class VillageCameraScroller : MonoBehaviour
         pointerDownScreenPosition = screenPosition;
         lastScreenPosition = screenPosition;
         accumulatedDragWorldY = 0f;
+        accumulatedDragWorldX = 0f;
         moveToTargetActive = false;
         blockedByUi = IsPointerOverUi();
         inertialVelocityY = 0f;
+        inertialVelocityX = 0f;
     }
 
     private void UpdatePointer(Vector2 screenPosition)
@@ -262,12 +302,16 @@ public class VillageCameraScroller : MonoBehaviour
         {
             draggingCamera = false;
             inertialVelocityY = 0f;
+            inertialVelocityX = 0f;
             accumulatedDragWorldY = 0f;
+            accumulatedDragWorldX = 0f;
             lastScreenPosition = screenPosition;
             return;
         }
 
-        float dragDistance = Mathf.Abs(screenPosition.y - pointerDownScreenPosition.y);
+        bool horizontalEnabled = GetHorizontalHalfRange() > 0.001f;
+        float dragDistance = horizontalEnabled ? Vector2.Distance(screenPosition, pointerDownScreenPosition)
+            : Mathf.Abs(screenPosition.y - pointerDownScreenPosition.y);
         float requiredThreshold = dragThresholdPixels;
 
         if (!draggingCamera)
@@ -281,16 +325,19 @@ public class VillageCameraScroller : MonoBehaviour
             draggingCamera = true;
         }
 
-        float deltaScreenY = screenPosition.y - lastScreenPosition.y;
-        if (Mathf.Approximately(deltaScreenY, 0f))
+        Vector2 deltaScreen = screenPosition - lastScreenPosition;
+        if (deltaScreen.sqrMagnitude < 0.0001f)
             return;
 
-        float deltaWorldY = -GetWorldDeltaFromScreenDelta(deltaScreenY);
+        float deltaWorldY = -GetWorldDeltaFromScreenDelta(deltaScreen.y);
         float appliedDelta = MoveCameraBy(deltaWorldY);
+        float appliedX = horizontalEnabled ? MoveCameraXBy(-GetWorldHorizontalDelta(deltaScreen.x)) : 0f;
         float deltaTime = Mathf.Max(0.0001f, Time.unscaledDeltaTime);
         float instantVelocity = appliedDelta / deltaTime;
         inertialVelocityY = Mathf.Lerp(inertialVelocityY, instantVelocity, releaseVelocityBlend);
+        inertialVelocityX = Mathf.Lerp(inertialVelocityX, appliedX / deltaTime, releaseVelocityBlend);
         accumulatedDragWorldY += appliedDelta;
+        accumulatedDragWorldX += appliedX;
         lastScreenPosition = screenPosition;
     }
 
@@ -303,32 +350,33 @@ public class VillageCameraScroller : MonoBehaviour
         draggingCamera = false;
         blockedByUi = false;
         accumulatedDragWorldY = 0f;
+        accumulatedDragWorldX = 0f;
     }
 
     private void ApplyReleaseMomentum()
     {
-        float direction = Mathf.Sign(inertialVelocityY);
-        if (Mathf.Abs(direction) < 0.001f)
-            direction = Mathf.Sign(accumulatedDragWorldY);
+        inertialVelocityY = GetReleaseVelocity(inertialVelocityY, accumulatedDragWorldY, GetCameraMaxY() - GetCameraMinY());
+        inertialVelocityX = GetReleaseVelocity(inertialVelocityX, accumulatedDragWorldX, GetHorizontalHalfRange() * 2f);
+        Vector2 velocity = Vector2.ClampMagnitude(new Vector2(inertialVelocityX, inertialVelocityY), maxInertiaSpeed);
+        inertialVelocityX = velocity.x;
+        inertialVelocityY = velocity.y;
+    }
 
-        if (Mathf.Abs(direction) < 0.001f)
-            return;
-
-        float cameraRange = Mathf.Max(0.001f, GetCameraMaxY() - GetCameraMinY());
-        float dragNormalized = Mathf.Abs(accumulatedDragWorldY) / cameraRange;
+    private float GetReleaseVelocity(float velocity, float distance, float cameraRange)
+    {
+        float direction = Mathf.Abs(velocity) > 0.001f ? Mathf.Sign(velocity) : Mathf.Sign(distance);
+        float dragNormalized = Mathf.Abs(distance) / Mathf.Max(0.001f, cameraRange);
         if (dragNormalized <= minReleaseDragNormalized)
-        {
-            inertialVelocityY = 0f;
-            return;
-        }
+            return 0f;
 
         float releaseNormalized = Mathf.InverseLerp(minReleaseDragNormalized, 1f, Mathf.Clamp01(dragNormalized));
         float releaseStrength = Mathf.SmoothStep(0f, 1f, releaseNormalized);
-        inertialVelocityY = direction * (maxInertiaSpeed * releaseStrength);
+        return direction * (maxInertiaSpeed * releaseStrength);
     }
 
     private void ApplyIdleMotion()
     {
+        AdvanceHorizontalInertia(Time.unscaledDeltaTime);
         if (moveToTargetActive)
         {
             float nextY = Mathf.MoveTowards(worldCamera.transform.position.y, targetCameraY, buttonMoveSpeed * Time.unscaledDeltaTime);
@@ -357,6 +405,17 @@ public class VillageCameraScroller : MonoBehaviour
         inertialVelocityY = Mathf.Lerp(clampedVelocity, 0f, deltaTime * Mathf.Max(0.01f, inertiaDamping));
     }
 
+    private void AdvanceHorizontalInertia(float deltaSeconds)
+    {
+        ClampCameraX();
+        if (GetHorizontalHalfRange() <= 0.001f) { inertialVelocityX = 0f; return; }
+        if (Mathf.Abs(inertialVelocityX) <= 0.001f) { inertialVelocityX = 0f; return; }
+        float velocity = Mathf.Clamp(inertialVelocityX, -maxInertiaSpeed, maxInertiaSpeed);
+        float applied = MoveCameraXBy(velocity * Mathf.Max(0f, deltaSeconds));
+        if (Mathf.Abs(applied) <= 0.0001f) { inertialVelocityX = 0f; return; }
+        inertialVelocityX = Mathf.Lerp(velocity, 0f, Mathf.Max(0f, deltaSeconds) * Mathf.Max(0.01f, inertiaDamping));
+    }
+
     private void MoveToNormalized(float normalizedFromTop)
     {
         if (worldCamera == null)
@@ -367,6 +426,7 @@ public class VillageCameraScroller : MonoBehaviour
         targetCameraY = Mathf.Clamp(targetCameraY, GetCameraMinY(), GetCameraMaxY());
         moveToTargetActive = true;
         inertialVelocityY = 0f;
+        inertialVelocityX = 0f;
     }
 
     private float MoveCameraBy(float deltaY)
@@ -384,12 +444,45 @@ public class VillageCameraScroller : MonoBehaviour
         worldCamera.transform.position = position;
     }
 
+    private float GetHorizontalHalfRange()
+    {
+        if (worldCamera == null || !worldCamera.orthographic) return 0f;
+        if (cameraZoom == null) cameraZoom = worldCamera.GetComponent<VillageCameraZoom>();
+        if (cameraZoom == null) return 0f;
+        // Reveal the parts of the Min-zoom view cropped by the current zoom.
+        return Mathf.Max(0f, (cameraZoom.MinimumZoomCameraSize - worldCamera.orthographicSize) * worldCamera.aspect);
+    }
+
+    private float MoveCameraXBy(float deltaX)
+    {
+        float before = worldCamera.transform.position.x;
+        float range = GetHorizontalHalfRange();
+        SetCameraX(Mathf.Clamp(before + deltaX, initialCameraX - range, initialCameraX + range));
+        return worldCamera.transform.position.x - before;
+    }
+
+    private void SetCameraX(float x)
+    {
+        Vector3 position = worldCamera.transform.position;
+        position.x = x;
+        worldCamera.transform.position = position;
+    }
+
+    private void ClampCameraX()
+    {
+        float before = worldCamera.transform.position.x;
+        float range = GetHorizontalHalfRange();
+        SetCameraX(Mathf.Clamp(before, initialCameraX - range, initialCameraX + range));
+        if (range <= 0.001f || !Mathf.Approximately(before, worldCamera.transform.position.x)) inertialVelocityX = 0f;
+    }
+
     private void SnapCameraWithinBounds()
     {
         if (worldCamera == null)
             return;
 
         SetCameraY(Mathf.Clamp(worldCamera.transform.position.y, GetCameraMinY(), GetCameraMaxY()));
+        ClampCameraX();
         targetCameraY = worldCamera.transform.position.y;
     }
 
@@ -488,12 +581,18 @@ public class VillageCameraScroller : MonoBehaviour
             return deltaScreenY * 0.01f;
 
         if (worldCamera.orthographic)
-            return deltaScreenY * ((worldCamera.orthographicSize * 2f) / Mathf.Max(1f, Screen.height));
+            return deltaScreenY * ((worldCamera.orthographicSize * 2f) / Mathf.Max(1f, worldCamera.pixelHeight));
 
         float distance = Mathf.Abs(worldCamera.transform.position.z);
         Vector3 from = worldCamera.ScreenToWorldPoint(new Vector3(0f, 0f, distance));
         Vector3 to = worldCamera.ScreenToWorldPoint(new Vector3(0f, deltaScreenY, distance));
         return to.y - from.y;
+    }
+
+    private float GetWorldHorizontalDelta(float deltaScreenX)
+    {
+        return deltaScreenX * (worldCamera.orthographicSize * 2f * worldCamera.aspect)
+            / Mathf.Max(1f, worldCamera.pixelWidth);
     }
 
     private void BindButtons()

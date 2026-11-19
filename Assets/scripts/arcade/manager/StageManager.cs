@@ -138,6 +138,7 @@ public partial class StageManager : MonoBehaviour
     [Header("Boss Settings")]
     [FormerlySerializedAs("stage3BossPrefab")]
     [FormerlySerializedAs("bossA")]
+    [Tooltip("씬에 배치된 보스 또는 보스 프리팹을 등록합니다. 프리팹은 저장된 위치와 회전으로 생성합니다.")]
     public GameObject bossPrefab;
     public string bossPhaseTriggerTag = "Boss";
     public float bossResumeDelay = 3f;
@@ -207,6 +208,28 @@ public partial class StageManager : MonoBehaviour
 
         if (Instance == this)
             Instance = null;
+    }
+
+    internal void Retire()
+    {
+        StopAllCoroutines();
+        StopStageLoop();
+        ForceClearBossNow();
+        // Phase pools are scene roots, so destroying the manager alone leaves them behind.
+        foreach (GameObject phase in pooledInstanceToPrefab.Keys)
+        {
+            if (phase == null) continue;
+            phase.SetActive(false);
+            Destroy(phase);
+        }
+        foreach (var entry in backgroundInstances)
+            if (entry.Value != null) entry.Value.SetActive(false);
+        DeactivateIfSceneObject(backgroundPrefab);
+        if (backgroundPrefabs != null)
+            foreach (GameObject background in backgroundPrefabs) DeactivateIfSceneObject(background);
+        gameObject.SetActive(false);
+        if (Instance == this) Instance = null;
+        Destroy(gameObject);
     }
 
     void OnEnable()
@@ -901,17 +924,10 @@ public partial class StageManager : MonoBehaviour
             yield break;
         }
 
-        // StageManager는 좌표를 정하지 않는다.
-        // 씬에 배치된 보스 오브젝트를 그대로 활성화해서 사용한다.
+        // Scene bosses retain their placement; prefab bosses spawn at their authored pose.
         activeBossIsSceneObject = source.scene.IsValid();
-        if (!activeBossIsSceneObject)
-        {
-            yield return WaitForSecondsRespectingGameplayPause(bossResumeDelay);
-            ResumeAfterBoss();
-            yield break;
-        }
-
-        activeBoss = source;
+        activeBoss = activeBossIsSceneObject ? source
+            : Instantiate(source, source.transform.position, source.transform.rotation);
 
         if (activeBoss != null && !activeBoss.activeSelf)
             activeBoss.SetActive(true);

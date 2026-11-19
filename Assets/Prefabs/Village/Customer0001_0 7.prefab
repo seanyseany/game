@@ -82,12 +82,12 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 100
-  m_Sprite: {fileID: -6387553986712076861, guid: 438cdf1e84061459194fcbfa59bd5376, type: 3}
+  m_Sprite: {fileID: -8122305104030628758, guid: 21197dcd72e9f45958a4c1277f43ff39, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 1.96, y: 1.98}
+  m_Size: {x: 1.96, y: 2.16}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
@@ -170,13 +170,22 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CustomerBlood
   moveSpeed: 0.6
+  canVisitSpecialBuilding: 1
   walkStretchFrequency: 6
   heldItemLocalPosition: {x: -0.512, y: 0.85}
   receiveItemLocalPosition: {x: -0.663, y: 1.3}
   roamPauseMin: 0
   roamPauseMax: 0
   spriteRenderer: {fileID: 0}
-  receiveItemSprite: {fileID: -7404954490692307319, guid: 438cdf1e84061459194fcbfa59bd5376, type: 3}
-  carryingWalkSprite: {fileID: -6387553986712076861, guid: 438cdf1e84061459194fcbfa59bd5376, type: 3}
-  walkingSprite: {fileID: 3138783153207805672, guid: 438cdf1e84061459194fcbfa59bd5376, type: 3}
-  receivingToCarryingDelay: 0.5
+  receiveItemSprite: {fileID: 1885985915630088144, guid: 21197dcd72e9f45958a4c1277f43ff39, type: 3}
+  carryingWalkSprite: {fileID: -279588208982227630, guid: 21197dcd72e9f45958a4c1277f43ff39, type: 3}
+  walkingSprite: {fileID: -8122305104030628758, guid: 21197dcd72e9f45958a4c1277f43ff39, type: 3}
+  receiveItemSpawnDelay: 0.2
+  receiveToCarryDelay: 0.3
+  purchasePassDistance: 0.35
+  sortingBaseOrder: 145
+  sortingOrderScale: 10
+  minimumBodySortingOrder: 100
+  maximumBodySortingOrder: 190
+  surpriseSprite: {fileID: 6120392436228431917, guid: 96dc12c3355cd4fa283b89badba90c88, type: 3}
+  clickEmojiPrefab: {fileID: 9146236059419807157, guid: c2ead8af288b847a494a69dc41d13a27, type: 3}

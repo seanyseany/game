@@ -38,6 +38,8 @@ public class Lift : MonoBehaviour, IColliderPointerTarget
     [SerializeField] private int price = 10;
     [SerializeField] private float platformMoveSpeed = 2f;
     [SerializeField] private float customerRideChance = 0.7f;
+    [SerializeField, Min(0), Tooltip("손님이 도르래 이용을 완료할 때 지급하는 마을 점수입니다.")]
+    private int villageScorePerRide = 1;
 
     [Header("Interaction")]
     [SerializeField] private bool allowPointerRelocation = false;
@@ -216,6 +218,8 @@ public class Lift : MonoBehaviour, IColliderPointerTarget
         platform.reserved = false;
         platform.lastBecameIdleAt = Time.time;
 
+        VillageManagement.EnsureInstance().AddVillageScore(Mathf.Max(0, villageScorePerRide));
+        if (VillageTownHall.Instance != null) VillageTownHall.Instance.ShowCustomerSatisfaction(customer);
         onCompleted?.Invoke(true, destinationSide);
         TryCompletePendingRelocation();
     }

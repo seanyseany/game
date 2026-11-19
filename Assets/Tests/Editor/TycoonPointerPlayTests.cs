@@ -149,7 +149,8 @@ public sealed class TycoonPointerPlayTests
         AssertReceiptSessionContents(store, 2, false);
         Assert.AreEqual(energy, VillageManagement.Instance.CurrentEnergy, "Restoring a receipt must not charge energy again");
         AssertSavedBoxOrder(inventory, "BreadResource", "CoffeeResource");
-        BeginFirstSavedDelivery(inventory);
+        Building interruptedTarget = BeginFirstSavedDelivery(inventory);
+        interruptedTarget.GetComponentInChildren<DeliveryArrival>().enabled = false;
         Assert.AreEqual(1, inventory.Count);
         Assert.AreEqual(2, ReadSavedBoxCount(), "Keep the backup until the building has actually received its stock");
         SceneManager.SetActiveScene(original);
@@ -168,8 +169,8 @@ public sealed class TycoonPointerPlayTests
         AssertSavedBoxOrder(inventory, "BreadResource", "CoffeeResource");
         AssertReceiptSessionContents(store, 0, false);
         Building target = BeginFirstSavedDelivery(inventory);
-        Call(target.GetComponentInChildren<DeliveryArrival>(), "Advance", 4.3f);
-        Assert.That(target.CurrentSalary, Is.EqualTo(100f).Within(0.0001f));
+        Call(target.GetComponentInChildren<DeliveryArrival>(), "Advance", 0.25f);
+        Assert.That(target.CurrentSalary, Is.EqualTo(50f).Within(0.0001f), "A level-one delivery fills one sixth of the 300-stock gauge.");
         Assert.AreEqual(1, ReadSavedBoxCount(), "A completed delivery must also be removed from the save file");
         Set(VillageManagement.Instance, "loaded", false);
         VillageManagement.Instance.Load();
@@ -323,20 +324,19 @@ public sealed class TycoonPointerPlayTests
         check(2);
     }
 
-    [UnityTest] public IEnumerator DeliveryShrinksThenHoldsRegisteredPrefabForThreeSecondsAndFadesBeforeRefill()
+    [UnityTest] public IEnumerator DeliveryCreditsOnPlacementThenHoldsAndFadesTheDecorativeBox()
     {
         yield return new EnterPlayMode();
         var check = PrepareArrivalTimeline();
-        yield return new WaitForSecondsRealtime(0.1f);
-        check(0);
-        yield return new WaitForSecondsRealtime(0.25f);
-        check(1);
-        yield return new WaitForSecondsRealtime(2.5f);
-        check(2);
-        yield return new WaitForSecondsRealtime(0.65f);
-        check(3);
-        yield return new WaitForSecondsRealtime(0.95f);
-        check(4);
+        DeliveryArrival arrival = Object.FindFirstObjectByType<DeliveryArrival>();
+        arrival.enabled = false;
+        float[] steps = { 0.1f, 0.25f, 2.5f, 0.65f, 0.95f };
+        for (int phase = 0; phase < steps.Length; phase++)
+        {
+            Call(arrival, "Advance", steps[phase]);
+            yield return null;
+            check(phase);
+        }
     }
 
     private static System.Action<int> PrepareArrivalTimeline()
@@ -384,11 +384,12 @@ public sealed class TycoonPointerPlayTests
                 else { Assert.Greater(alpha, 0f); Assert.Less(alpha, 0.8f); }
                 if (phase == 1) target.transform.position += new Vector3(0.2f, 0.1f, 0f);
             }
-            if (phase < 4) { Assert.AreEqual(0f, target.CurrentSalary); Assert.AreEqual(0, deliveries); }
+            if (phase == 0) { Assert.AreEqual(0f, target.CurrentSalary); Assert.AreEqual(0, deliveries); }
             else
             {
-                Assert.IsTrue(arrival == null); Assert.AreEqual(1, deliveries);
-                Assert.That(target.CurrentSalary, Is.EqualTo(100f).Within(0.0001f));
+                Assert.AreEqual(1, deliveries, "Placement completes delivery; later visual frames must not credit it again.");
+                Assert.That(target.CurrentSalary, Is.EqualTo(50f).Within(0.0001f), "A level-one delivery fills one sixth of the 300-stock gauge.");
+                if (phase == 4) Assert.IsTrue(arrival == null);
             }
             Assert.IsFalse(inventory.gameObject.activeSelf, "Arrival continues after BoxIn closes");
         };

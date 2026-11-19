@@ -95,6 +95,7 @@ public class SpecialBuilding : MonoBehaviour
 
     private void UpdatePointerHold(Vector3 worldPoint, bool pressed)
     {
+        if (Input.touchCount >= 2 && !isDragging) { ReleasePointerHold(); return; }
         if (pointerHeld && !isDragging &&
             !VillagePointerCapture.ContainsPoint(transform, worldPoint + holdShake.WorldOffset))
         {
@@ -172,6 +173,7 @@ public class SpecialBuilding : MonoBehaviour
 
     private bool CanStartPointerInteraction()
     {
+        if (Input.touchCount >= 2) return false;
         if (Tycoon.DeliveryRuntime.BlocksWorldInput)
             return false;
 

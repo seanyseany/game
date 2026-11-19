@@ -8,6 +8,7 @@ namespace Tycoon
     [AddComponentMenu("")]
     public sealed class DeliveryRuntime : MonoBehaviour
     {
+        private const float MissingPointerGraceSeconds = 0.15f;
         private static DeliveryRuntime instance;
         private bool captured;
         private int fingerId = -1;
@@ -16,6 +17,7 @@ namespace Tycoon
         private Action<Vector2, bool> finish;
         private UnityEngine.Object dragOwner;
         private int releasedFrame = -1;
+        private float missingPointerSince = -1f;
         public static DeliveryRuntime Current => instance;
 
         private void Awake()
@@ -57,6 +59,7 @@ namespace Tycoon
             captured = true;
             fingerId = finger;
             lastPosition = screen;
+            missingPointerSince = -1f;
             move = onMove;
             finish = onFinish;
             VillagePointerCapture.Acquire(this);
@@ -89,30 +92,47 @@ namespace Tycoon
                 if (!captured) return;
             }
 
-            bool held = false;
-            bool cancelled = !Application.isFocused;
             if (fingerId >= 0)
             {
-                bool found = false;
                 for (int i = 0; i < Input.touchCount; i++)
                 {
                     Touch touch = Input.GetTouch(i);
                     if (touch.fingerId != fingerId) continue;
-                    found = true;
-                    lastPosition = touch.position;
-                    held = touch.phase != TouchPhase.Ended && touch.phase != TouchPhase.Canceled;
-                    cancelled |= touch.phase == TouchPhase.Canceled;
-                    break;
+                    ProcessPointerSample(touch.position, true, touch.phase == TouchPhase.Ended,
+                        touch.phase == TouchPhase.Canceled, Time.unscaledTime);
+                    return;
                 }
-                cancelled |= !found;
+                ProcessPointerSample(lastPosition, false, false, false, Time.unscaledTime);
             }
             else
             {
-                lastPosition = Input.mousePosition;
-                held = Input.GetMouseButton(0);
+                bool released = Input.GetMouseButtonUp(0);
+                ProcessPointerSample(Input.mousePosition, Input.GetMouseButton(0) || released,
+                    released, false, Time.unscaledTime);
             }
-            if (cancelled || !held || (finish != null && dragOwner == null)) End(cancelled || dragOwner == null);
-            else move?.Invoke(lastPosition);
+        }
+
+        private void ProcessPointerSample(Vector2 position, bool present, bool released, bool cancelled, float now)
+        {
+            if (!captured) return;
+            if (finish != null && dragOwner == null) { End(true); return; }
+            if (cancelled || released)
+            {
+                lastPosition = position;
+                End(cancelled);
+                return;
+            }
+            if (!present)
+            {
+                // Keep the original pointer and preview through a brief input gap.
+                // Do not treat another finger or a synthetic mouse event as its release.
+                if (missingPointerSince < 0f) missingPointerSince = now;
+                if (now - missingPointerSince >= MissingPointerGraceSeconds) End(true);
+                return;
+            }
+            missingPointerSince = -1f;
+            lastPosition = position;
+            move?.Invoke(lastPosition);
         }
 
         private void Press(Vector2 position, int finger)
@@ -126,6 +146,7 @@ namespace Tycoon
                 captured = true;
                 fingerId = finger;
                 lastPosition = position;
+                missingPointerSince = -1f;
                 VillagePointerCapture.Acquire(this);
             }
             DeliveryWindows.NotifyUiPressed(ui != null ? ui : target != null ? target.gameObject : null);
@@ -140,12 +161,17 @@ namespace Tycoon
             move = null;
             dragOwner = null;
             captured = false;
+            fingerId = -1;
+            missingPointerSince = -1f;
             releasedFrame = Time.frameCount;
             VillagePointerCapture.Release(this);
             callback?.Invoke(lastPosition, cancelled);
         }
 
-        private void OnApplicationFocus(bool focused) { if (!focused && captured) End(true); }
+        // Touch focus can change without ending the gesture (for example when a
+        // mobile keyboard opens). Backgrounding and real touch cancellation still end it.
+        private void OnApplicationFocus(bool focused) { if (!focused && captured && fingerId < 0) End(true); }
+        private void OnApplicationPause(bool paused) { if (paused && captured) End(true); }
         private void OnDisable() { if (captured) End(true); }
         private void OnDestroy()
         {

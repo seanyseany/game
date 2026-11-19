@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine.SceneManagement;
 
 public class GameData : MonoBehaviour
@@ -14,6 +15,19 @@ public class GameData : MonoBehaviour
 
     [Header("References")]
     public Player playerRef;
+
+    [System.Serializable]
+    public sealed class StageManagerEntry
+    {
+        public StageManager prefab;
+        public bool use;
+    }
+
+    [Header("Stage Managers")]
+    [Tooltip("사용할 StageManager 프리팹을 하나 체크하세요. 아케이드 시작 또는 재시작 시 적용됩니다. 목록이 비어 있으면 기존 씬 매니저를 사용하고, 등록된 목록에서 모두 해제하면 스테이지를 시작하지 않습니다.")]
+    public List<StageManagerEntry> stageManagers = new List<StageManagerEntry>();
+    private StageManager configuredStageManager;
+    private StageManager configuredStageManagerPrefab;
 
     [Header("Player (compat)")]
     [Range(1, 5)] public int selectedPlayerType = 1;
@@ -577,13 +591,59 @@ public class GameData : MonoBehaviour
         // Scene-loaded callbacks precede Start. Let scene components finish binding first.
         yield return null;
 
-        var stageManager = StageManager.Instance;
+        var stageManager = ResolveConfiguredStageManager();
         if (stageManager != null)
             stageManager.StartStageLoop();
         ResetGameState();
         ClearMiniBossEntities();
         IsResetting = false;
         restartRoutine = null;
+    }
+
+    private StageManager ResolveConfiguredStageManager()
+    {
+        if (stageManagers == null || stageManagers.Count == 0)
+            return StageManager.Instance;
+
+        StageManager prefab = null;
+        foreach (StageManagerEntry entry in stageManagers)
+        {
+            if (entry == null || !entry.use) continue;
+            prefab = entry.prefab;
+            break;
+        }
+
+        StageManager current = StageManager.Instance;
+        if (current != null && current == configuredStageManager && prefab == configuredStageManagerPrefab)
+            return current;
+
+        // Release the previous singleton before the selected prefab's Awake runs.
+        if (current != null) current.Retire();
+        configuredStageManager = null;
+        configuredStageManagerPrefab = prefab;
+        if (prefab == null) return null;
+
+        configuredStageManager = Instantiate(prefab);
+        configuredStageManager.name = prefab.name;
+        // Keep the runtime manager in the arcade scene, outside persistent GameData.
+        Scene scene = SceneManager.GetActiveScene();
+        if (configuredStageManager.gameObject.scene != scene)
+            SceneManager.MoveGameObjectToScene(configuredStageManager.gameObject, scene);
+        configuredStageManager.enabled = true;
+        configuredStageManager.gameObject.SetActive(true);
+        return configuredStageManager;
+    }
+
+    private void OnValidate()
+    {
+        if (stageManagers == null) return;
+        bool selected = false;
+        foreach (StageManagerEntry entry in stageManagers)
+        {
+            if (entry == null || !entry.use) continue;
+            if (selected) entry.use = false;
+            else selected = true;
+        }
     }
 
     private void ResetGameState()

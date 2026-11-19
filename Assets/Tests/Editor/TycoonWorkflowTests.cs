@@ -505,8 +505,7 @@ public sealed class TycoonWorkflowTests
         Assert.AreEqual(100f, building.CurrentSalary);
         Assert.AreEqual(5, building.VillageScorePerTrade);
         var serialized = new UnityEditor.SerializedObject(building);
-        var icon = serialized.FindProperty("exclamationPrefab").objectReferenceValue;
-        Assert.AreEqual("Assets/Prefabs/Village/OxygenTradeIcon.prefab", UnityEditor.AssetDatabase.GetAssetPath(icon));
+        Assert.IsNull(serialized.FindProperty("exclamationPrefab"));
     }
 
     [Test]
@@ -685,7 +684,7 @@ public sealed class TycoonWorkflowTests
 
     [TestCase(1, 100, 6)]
     [TestCase(2, 300, 3)]
-    public void SuccessfulDeliveryShrinksThenShowsDeliveredPrefabAndRefillsOnlyAfterFade(int level, int capacity, int divisor)
+    public void SuccessfulDeliveryCreditsOnPlacementAndKeepsVisualUntilFadeCompletes(int level, int capacity, int divisor)
     {
         Set(breadBuilding, "level", level);
         ((Building.LevelDefinition)Call(breadBuilding, "GetDefinitionForLevel", level)).boxStockCapacity = capacity;
@@ -732,19 +731,83 @@ public sealed class TycoonWorkflowTests
         Assert.AreEqual(Vector3.zero, delivered.transform.localPosition);
         SpriteRenderer renderer = delivered.GetComponent<SpriteRenderer>();
         Assert.AreEqual(0.7f, renderer.color.a, 0.00001f);
+        Assert.AreEqual(1, deliveries, "Placing the box must complete the delivery immediately.");
+        Assert.That(breadBuilding.CurrentSalary, Is.EqualTo(breadBuilding.MaxSalary / (float)divisor).Within(0.0001f));
+        Assert.IsFalse(inventory.IsFull);
         Call(arrival, "Advance", 3f);
         Assert.AreEqual(0.7f, renderer.color.a, 0.00001f);
-        Assert.AreEqual(0f, breadBuilding.CurrentSalary);
+        Assert.That(breadBuilding.CurrentSalary, Is.EqualTo(breadBuilding.MaxSalary / (float)divisor).Within(0.0001f));
         Call(arrival, "Advance", 0.5f);
         Assert.AreEqual(0.35f, renderer.color.a, 0.00001f);
-        Assert.AreEqual(0f, breadBuilding.CurrentSalary);
-        Assert.AreEqual(0, deliveries);
+        Assert.That(breadBuilding.CurrentSalary, Is.EqualTo(breadBuilding.MaxSalary / (float)divisor).Within(0.0001f));
+        Assert.AreEqual(1, deliveries, "Holding and fading must not credit a second delivery.");
         Call(arrival, "Advance", 0.5f);
         Assert.IsTrue(delivered == null);
         Assert.IsTrue(arrival == null);
         Assert.AreEqual(1, deliveries);
         Assert.That(breadBuilding.CurrentSalary, Is.EqualTo(breadBuilding.MaxSalary / (float)divisor).Within(0.0001f));
         Assert.That(gauge.value, Is.EqualTo(1f / divisor).Within(0.00001f));
+    }
+
+    [TestCase(-1)]
+    [TestCase(7)]
+    public void FullSevenSlotInventoryAllowsPackingAsSoonAsBoxIsPlacedWhileVisualRemains(int finger)
+    {
+        Camera camera = Root("DeliveryCamera").AddComponent<Camera>();
+        camera.tag = "MainCamera";
+        camera.orthographic = true;
+        camera.pixelRect = new Rect(0f, 0f, 640f, 480f);
+        camera.transform.position = Vector3.back * 10f;
+        breadBuilding.gameObject.AddComponent<SpriteRenderer>().sprite = DigitSprite("DeliveryTarget");
+        BoxIn inventory = Inventory(7);
+        for (int i = 0; i < 7; i++)
+        {
+            Assert.IsTrue(inventory.TryReserve(out object token));
+            Assert.IsTrue(inventory.CommitReservation(token, Order()));
+        }
+        FillReceipt();
+        int energy = village.CurrentEnergy;
+        StoreIn store = Root("FullStore").AddComponent<StoreIn>();
+        Set(store, "receiptPrefab", receipt.gameObject);
+        Set(store, "boxPrefab", MotionSprite());
+        Set(store, "boxIn", inventory);
+        store.Initialize();
+        Assert.IsTrue(inventory.IsFull);
+        Assert.IsFalse(store.TryPack());
+        int completions = 0;
+        inventory.Delivered += (_, target) => completions++;
+        boxComplete source = inventory.GetComponentInChildren<boxComplete>();
+        Vector2 screen = camera.WorldToScreenPoint(breadBuilding.transform.position);
+        Assert.IsTrue(inventory.BeginDelivery(source, screen, finger));
+        Call(DeliveryRuntime.Ensure(), "End", false);
+        store.Show();
+        DeliveryArrival arrival = breadBuilding.GetComponentInChildren<DeliveryArrival>();
+        Assert.IsNotNull(arrival);
+        Assert.AreEqual(6, inventory.Count);
+        Assert.IsTrue(inventory.IsFull, "The slot remains occupied during the initial shrink.");
+        Assert.IsFalse(store.TryPack());
+        Call(arrival, "Advance", 0.125f);
+        Assert.AreEqual(0, completions);
+        Assert.IsTrue(inventory.IsFull);
+        Call(arrival, "Advance", 0.125f);
+        GameObject placed = (GameObject)typeof(DeliveryArrival).GetField("delivered", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(arrival);
+        Assert.IsNotNull(placed);
+        Assert.IsTrue(placed.activeInHierarchy);
+        Assert.AreEqual(1, completions);
+        Assert.IsFalse(inventory.IsFull, "Placing the box must immediately release its inventory slot.");
+        float creditedStock = breadBuilding.CurrentSalary;
+        Assert.Greater(creditedStock, 0f);
+        Assert.IsTrue(store.TryPack(), "The first packing request must succeed while the delivered box is still visible.");
+        Assert.IsTrue(store.IsPacking);
+        Assert.IsTrue(inventory.IsFull, "The new pack must reserve the released slot.");
+        Assert.AreEqual(energy, village.CurrentEnergy);
+        Call(arrival, "Advance", 3f);
+        Assert.IsTrue(placed != null);
+        Call(arrival, "Advance", 1f);
+        Assert.IsTrue(placed == null);
+        Assert.IsTrue(arrival == null);
+        Assert.AreEqual(1, completions);
+        Assert.AreEqual(creditedStock, breadBuilding.CurrentSalary, "Finishing the visual must not deliver or refill twice.");
     }
 
     [Test]
@@ -912,7 +975,7 @@ public sealed class TycoonWorkflowTests
     [TestCase(false, 7)]
     [TestCase(true, -1)]
     [TestCase(true, 7)]
-    public void ResourceDragPreservesGrabPointFollowsPointerWithoutLagAndReusesPreview(bool overlay, int finger)
+    public void ResourceDragPreservesGrabPointSmoothsBetweenSamplesAndReusesPreview(bool overlay, int finger)
     {
         StoreIn store = StorePanel();
         Camera camera = Root("DragCamera").AddComponent<Camera>();
@@ -943,15 +1006,25 @@ public sealed class TycoonWorkflowTests
             Call(bread, "BeginDrag", press, finger);
             Assert.AreEqual(original, prepared.position, "Pressing off-center must not snap the pivot to the pointer");
             Call(bread, "MoveDragPreview", press + new Vector2(120f, 60f));
-            Call(bread, "LateUpdate");
+            Call(bread, "AdvanceDrag", 1f / 60f);
             Vector2 first = overlay ? (Vector2)prepared.position : (Vector2)camera.WorldToScreenPoint(prepared.position);
-            Assert.Less(Vector2.Distance(start + new Vector2(120f, 60f), first), 0.01f,
-                "The grabbed point must reach the pointer in the same frame");
+            Vector2 destination = start + new Vector2(120f, 60f);
+            Assert.Greater(Vector2.Distance(first, destination), 1f, "A new sample must not teleport the preview.");
+            Assert.Less(Vector2.Distance(first, destination), Vector2.Distance(start, destination) * 0.5f,
+                "The preview must cover most of the distance on the first frame.");
+            Call(bread, "AdvanceDrag", 1f / 60f);
+            Vector2 betweenSamples = overlay ? (Vector2)prepared.position : (Vector2)camera.WorldToScreenPoint(prepared.position);
+            Assert.Less(Vector2.Distance(betweenSamples, destination), Vector2.Distance(first, destination),
+                "Movement must continue smoothly even before another pointer sample arrives.");
             Call(bread, "MoveDragPreview", press + new Vector2(-90f, -40f));
-            Call(bread, "LateUpdate");
+            Call(bread, "AdvanceDrag", 1f / 60f);
             Vector2 reversed = overlay ? (Vector2)prepared.position : (Vector2)camera.WorldToScreenPoint(prepared.position);
-            Assert.Less(Vector2.Distance(start + new Vector2(-90f, -40f), reversed), 0.01f,
-                "Changing direction must not leave the preview trailing behind");
+            Vector2 reversedDestination = start + new Vector2(-90f, -40f);
+            Assert.Less(Vector2.Distance(reversed, reversedDestination), Vector2.Distance(betweenSamples, reversedDestination),
+                "Changing direction must immediately move toward the new sample.");
+            for (int frame = 0; frame < 9; frame++) Call(bread, "AdvanceDrag", 1f / 60f);
+            Vector2 settled = overlay ? (Vector2)prepared.position : (Vector2)camera.WorldToScreenPoint(prepared.position);
+            Assert.Less(Vector2.Distance(settled, reversedDestination), 0.1f, "The preview must settle at the grabbed point.");
             Assert.AreEqual(30, village.CurrentEnergy);
             Assert.AreEqual(0, receipt.Quantity);
             Call(DeliveryRuntime.Ensure(), "End", true);
@@ -962,9 +1035,9 @@ public sealed class TycoonWorkflowTests
             Assert.AreSame(prepared.gameObject, typeof(ResourceItem).GetField("dragVisual", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(bread));
             Assert.AreEqual(original, prepared.position);
             Call(bread, "MoveDragPreview", press + new Vector2(120f, 60f));
-            Call(bread, "LateUpdate");
+            Call(bread, "AdvanceDrag", 1f / 60f);
             Vector2 reused = overlay ? (Vector2)prepared.position : (Vector2)camera.WorldToScreenPoint(prepared.position);
-            Assert.Less(Vector2.Distance(first, reused), 0.01f, "Reusing the preview must follow immediately");
+            Assert.Less(Vector2.Distance(first, reused), 0.01f, "Reusing the preview must reset its smoothing position.");
             store.Close();
             // Edit-mode objects do not receive play-mode lifecycle callbacks.
             bread.gameObject.SetActive(false);
@@ -972,6 +1045,41 @@ public sealed class TycoonWorkflowTests
             Assert.IsFalse(prepared.gameObject.activeSelf);
             Assert.AreSame(bread.transform.parent, prepared.parent);
             Assert.AreEqual(30, village.CurrentEnergy);
+        }
+        finally { instance.SetValue(null, previous); }
+    }
+
+    [TestCase(-1)]
+    [TestCase(7)]
+    public void ResourceDragSmoothingHasTheSameResponseAtThirtySixtyAndOneTwentyFps(int finger)
+    {
+        StoreIn store = StorePanel();
+        Camera camera = Root("DragCamera").AddComponent<Camera>();
+        camera.tag = "MainCamera";
+        camera.orthographic = true;
+        camera.pixelRect = new Rect(0f, 0f, 640f, 480f);
+        camera.transform.position = Vector3.back * 10f;
+        var instance = typeof(VillageManagement).GetProperty("Instance");
+        VillageManagement previous = VillageManagement.Instance;
+        instance.SetValue(null, village);
+        try
+        {
+            bread.Bind(store, bread);
+            Vector2 start = camera.WorldToScreenPoint(bread.transform.position);
+            Vector2 destination = start + new Vector2(120f, 60f);
+            Vector2? reference = null;
+            foreach (int fps in new[] { 30, 60, 120 })
+            {
+                Call(bread, "BeginDrag", start, finger);
+                Call(bread, "MoveDragPreview", destination);
+                for (int frame = 0; frame < fps / 10; frame++) Call(bread, "AdvanceDrag", 1f / fps);
+                var preview = (GameObject)typeof(ResourceItem).GetField("dragVisual", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(bread);
+                Vector2 position = camera.WorldToScreenPoint(preview.transform.position);
+                Assert.Less(Vector2.Distance(position, destination), 1f, "Following must settle quickly at every frame rate.");
+                if (reference.HasValue) Assert.Less(Vector2.Distance(reference.Value, position), 0.01f);
+                else reference = position;
+                Call(DeliveryRuntime.Ensure(), "End", true);
+            }
         }
         finally { instance.SetValue(null, previous); }
     }
@@ -1356,6 +1464,127 @@ public sealed class TycoonWorkflowTests
             Assert.AreSame(firstScene, scenes[0]);
         }
         finally { property.SetValue(null, previous); }
+    }
+
+    [TestCase(-1)]
+    [TestCase(7)]
+    public void ResourceDragKeepsCaptureAcrossBriefInputGapsAndDropsAtReceipt(int finger)
+    {
+        StoreIn store = StorePanel();
+        Camera camera = Root("DragCamera").AddComponent<Camera>();
+        camera.tag = "MainCamera";
+        camera.orthographic = true;
+        camera.pixelRect = new Rect(0f, 0f, 640f, 480f);
+        camera.transform.position = Vector3.back * 10f;
+        receipt.transform.position = new Vector3(3f, 1f, 0f);
+        receipt.gameObject.AddComponent<SpriteRenderer>().sprite = DigitSprite("ReceiptDropArea");
+        var instance = typeof(VillageManagement).GetProperty("Instance");
+        VillageManagement previous = VillageManagement.Instance;
+        instance.SetValue(null, village);
+        try
+        {
+            bread.Bind(store, bread);
+            Vector2 start = camera.WorldToScreenPoint(bread.transform.position);
+            Vector2 destination = camera.WorldToScreenPoint(receipt.transform.position);
+            Call(bread, "BeginDrag", start, finger);
+            DeliveryRuntime runtime = DeliveryRuntime.Ensure();
+            GameObject preview = (GameObject)typeof(ResourceItem).GetField("dragVisual", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(bread);
+            Assert.IsNotNull(preview);
+            Call(runtime, "ProcessPointerSample", start + Vector2.right * 20f, true, false, false, 10f);
+            Call(runtime, "ProcessPointerSample", Vector2.zero, false, false, false, 10.01f);
+            Call(runtime, "ProcessPointerSample", Vector2.zero, false, false, false, 10.09f);
+            Assert.IsTrue(preview.activeSelf, "A brief missing sample must not cancel the resource preview.");
+            Assert.IsTrue(VillagePointerCapture.HasActiveCapture);
+            Assert.AreEqual(30, village.CurrentEnergy);
+            Call(runtime, "ProcessPointerSample", destination, true, false, false, 10.1f);
+            Vector2 before = camera.WorldToScreenPoint(preview.transform.position);
+            Call(bread, "AdvanceDrag", 1f / 60f);
+            Vector2 following = camera.WorldToScreenPoint(preview.transform.position);
+            Assert.Less(Vector2.Distance(destination, following), Vector2.Distance(destination, before));
+            Assert.Greater(Vector2.Distance(destination, following), 1f, "The visual may still be smoothing when the pointer is released.");
+            Call(runtime, "ProcessPointerSample", destination, true, true, false, 10.11f);
+            Assert.AreEqual(1, receipt.Quantity);
+            Assert.AreEqual(27, village.CurrentEnergy);
+            Assert.IsFalse(preview.activeSelf);
+            Assert.IsFalse(VillagePointerCapture.HasActiveCapture);
+        }
+        finally { instance.SetValue(null, previous); }
+    }
+
+    [TestCase(-1, false)]
+    [TestCase(7, false)]
+    [TestCase(-1, true)]
+    [TestCase(7, true)]
+    public void CapturedPointerRecoversFromMissingSamplesButCancelsOnTimeoutOrExplicitCancel(int finger, bool explicitCancel)
+    {
+        DeliveryRuntime runtime = DeliveryRuntime.Ensure();
+        GameObject owner = Root("DragOwner");
+        int completions = 0;
+        bool cancelled = false;
+        Vector2 moved = Vector2.zero;
+        Vector2 finished = Vector2.zero;
+        Assert.IsTrue(runtime.BeginDrag(owner, Vector2.zero, finger, point => moved = point,
+            (point, aborted) => { completions++; cancelled = aborted; finished = point; }));
+        Call(runtime, "ProcessPointerSample", new Vector2(20f, 30f), true, false, false, 1f);
+        Call(runtime, "ProcessPointerSample", Vector2.zero, false, false, false, 1.01f);
+        Call(runtime, "ProcessPointerSample", Vector2.zero, false, false, false, 1.1f);
+        Assert.AreEqual(0, completions);
+        Assert.AreEqual(new Vector2(20f, 30f), moved);
+        Call(runtime, "ProcessPointerSample", new Vector2(80f, 90f), true, false, false, 1.11f);
+        Assert.AreEqual(new Vector2(80f, 90f), moved);
+        Call(runtime, "ProcessPointerSample", Vector2.zero, false, false, false, 2f);
+        if (explicitCancel)
+            Call(runtime, "ProcessPointerSample", new Vector2(100f, 110f), true, false, true, 2.01f);
+        else
+            Call(runtime, "ProcessPointerSample", Vector2.zero, false, false, false, 2.16f);
+        Assert.AreEqual(1, completions);
+        Assert.IsTrue(cancelled);
+        Assert.AreEqual(explicitCancel ? new Vector2(100f, 110f) : moved, finished);
+        Assert.IsFalse(VillagePointerCapture.HasActiveCapture);
+        Call(runtime, "ProcessPointerSample", Vector2.one, true, true, false, 3f);
+        Assert.AreEqual(1, completions, "The completion callback must run once per capture.");
+        Assert.IsTrue(runtime.BeginDrag(owner, Vector2.zero, finger, point => moved = point,
+            (point, aborted) => completions++));
+        Call(runtime, "ProcessPointerSample", Vector2.zero, false, false, false, 4f);
+        Assert.AreEqual(1, completions, "A new drag must not inherit the preceding missing-input timer.");
+        Call(runtime, "ProcessPointerSample", Vector2.one, true, true, false, 4.01f);
+        Assert.AreEqual(2, completions);
+    }
+
+    [TestCase(-1)]
+    [TestCase(7)]
+    public void CapturedPointerHandlesFocusChangesAndCancelsWhenApplicationPauses(int finger)
+    {
+        DeliveryRuntime runtime = DeliveryRuntime.Ensure();
+        int completions = 0;
+        bool cancelled = false;
+        Assert.IsTrue(runtime.BeginDrag(Root("DragOwner"), Vector2.zero, finger, point => { },
+            (point, aborted) => { completions++; cancelled = aborted; }));
+        Call(runtime, "OnApplicationFocus", false);
+        Assert.AreEqual(finger >= 0 ? 0 : 1, completions, "Touch capture must survive focus-only changes.");
+        if (finger >= 0)
+        {
+            Call(runtime, "ProcessPointerSample", Vector2.one, true, false, false, 1f);
+            Assert.IsTrue(VillagePointerCapture.HasActiveCapture);
+            Call(runtime, "OnApplicationPause", true);
+        }
+        Assert.AreEqual(1, completions);
+        Assert.IsTrue(cancelled);
+        Assert.IsFalse(VillagePointerCapture.HasActiveCapture);
+    }
+
+    [TestCase(-1)]
+    [TestCase(7)]
+    public void CapturedPointerCancelsImmediatelyWhenItsOwnerIsDestroyed(int finger)
+    {
+        DeliveryRuntime runtime = DeliveryRuntime.Ensure();
+        GameObject owner = Root("DragOwner");
+        bool cancelled = false;
+        Assert.IsTrue(runtime.BeginDrag(owner, Vector2.zero, finger, point => { }, (point, aborted) => cancelled = aborted));
+        Object.DestroyImmediate(owner);
+        Call(runtime, "ProcessPointerSample", Vector2.one, true, false, false, 1f);
+        Assert.IsTrue(cancelled);
+        Assert.IsFalse(VillagePointerCapture.HasActiveCapture);
     }
 
     private StoreIn StorePanel()

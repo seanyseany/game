@@ -9,6 +9,10 @@ public class CustomerBlood : MonoBehaviour
 {
     private const float LiftUseBlockAfterSpawnSeconds = 5f;
     private const int MaxLiftUsesPerTrip = 2;
+    private const float SatisfactionEmojiHoldDuration = 1f;
+    private const float SatisfactionEmojiFadeDuration = 0.5f;
+    private const float SurpriseDuration = 0.3f;
+    private const int MinimumEmojiSortingOrder = 400;
 
     private static readonly System.Collections.Generic.HashSet<CustomerBlood> ActiveCustomers =
         new System.Collections.Generic.HashSet<CustomerBlood>();
@@ -43,10 +47,23 @@ public class CustomerBlood : MonoBehaviour
     [SerializeField] private int minimumBodySortingOrder = 100;
     [SerializeField] private int maximumBodySortingOrder = 190;
 
+    [Header("Surprise Sprite")]
+    [SerializeField, Tooltip("거래 중이 아닌 손님을 클릭하거나 터치하면 0.3초간 멈추며 표시할 놀람 스프라이트입니다.")]
+    private Sprite surpriseSprite;
+    [Header("Click Emoji")]
+    [SerializeField, Tooltip("손님 클릭/터치 시 생성할 BloodCustomer 이모지입니다. 표시 시간은 프리팹의 Arcade Popup 설정을 따릅니다.")]
+    private GameObject clickEmojiPrefab;
+
     private Rigidbody2D body;
     private SortingGroup sortingGroup;
     private Coroutine lifeRoutine;
     private Coroutine moveRoutine;
+    private Coroutine satisfactionEmojiRoutine;
+    private GameObject satisfactionEmojiInstance;
+    private Coroutine clickEmojiRoutine;
+    private GameObject clickEmojiInstance;
+    private Coroutine surpriseRoutine;
+    private Sprite normalSprite;
     private EntranceManagement ownerEntranceManagement;
     private Entrance sourceEntrance;
     private Way currentWay;
@@ -88,6 +105,9 @@ public class CustomerBlood : MonoBehaviour
     public string SpawnEntryId => spawnEntryId;
     public CustomerBlood SourcePrefab => sourcePrefab;
     public float ReceiveItemSpawnDelay => receiveItemSpawnDelay;
+    private bool IsTrading => transitioningToCarry || (!purchaseFinished &&
+        (purchaseSequenceRunning || waitingAtCounter || currentQueueSlot != Building.QueueSlot.None));
+    private bool HasSurpriseFeedback => surpriseSprite != null || clickEmojiPrefab != null;
 
     private void Awake()
     {
@@ -119,6 +139,162 @@ public class CustomerBlood : MonoBehaviour
     private void OnDisable()
     {
         ActiveCustomers.Remove(this);
+        ClearSatisfactionEmoji();
+        ClearSurprise();
+    }
+
+    private void Update()
+    {
+        if (!HasSurpriseFeedback || IsTrading || Input.touchCount >= 2 || Tycoon.DeliveryRuntime.BlocksWorldInput) return;
+
+        int touchCount = Input.touchCount;
+        for (int i = 0; i < touchCount; i++)
+        {
+            Touch touch = Input.GetTouch(i);
+            if (touch.phase == TouchPhase.Began) TryShowSurpriseAtScreenPoint(touch.position);
+        }
+        if (touchCount == 0 && Input.GetMouseButtonDown(0))
+            TryShowSurpriseAtScreenPoint(Input.mousePosition);
+    }
+
+    private void TryShowSurpriseAtScreenPoint(Vector2 screenPoint)
+    {
+        if (!isActiveAndEnabled || IsTrading || bodyCollider == null || !bodyCollider.enabled ||
+            Tycoon.DeliveryRuntime.BlocksWorldInput || Tycoon.DeliveryPointer.FindUiTarget(screenPoint) != null)
+            return;
+
+        Camera cameraRef = Camera.main;
+        if (cameraRef == null) return;
+        Vector3 worldPoint = cameraRef.ScreenToWorldPoint(new Vector3(screenPoint.x, screenPoint.y,
+            Mathf.Abs(cameraRef.transform.position.z - transform.position.z)));
+        if (!bodyCollider.OverlapPoint(worldPoint) || !HasSurpriseFeedback) return;
+
+        if (surpriseRoutine == null && spriteRenderer != null) normalSprite = spriteRenderer.sprite;
+        if (surpriseRoutine != null) StopCoroutine(surpriseRoutine);
+        surpriseRoutine = StartCoroutine(SurpriseRoutine());
+        ShowClickEmoji();
+    }
+
+    private IEnumerator SurpriseRoutine()
+    {
+        if (spriteRenderer != null && surpriseSprite != null) spriteRenderer.sprite = surpriseSprite;
+        ResetWalkStretch();
+        if (body != null) body.linearVelocity = Vector2.zero;
+        yield return new WaitForSeconds(SurpriseDuration);
+        surpriseRoutine = null;
+        if (spriteRenderer != null) spriteRenderer.sprite = normalSprite;
+    }
+
+    private void ClearSurprise()
+    {
+        ClearClickEmoji();
+        if (surpriseRoutine == null) return;
+        StopCoroutine(surpriseRoutine);
+        surpriseRoutine = null;
+        if (spriteRenderer != null) spriteRenderer.sprite = normalSprite;
+    }
+
+    private void ShowClickEmoji()
+    {
+        if (clickEmojiPrefab == null) return;
+        ClearClickEmoji();
+        clickEmojiInstance = Instantiate(clickEmojiPrefab, transform.position, Quaternion.identity);
+        ArcadePopup popup = clickEmojiInstance.GetComponent<ArcadePopup>();
+        if (popup != null) popup.Play(transform.position, transform);
+        clickEmojiRoutine = StartCoroutine(ClickEmojiRoutine(popup != null));
+    }
+
+    private IEnumerator ClickEmojiRoutine(bool usesPopupLifetime)
+    {
+        SortingGroup emojiSorting = EnsureEmojiSorting(clickEmojiInstance);
+        float elapsed = 0f;
+        while (clickEmojiInstance != null && (usesPopupLifetime || elapsed < SurpriseDuration))
+        {
+            FollowEmoji(clickEmojiInstance, emojiSorting);
+            yield return null;
+            elapsed += Time.deltaTime;
+        }
+        clickEmojiRoutine = null;
+        ClearClickEmoji();
+    }
+
+    private void ClearClickEmoji()
+    {
+        if (clickEmojiRoutine != null) StopCoroutine(clickEmojiRoutine);
+        clickEmojiRoutine = null;
+        if (clickEmojiInstance != null)
+        {
+            clickEmojiInstance.SetActive(false);
+            Destroy(clickEmojiInstance);
+        }
+        clickEmojiInstance = null;
+    }
+
+    public void ShowSatisfactionEmoji(GameObject prefab)
+    {
+        if (!isActiveAndEnabled || prefab == null) return;
+        ClearSatisfactionEmoji();
+        satisfactionEmojiInstance = Instantiate(prefab, transform.position, Quaternion.identity);
+        // Transaction feedback has its own hold and fade, independent of the click popup animation.
+        foreach (ArcadePopup popup in satisfactionEmojiInstance.GetComponentsInChildren<ArcadePopup>(true))
+            popup.enabled = false;
+        satisfactionEmojiRoutine = StartCoroutine(SatisfactionEmojiRoutine());
+    }
+
+    private IEnumerator SatisfactionEmojiRoutine()
+    {
+        SortingGroup emojiSorting = EnsureEmojiSorting(satisfactionEmojiInstance);
+        SpriteRenderer[] sprites = satisfactionEmojiInstance.GetComponentsInChildren<SpriteRenderer>(true);
+        Color[] colors = new Color[sprites.Length];
+        for (int i = 0; i < sprites.Length; i++) colors[i] = sprites[i].color;
+        float elapsed = 0f;
+        while (satisfactionEmojiInstance != null && elapsed < SatisfactionEmojiHoldDuration + SatisfactionEmojiFadeDuration)
+        {
+            FollowEmoji(satisfactionEmojiInstance, emojiSorting);
+            float alpha = 1f - Mathf.Clamp01((elapsed - SatisfactionEmojiHoldDuration) / SatisfactionEmojiFadeDuration);
+            for (int i = 0; i < sprites.Length; i++)
+            {
+                if (sprites[i] == null) continue;
+                Color color = colors[i];
+                color.a *= alpha;
+                sprites[i].color = color;
+            }
+            yield return null;
+            elapsed += Time.deltaTime;
+        }
+        satisfactionEmojiRoutine = null;
+        ClearSatisfactionEmoji();
+    }
+
+    private SortingGroup EnsureEmojiSorting(GameObject emoji)
+    {
+        SortingGroup group = emoji.GetComponent<SortingGroup>();
+        if (group == null) group = emoji.AddComponent<SortingGroup>();
+        // The outer group controls world sorting; child sprite orders alone cannot raise it.
+        int order = Mathf.Max(MinimumEmojiSortingOrder, group.sortingOrder);
+        foreach (SpriteRenderer sprite in emoji.GetComponentsInChildren<SpriteRenderer>(true))
+            order = Mathf.Max(order, sprite.sortingOrder);
+        group.sortingOrder = order;
+        return group;
+    }
+
+    private void FollowEmoji(GameObject emoji, SortingGroup group)
+    {
+        emoji.transform.position = transform.position;
+        group.sortingLayerID = sortingGroup.sortingLayerID;
+        group.sortingOrder = Mathf.Max(group.sortingOrder, sortingGroup.sortingOrder + 1);
+    }
+
+    private void ClearSatisfactionEmoji()
+    {
+        if (satisfactionEmojiRoutine != null) StopCoroutine(satisfactionEmojiRoutine);
+        satisfactionEmojiRoutine = null;
+        if (satisfactionEmojiInstance != null)
+        {
+            satisfactionEmojiInstance.SetActive(false);
+            Destroy(satisfactionEmojiInstance);
+        }
+        satisfactionEmojiInstance = null;
     }
 
     public static void CancelBuildingInteractions(Building building)
@@ -231,6 +407,7 @@ public class CustomerBlood : MonoBehaviour
 
     public void MoveToQueueSlot(Building building, Building.QueueSlot slot, Vector3 worldTarget)
     {
+        ClearSurprise();
         if (moveRoutine != null)
             StopCoroutine(moveRoutine);
 
@@ -255,6 +432,7 @@ public class CustomerBlood : MonoBehaviour
 
     public IEnumerator ReceivePurchasedItemRoutine(GameObject itemPrefab, System.Action onItemSpawned = null)
     {
+        ClearSurprise();
         int routineVersion = ++purchaseReceiveRoutineVersion;
         waitingAtCounter = false;
         transitioningToCarry = true;
@@ -417,7 +595,7 @@ public class CustomerBlood : MonoBehaviour
         activeMoveTargetTransform = null;
         activeMoveTargetPosition = WithFixedZ(targetPosition);
 
-        while (Vector3.Distance(transform.position, activeMoveTargetPosition) > 0.03f)
+        while (surpriseRoutine != null || Vector3.Distance(transform.position, activeMoveTargetPosition) > 0.03f)
         {
             if (expectedBuilding != null &&
                 (targetBuilding != expectedBuilding || currentQueueSlot != expectedSlot))
@@ -426,6 +604,12 @@ public class CustomerBlood : MonoBehaviour
                 ResetWalkStretch();
                 UpdateSortingOrders();
                 yield break;
+            }
+
+            if (surpriseRoutine != null)
+            {
+                yield return waitForFixedUpdate;
+                continue;
             }
 
             Vector3 next = Vector3.MoveTowards(transform.position, activeMoveTargetPosition, moveSpeed * Time.fixedDeltaTime);
@@ -481,7 +665,7 @@ public class CustomerBlood : MonoBehaviour
         activeMoveTargetTransform = targetTransform;
         activeMoveTargetPosition = WithFixedZ(targetTransform != null ? targetTransform.position : fallbackWorldPosition);
 
-        while (Vector3.Distance(transform.position, GetCurrentMoveTargetPosition(fallbackWorldPosition)) > 0.03f)
+        while (surpriseRoutine != null || Vector3.Distance(transform.position, GetCurrentMoveTargetPosition(fallbackWorldPosition)) > 0.03f)
         {
             if (expectedBuilding != null &&
                 (targetBuilding != expectedBuilding || currentQueueSlot != expectedSlot))
@@ -490,6 +674,12 @@ public class CustomerBlood : MonoBehaviour
                 ResetWalkStretch();
                 UpdateSortingOrders();
                 yield break;
+            }
+
+            if (surpriseRoutine != null)
+            {
+                yield return waitForFixedUpdate;
+                continue;
             }
 
             Vector3 moveTarget = GetCurrentMoveTargetPosition(fallbackWorldPosition);
@@ -538,6 +728,8 @@ public class CustomerBlood : MonoBehaviour
 
     private void ResetState()
     {
+        ClearSatisfactionEmoji();
+        ClearSurprise();
         if (moveRoutine != null)
         {
             StopCoroutine(moveRoutine);
@@ -735,17 +927,19 @@ public class CustomerBlood : MonoBehaviour
         {
             case VisualState.ReceivingItem:
                 if (receiveItemSprite != null)
-                    spriteRenderer.sprite = receiveItemSprite;
+                    normalSprite = receiveItemSprite;
                 break;
             case VisualState.CarryingItem:
                 if (carryingWalkSprite != null)
-                    spriteRenderer.sprite = carryingWalkSprite;
+                    normalSprite = carryingWalkSprite;
                 break;
             default:
                 if (walkingSprite != null)
-                    spriteRenderer.sprite = walkingSprite;
+                    normalSprite = walkingSprite;
                 break;
         }
+        if (surpriseRoutine == null && normalSprite != null)
+            spriteRenderer.sprite = normalSprite;
     }
 
     private void ApplyWalkStretch()
@@ -842,6 +1036,7 @@ public class CustomerBlood : MonoBehaviour
 
             if (building != null && building.TryEnterQueue(this, out Building.QueueSlot slot, out Transform queueTarget))
             {
+                ClearSurprise();
                 purchaseSequenceRunning = true;
                 targetBuilding = building;
                 pendingPurchaseBuilding = null;
@@ -1021,6 +1216,12 @@ public class CustomerBlood : MonoBehaviour
             {
                 if (!IsSpecialBuildingVisitApproachValid(specialBuilding, expectedPath))
                     break;
+
+                if (surpriseRoutine != null)
+                {
+                    yield return waitForFixedUpdate;
+                    continue;
+                }
 
                 Vector3 moveTarget = GetCurrentMoveTargetPosition(fallbackWorldPosition);
                 if (Vector3.Distance(transform.position, moveTarget) <= 0.03f)
@@ -1439,6 +1640,8 @@ public class CustomerBlood : MonoBehaviour
     private void SetTemporaryVisibility(bool visible)
     {
         RefreshSpriteRendererCache();
+        if (satisfactionEmojiInstance != null) satisfactionEmojiInstance.SetActive(visible);
+        if (clickEmojiInstance != null) clickEmojiInstance.SetActive(visible);
 
         if (bodyCollider != null)
             bodyCollider.enabled = visible;

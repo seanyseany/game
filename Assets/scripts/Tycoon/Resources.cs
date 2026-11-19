@@ -8,6 +8,7 @@ namespace Tycoon
     [AddComponentMenu("Tycoon/Resources")]
     public sealed class Resources : MonoBehaviour
     {
+        private const float DragFollowSharpness = 60f;
         [SerializeField, Tooltip("비워두면 프리팹 이름 사용")] private string resourceId;
         [FormerlySerializedAs("oxygenPrice")]
         [SerializeField, Min(0)] private int energyPrice = 1;
@@ -23,6 +24,7 @@ namespace Tycoon
         private Camera dragCamera;
         private RectTransform dragRect;
         private Vector2 dragScreenPosition;
+        private Vector2 displayedDragScreenPosition;
         private Vector2 grabOffset;
         private float dragPlaneZ;
 
@@ -86,6 +88,7 @@ namespace Tycoon
             dragPlaneZ = preview.position.z;
             dragScreenPosition = dragCamera != null ? (Vector2)dragCamera.WorldToScreenPoint(preview.position)
                 : (Vector2)preview.position;
+            displayedDragScreenPosition = dragScreenPosition;
             // Preserve the point the user grabbed: no initial snap to the icon's pivot.
             grabOffset = dragScreenPosition - screen;
             dragVisual.SetActive(true);
@@ -98,18 +101,22 @@ namespace Tycoon
 
         // Run after the panel/camera has moved, with no hierarchy searches or
         // allocations in the follow loop, even when time is paused.
-        private void LateUpdate() { AdvanceDrag(); }
+        private void LateUpdate() { AdvanceDrag(Time.unscaledDeltaTime); }
 
-        private void AdvanceDrag()
+        private void AdvanceDrag(float deltaSeconds)
         {
             if (dragVisual == null) return;
-            // Keep the grabbed point under the pointer without follow smoothing.
+            // Smooth between input samples in screen space, independent of frame rate or time scale.
+            float blend = 1f - Mathf.Exp(-DragFollowSharpness * Mathf.Max(0f, deltaSeconds));
+            displayedDragScreenPosition = Vector2.Lerp(displayedDragScreenPosition, dragScreenPosition, blend);
+            if ((displayedDragScreenPosition - dragScreenPosition).sqrMagnitude < 0.01f)
+                displayedDragScreenPosition = dragScreenPosition;
             if (dragRect != null)
             {
-                if (RectTransformUtility.ScreenPointToWorldPointInRectangle(dragRect, dragScreenPosition, dragCamera, out Vector3 world))
+                if (RectTransformUtility.ScreenPointToWorldPointInRectangle(dragRect, displayedDragScreenPosition, dragCamera, out Vector3 world))
                     dragVisual.transform.position = world;
             }
-            else dragVisual.transform.position = DeliveryView.WorldPoint(dragScreenPosition, dragPlaneZ, dragCamera);
+            else dragVisual.transform.position = DeliveryView.WorldPoint(displayedDragScreenPosition, dragPlaneZ, dragCamera);
         }
 
         private void ReleaseDragVisual()
