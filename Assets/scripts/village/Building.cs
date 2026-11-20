@@ -662,7 +662,7 @@ public class Building : MonoBehaviour
             }
         }
 
-        return true;
+        return !CustomerBlood.HasCustomerAtScreenPoint(screenPosition);
     }
 
     private void BeginDrag()

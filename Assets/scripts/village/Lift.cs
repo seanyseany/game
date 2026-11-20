@@ -537,7 +537,7 @@ public class Lift : MonoBehaviour, IColliderPointerTarget
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
             return false;
 
-        return true;
+        return !CustomerBlood.HasCustomerAtScreenPoint(Input.mousePosition);
     }
 
     private void BeginDrag()

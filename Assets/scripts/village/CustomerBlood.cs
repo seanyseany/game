@@ -48,7 +48,7 @@ public class CustomerBlood : MonoBehaviour
     [SerializeField] private int maximumBodySortingOrder = 190;
 
     [Header("Surprise Sprite")]
-    [SerializeField, Tooltip("거래 중이 아닌 손님을 클릭하거나 터치하면 0.3초간 멈추며 표시할 놀람 스프라이트입니다.")]
+    [SerializeField, Tooltip("손님 클릭/터치 시 표시할 놀람 스프라이트입니다. 일반 이동 중에는 0.3초간 멈춥니다.")]
     private Sprite surpriseSprite;
     [Header("Click Emoji")]
     [SerializeField, Tooltip("손님 클릭/터치 시 생성할 BloodCustomer 이모지입니다. 표시 시간은 프리팹의 Arcade Popup 설정을 따릅니다.")]
@@ -81,6 +81,7 @@ public class CustomerBlood : MonoBehaviour
     private bool purchaseFinished;
     private bool transitioningToCarry;
     private bool purchaseSequenceRunning;
+    private bool returningToDespawn;
     private bool hasVisitedSpecialBuildingThisTrip;
     private bool specialBuildingRelocatedDuringVisit;
     private bool specialBuildingVisitEndedWithDespawn;
@@ -93,6 +94,7 @@ public class CustomerBlood : MonoBehaviour
     private float fixedZ;
     private float lifeEndTime;
     private float spawnedAtTime;
+    private float surpriseWalkPauseTime;
     private int routeSequenceIndex = int.MinValue;
     private int currentRouteNodeIndex = -1;
     private int routeTravelDirection = 1;
@@ -106,8 +108,10 @@ public class CustomerBlood : MonoBehaviour
     public CustomerBlood SourcePrefab => sourcePrefab;
     public float ReceiveItemSpawnDelay => receiveItemSpawnDelay;
     private bool IsTrading => transitioningToCarry || (!purchaseFinished &&
-        (purchaseSequenceRunning || waitingAtCounter || currentQueueSlot != Building.QueueSlot.None));
+        (pendingPurchaseBuilding != null || purchaseSequenceRunning || waitingAtCounter || currentQueueSlot != Building.QueueSlot.None));
     private bool HasSurpriseFeedback => surpriseSprite != null || clickEmojiPrefab != null;
+    private bool CanShowSurprise => HasSurpriseFeedback && !IsTrading;
+    private float TripTime => Time.time - surpriseWalkPauseTime;
 
     private void Awake()
     {
@@ -145,7 +149,7 @@ public class CustomerBlood : MonoBehaviour
 
     private void Update()
     {
-        if (!HasSurpriseFeedback || IsTrading || Input.touchCount >= 2 || Tycoon.DeliveryRuntime.BlocksWorldInput) return;
+        if (!CanShowSurprise || Input.touchCount >= 2 || Tycoon.DeliveryRuntime.BlocksWorldInput) return;
 
         int touchCount = Input.touchCount;
         for (int i = 0; i < touchCount; i++)
@@ -159,15 +163,12 @@ public class CustomerBlood : MonoBehaviour
 
     private void TryShowSurpriseAtScreenPoint(Vector2 screenPoint)
     {
-        if (!isActiveAndEnabled || IsTrading || bodyCollider == null || !bodyCollider.enabled ||
+        if (!isActiveAndEnabled || !CanShowSurprise ||
             Tycoon.DeliveryRuntime.BlocksWorldInput || Tycoon.DeliveryPointer.FindUiTarget(screenPoint) != null)
             return;
 
         Camera cameraRef = Camera.main;
-        if (cameraRef == null) return;
-        Vector3 worldPoint = cameraRef.ScreenToWorldPoint(new Vector3(screenPoint.x, screenPoint.y,
-            Mathf.Abs(cameraRef.transform.position.z - transform.position.z)));
-        if (!bodyCollider.OverlapPoint(worldPoint) || !HasSurpriseFeedback) return;
+        if (cameraRef == null || !OverlapsScreenPoint(screenPoint, cameraRef)) return;
 
         if (surpriseRoutine == null && spriteRenderer != null) normalSprite = spriteRenderer.sprite;
         if (surpriseRoutine != null) StopCoroutine(surpriseRoutine);
@@ -175,14 +176,49 @@ public class CustomerBlood : MonoBehaviour
         ShowClickEmoji();
     }
 
+    internal static bool HasCustomerAtScreenPoint(Vector2 screenPoint)
+    {
+        Camera cameraRef = Camera.main;
+        if (cameraRef == null) return false;
+
+        foreach (CustomerBlood customer in ActiveCustomers)
+        {
+            if (customer.HasSurpriseFeedback && customer.OverlapsScreenPoint(screenPoint, cameraRef))
+                return true;
+        }
+
+        return false;
+    }
+
+    private bool OverlapsScreenPoint(Vector2 screenPoint, Camera cameraRef)
+    {
+        if (bodyCollider == null || !bodyCollider.enabled) return false;
+
+        Vector3 worldPoint = cameraRef.ScreenToWorldPoint(new Vector3(screenPoint.x, screenPoint.y,
+            Mathf.Abs(cameraRef.transform.position.z - transform.position.z)));
+        return bodyCollider.OverlapPoint(worldPoint);
+    }
+
     private IEnumerator SurpriseRoutine()
     {
         if (spriteRenderer != null && surpriseSprite != null) spriteRenderer.sprite = surpriseSprite;
-        ResetWalkStretch();
-        if (body != null) body.linearVelocity = Vector2.zero;
+        if (!returningToDespawn)
+        {
+            ResetWalkStretch();
+            if (body != null) body.linearVelocity = Vector2.zero;
+        }
         yield return new WaitForSeconds(SurpriseDuration);
         surpriseRoutine = null;
         if (spriteRenderer != null) spriteRenderer.sprite = normalSprite;
+    }
+
+    private bool TryPauseWalkingForSurprise()
+    {
+        if (surpriseRoutine == null || returningToDespawn)
+            return false;
+
+        surpriseWalkPauseTime += Time.fixedDeltaTime;
+        return true;
     }
 
     private void ClearSurprise()
@@ -482,13 +518,13 @@ public class CustomerBlood : MonoBehaviour
     private IEnumerator LifeCycleRoutine()
     {
         float lifetime = Random.Range(15f, 20f);
-        lifeEndTime = Time.time + lifetime;
+        lifeEndTime = TripTime + lifetime;
 
         ApplyVisualState(VisualState.Walking);
 
-        while (Time.time < lifeEndTime)
+        while (TripTime < lifeEndTime)
         {
-            yield return RoamUntil(lifeEndTime);
+            yield return RoamUntilLifetimeEnds();
 
             if (liftTravelEndedWithDespawn)
                 yield break;
@@ -504,9 +540,9 @@ public class CustomerBlood : MonoBehaviour
         if (liftTravelEndedWithDespawn)
             yield break;
 
-        while (Time.time < lifeEndTime)
+        while (TripTime < lifeEndTime)
         {
-            yield return RoamUntil(lifeEndTime);
+            yield return RoamUntilLifetimeEnds();
 
             if (liftTravelEndedWithDespawn)
                 yield break;
@@ -515,7 +551,7 @@ public class CustomerBlood : MonoBehaviour
         yield return ReturnToEntranceAndDespawn();
     }
 
-    private IEnumerator RoamUntil(float endTime)
+    private IEnumerator RoamUntilLifetimeEnds()
     {
         if (currentPath == null)
         {
@@ -542,7 +578,7 @@ public class CustomerBlood : MonoBehaviour
         if (liftTravelEndedWithDespawn)
             yield break;
 
-        if (Time.time < endTime)
+        if (TripTime < lifeEndTime)
         {
             float pauseDuration = GetRoamPauseDuration();
             if (pauseDuration > 0f)
@@ -552,6 +588,7 @@ public class CustomerBlood : MonoBehaviour
 
     private IEnumerator ReturnToEntranceAndDespawn()
     {
+        returningToDespawn = true;
         if (targetBuilding != null)
             targetBuilding.NotifyCustomerLeaving(this);
 
@@ -595,7 +632,7 @@ public class CustomerBlood : MonoBehaviour
         activeMoveTargetTransform = null;
         activeMoveTargetPosition = WithFixedZ(targetPosition);
 
-        while (surpriseRoutine != null || Vector3.Distance(transform.position, activeMoveTargetPosition) > 0.03f)
+        while (Vector3.Distance(transform.position, activeMoveTargetPosition) > 0.03f)
         {
             if (expectedBuilding != null &&
                 (targetBuilding != expectedBuilding || currentQueueSlot != expectedSlot))
@@ -606,7 +643,7 @@ public class CustomerBlood : MonoBehaviour
                 yield break;
             }
 
-            if (surpriseRoutine != null)
+            if (TryPauseWalkingForSurprise())
             {
                 yield return waitForFixedUpdate;
                 continue;
@@ -665,7 +702,7 @@ public class CustomerBlood : MonoBehaviour
         activeMoveTargetTransform = targetTransform;
         activeMoveTargetPosition = WithFixedZ(targetTransform != null ? targetTransform.position : fallbackWorldPosition);
 
-        while (surpriseRoutine != null || Vector3.Distance(transform.position, GetCurrentMoveTargetPosition(fallbackWorldPosition)) > 0.03f)
+        while (Vector3.Distance(transform.position, GetCurrentMoveTargetPosition(fallbackWorldPosition)) > 0.03f)
         {
             if (expectedBuilding != null &&
                 (targetBuilding != expectedBuilding || currentQueueSlot != expectedSlot))
@@ -676,7 +713,7 @@ public class CustomerBlood : MonoBehaviour
                 yield break;
             }
 
-            if (surpriseRoutine != null)
+            if (TryPauseWalkingForSurprise())
             {
                 yield return waitForFixedUpdate;
                 continue;
@@ -761,6 +798,7 @@ public class CustomerBlood : MonoBehaviour
         purchaseFinished = false;
         transitioningToCarry = false;
         purchaseSequenceRunning = false;
+        returningToDespawn = false;
         purchaseReceiveRoutineVersion++;
         spawnEntryId = string.Empty;
         routeSequenceIndex = int.MinValue;
@@ -774,6 +812,7 @@ public class CustomerBlood : MonoBehaviour
         liftUseCountThisTrip = 0;
         lastUsedLiftThisTrip = null;
         spawnedAtTime = 0f;
+        surpriseWalkPauseTime = 0f;
         enteredSpecialBuildingPath = null;
         ClearActiveMoveTarget();
         body.linearVelocity = Vector2.zero;
@@ -826,24 +865,15 @@ public class CustomerBlood : MonoBehaviour
         if (currentWay == null || routeSequenceIndex == int.MinValue)
             yield break;
 
-        int returnNodeIndex;
-        if (currentRouteNodeIndex < 0)
-        {
-            returnNodeIndex = currentWay.GetClosestRouteNodeIndex(routeSequenceIndex, transform.position);
-        }
-        else
-        {
-            int nextNodeIndex = currentWay.GetNextRouteNodeIndexNoLoop(routeSequenceIndex, currentRouteNodeIndex);
-            int lastNodeIndex = currentWay.GetLastRouteNodeIndex(routeSequenceIndex);
-            if (nextNodeIndex >= 0)
-                returnNodeIndex = nextNodeIndex;
-            else
-                returnNodeIndex = lastNodeIndex >= 0 ? lastNodeIndex : currentRouteNodeIndex;
-        }
+        int returnNodeIndex = currentRouteNodeIndex >= 0
+            ? currentRouteNodeIndex
+            : currentWay.GetClosestRouteNodeIndex(routeSequenceIndex, transform.position);
 
         while (returnNodeIndex >= 0)
         {
-            yield return MoveToRouteNodeRoutine(returnNodeIndex);
+            if (currentWay.TryGetRouteNode(routeSequenceIndex, returnNodeIndex, out Vector3 worldPoint))
+                yield return MoveToRoutine(worldPoint, false, null);
+
             returnNodeIndex = currentWay.GetPreviousRouteNodeIndexNoLoop(routeSequenceIndex, returnNodeIndex);
         }
     }
@@ -1026,6 +1056,7 @@ public class CustomerBlood : MonoBehaviour
             TryChoosePurchaseTargetAlongSegment(segmentStart, targetPoint, out Building building, out Path path, out Vector3 branchPoint))
         {
             pendingPurchaseBuilding = building;
+            ClearSurprise();
             yield return MoveToRoutine(branchPoint, false, null);
 
             if (pendingPurchaseBuilding != building)
@@ -1034,9 +1065,8 @@ public class CustomerBlood : MonoBehaviour
                 yield break;
             }
 
-            if (building != null && building.TryEnterQueue(this, out Building.QueueSlot slot, out Transform queueTarget))
+            if (building != null && building.TryEnterQueue(this, out Building.QueueSlot slot, out _))
             {
-                ClearSurprise();
                 purchaseSequenceRunning = true;
                 targetBuilding = building;
                 pendingPurchaseBuilding = null;
@@ -1166,7 +1196,6 @@ public class CustomerBlood : MonoBehaviour
                 liftSucceeded = success;
                 destinationSide = arrivedSide;
             });
-
             if (liftSucceeded)
             {
                 liftUseCountThisTrip++;
@@ -1217,17 +1246,17 @@ public class CustomerBlood : MonoBehaviour
                 if (!IsSpecialBuildingVisitApproachValid(specialBuilding, expectedPath))
                     break;
 
-                if (surpriseRoutine != null)
-                {
-                    yield return waitForFixedUpdate;
-                    continue;
-                }
-
                 Vector3 moveTarget = GetCurrentMoveTargetPosition(fallbackWorldPosition);
                 if (Vector3.Distance(transform.position, moveTarget) <= 0.03f)
                 {
                     reachedDestination = true;
                     break;
+                }
+
+                if (TryPauseWalkingForSurprise())
+                {
+                    yield return waitForFixedUpdate;
+                    continue;
                 }
 
                 Vector3 next = Vector3.MoveTowards(transform.position, moveTarget, moveSpeed * Time.fixedDeltaTime);
@@ -1423,6 +1452,7 @@ public class CustomerBlood : MonoBehaviour
 
     public void AttachToCarrier(Transform carrier, Vector3 localPosition)
     {
+        ClearSurprise();
         ClearActiveMoveTarget();
         waitingAtCounter = false;
 
@@ -1466,14 +1496,15 @@ public class CustomerBlood : MonoBehaviour
         if (lift == null || !lift.TryGetConnectedWay(destinationSide, out Way destinationWay) || destinationWay == null)
             yield break;
 
+        returningToDespawn = true;
         currentWay = destinationWay;
         currentPath = null;
         targetBuilding = null;
         pendingPurchaseBuilding = null;
         targetSpecialBuilding = null;
 
-        if (!destinationWay.TryGetSpawnEntrance(out Entrance destinationEntrance))
-            destinationEntrance = null;
+        destinationWay.TryGetSpawnEntrance(out Entrance destinationEntrance);
+        sourceEntrance = destinationEntrance;
 
         if (!TryGetClosestRouteNode(destinationWay, transform.position, out int destinationSequenceIndex, out int closestNodeIndex))
         {
@@ -1549,7 +1580,7 @@ public class CustomerBlood : MonoBehaviour
         if (liftUseCountThisTrip >= MaxLiftUsesPerTrip)
             return false;
 
-        return Time.time >= spawnedAtTime + LiftUseBlockAfterSpawnSeconds;
+        return TripTime >= spawnedAtTime + LiftUseBlockAfterSpawnSeconds;
     }
 
     private IEnumerator VisitSpecialBuildingRoutine(SpecialBuilding specialBuilding)
@@ -1558,6 +1589,7 @@ public class CustomerBlood : MonoBehaviour
             yield break;
 
         const float visitSeconds = 20f;
+        ClearSurprise();
         ClearHeldItem();
         purchaseFinished = false;
         transitioningToCarry = false;
@@ -1681,6 +1713,7 @@ public class CustomerBlood : MonoBehaviour
 
     private IEnumerator ExitSpecialBuildingViaInstalledWayAndDespawn(SpecialBuilding specialBuilding)
     {
+        returningToDespawn = true;
         if (specialBuilding == null || specialBuilding.CurrentPath == null)
         {
             targetSpecialBuilding = null;
